@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ESP Maker</AssemblyName>
+    <ApplicationIcon>Resources\ESPMaker.ico</ApplicationIcon>
+    <Product>ESP Maker</Product>
+    <RootNamespace>ItemFinder</RootNamespace>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <Version>1.4.1</Version>
+  </PropertyGroup>
+
+  <!-- dev / test command-line modes (uitest, stress...) are left out of the release build: publish with -p:DevTools=false -->
+  <PropertyGroup Condition="'$(DevTools)' != 'false'">
+    <DefineConstants>$(DefineConstants);DEVTOOLS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- the Spooky Scorched Beacons pumpkin and clown textures (3D model icons) -->
+    <EmbeddedResource Include="Models\*.dds" LogicalName="ItemFinder.Models.%(Filename)%(Extension)" />
+    <!-- the tour's pictures (made by the dev command - -tutorial-shots src\Tutorial) -->
+    <EmbeddedResource Include="Tutorial\*.png" LogicalName="ItemFinder.Tutorial.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

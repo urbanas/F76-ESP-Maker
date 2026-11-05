@@ -1,0 +1,17 @@
+# build output
+bin/
+obj/
+src/x/
+*.exe
+# release zips (built from source)
+release/*.zip
+# app data and test runs
+settings.json
+autosave.itemfinder.json
+game-index.json
+mods/
+output/
+qa-baseline/
+qa-last/
+backup-*/
+source-1.4.1/

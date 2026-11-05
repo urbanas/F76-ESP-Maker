@@ -1,0 +1,147 @@
+ESP Maker - changes
+===================
+
+1.4.1
+Fixed
+- First aid kits, wall safes, ammo boxes and other animated containers showed no outline glow in
+  the game. They now always glow with a fill, whatever look is set. Rebuild your mod to get it.
+
+1.4
+New
+- Loot bags: dropped-item paper bags, creature meat piles, robot scrap piles and every loot bag skin.
+- CAMP storage boxes: aid, ammo, scrap and stash boxes, every design. Every player's box lights up.
+  (The "First aid boxes" loot spot is the world's first aid kits, not your CAMP aid box.)
+- Deathclaw nests (Scorchbeast nests use the same model and light up too).
+- The Pitt expeditions under Events: Union supply crates, chemicals, coolant canisters, deposit
+  points, prison doors, trench masks and meds. Each entry says what else lights up.
+- Pre-war food: Fancy Lads, Sugar Bombs, Cram, InstaMash, bubblegum and the rest.
+- Notes & holotapes: by model (paper, torn paper, holotape, printout...). Notes share a few
+  models, so every note on a model lights up together.
+- Clothes lying around: clothes and hats on the ground, by their ground model. Clothes whose ground
+  model is also the worn one are left out, so players wearing them don't glow.
+Fixed
+- Chem containers (the Arktos chemical tanks) glowed only on their top and bottom rims. The glass
+  tank glows now too.
+- Status messages say "selected" instead of "checked".
+
+1.3
+New
+- Workbenches category: Tinker's, Armor and Weapons Workbenches, Power Armor, Chemistry, Cooking and
+  Brewing stations, in the world and in CAMPs.
+- Atlantic City expeditions under Events: listening bugs, slot machines, tickets, supplies, secret
+  teddy bears and more. Many objectives share their model with other things; each entry says what
+  else lights up.
+- Bright colours look and Bright plants preset: the item's own colours shine, with nothing added to
+  the model and nothing through walls. It works on the game's material, so everything using that
+  material brightens too.
+Fixed
+- A green see-through machine could appear on wood piles when they were highlighted. It's a hidden
+  placement guide inside the game's model. These guides are now removed from every highlighted model.
+- Spooky Scorched in the Silver Shroud costume get a beam and icon again. It has no head piece, so
+  its gloves moved from costume bodies to costume heads.
+Changed
+- Your picks no longer fills the left panel with a list of counts, so the Categories list keeps its
+  room. The counts are in the Categories list itself.
+- Guardian (EN06) now lists all 16 of its parts, with clear names, so each one can be switched on or
+  off. Before, it had only 4: EN06 is mostly built from normal Sentry Bot parts, so it kept glowing
+  after you unselected it.
+- Parts EN06 shares with other robots (head, arms, armor, shoulder launchers, laser hands) are marked
+  "(shared)" and listed under every robot that uses them: Guardian (EN06), Sentry Bot, Robobrain,
+  Protectron and Mr. Handy. Select or unselect a shared part in one place and it changes in all of
+  them, because the game uses the same file for all of them.
+- Selecting a whole robot selects its shared parts on the others too, without selecting the rest of
+  those robots. If you have Sentry Bot selected, EN06's shared parts show as selected. To turn EN06
+  off completely, unselect its shared parts: those parts then stop glowing on the other robots too.
+- New: the laser hands can now be selected.
+- EN06's beam now starts at its torso.
+
+1.2
+New
+- Import .ba2: open any ESP mod and change it - your own or someone else's.
+  Your own mods made with 1.2 or later come back exactly as you built them. Older ones come back
+  with their items and looks (beam length and width start at the category's).
+  Other people's mods: the items they change get selected, part by part, and their colours are read
+  where possible. Models that aren't in ESP Maker's lists can't be included; the log lists them.
+  With something already selected it asks whether to replace it or add to it, so you can merge
+  several mods into one. Turn the original mod off in your mod manager once yours is built.
+- Build & save: type a name, and the mod is built and installed. Pick one of your mods in the name
+  box to replace it. Uncheck "Install in the game" to only make the .ba2.
+
+Changed
+- Simpler way of working: the "Mod:" list and the status line are gone. There is one current
+  selection; to work on another mod, import it or open its project.
+- The bottom of the window lists the ESP Maker mods in the game, read from the mod files themselves.
+- Uninstall shows a checklist of your mods, so you pick which to remove.
+- Save / Load setup is now Save / Open project.
+- The tour shows the new buttons.
+
+Fixes
+- Snow globes, Protectron vending machines and some weapons (39 models) were left out of builds and
+  shown without the look in the preview. They work now (rebuild your mod to get them).
+- An ini that wasn't saved as UTF-8 could get damaged characters when the app updated it.
+- If the ini had more than one sResourceArchive2List line, only the first was updated.
+- Old 3D-shape looks on the split Spooky Scorched heads and bodies only converted on the second start.
+
+Updating from 1.1 (keeps your setups)
+1. Close ESP Maker (and the game).
+2. Replace the old "ESP Maker.exe" with the new one. Don't delete %AppData%\ESP Maker.
+3. Start the new version. Your installed mods stay in the game. The setups from the old "Mod:" list
+   move to %AppData%\ESP Maker\output\my mods (the log says so once).
+4. To change a mod: "Import .ba2..." and pick it, or More > "Open project..." and pick its setup in
+   "my mods". Then "Build & save" under the same name. Do this once if you want the fixes above.
+
+1.1
+New
+- Weapons category: every weapon, shown in the 3D preview as the whole gun (put together from its
+  default parts).
+- Junk split by component: "Junk: Steel", "Junk: Screws", "Junk: Adhesive"... - each junk item is
+  listed under every component it scraps into, so you can light up only the junk you need.
+  Items that don't scrap stay in "Junk & misc". Your old Junk & misc look is copied to the new
+  categories.
+- More public events: Lucky Strike (dig sites, U-Mine-It! machines), Tunnel of Love, Radiation
+  Rumble, Most Wanted, Encryptid, Uranium Fever, Dangerous Pastimes, Eviction Notice, Campfire
+  Tales, Distinguished Guests.
+
+Fixes
+- Outline glow no longer washes items out white when seen through walls (rebuild your mod to get it).
+- Fixed a crash when clicking the list while it was refilling.
+- The preview always shows the arrow / icon in the picture.
+- Preview and build fall back to the game's own model when another mod's version can't be read.
+
+Heads-up: some things light up more than you asked for
+The game highlights 3D MODELS, not items, and many models are reused. Lighting one up lights up
+everything that uses the same model - sometimes things in the world you never meant to mark.
+- Weapons: guns are built from shared parts (receivers, barrels, stocks...). Checking the 10mm
+  Pistol can also light up other guns built on the same parts, and guns on display racks, wall
+  mounts or in CAMPs. A dropped weapon with a different barrel or stock only glows on the parts it
+  shares with the default version.
+- Junk: e.g. the Plastic Gas Canister uses the same model as the raid's fuel canister.
+- Events: some event objects are normal world or CAMP objects too (the Most Wanted getaway wagon =
+  the CAMP wagon; Eviction Notice meat bags also hang in super mutant camps).
+Click an entry and look at Details to see what shares its model. If something glows that you
+don't want, uncheck that entry, or open its parts ("► parts") and uncheck the part that causes it.
+
+Updating from 1.0 (keeps your setups)
+Your settings, mods and looks are saved in %AppData%\ESP Maker, not in the app folder.
+1. Close ESP Maker (and the game).
+2. Replace the old "ESP Maker.exe" with the new one (or unzip the new folder anywhere and delete
+   the old one). Don't delete %AppData%\ESP Maker.
+3. Start the new version: your mods and checks are all there. The first start reads the game's
+   item list again (a few seconds).
+4. Press "Build & install" once for each of your mods to get the 1.1 fixes into the game.
+Your installed .ba2 mods keep working in the game meanwhile - nothing is uninstalled.
+
+1.0 (first release)
+- Pick items, plants, loot, event objects and enemies (by kind, bosses, legendary) to highlight.
+- Vending machines: every player CAMP vending machine design (find shops fast) and the Legendary Exchange machines.
+- Events: The Slasher, Mischief Night, Fasnacht, Meat Week, Mothman Equinox, Invaders from Beyond, Once in a
+  Blue Moon and the Gleaming Depths raid (fuel canisters, fuel deposits, charging nodes, the Stalker).
+- Looks: outline or fill glow (also through walls), beam or arrow, flat icons and 3D models
+  (bobblehead, crown, ramen, pumpkin, clown and many more); a look per category, item or part.
+- Live 3D preview of the real game model.
+- Recommended presets: Enemies, Legendary enemies, Bobbleheads, Magazines, Plans, Slasher event,
+  XP buffs, Player vendors.
+- Several mods side by side (the "Mod:" list), each its own .ba2.
+- Build & install in one click; uninstall; status line shows whether the game is up to date.
+- Steam and Microsoft Store / PC Game Pass versions of Fallout 76.
+- Short tour on the first start.
