@@ -58,3 +58,7 @@ The app is written in C# with WinForms. It reads the game's own `.ba2` archives 
 ## Bug reports
 
 If something goes wrong, the app writes `%AppData%\ESP Maker\error.log`. Please open an issue, attach that file, and describe what you did.
+
+## License
+
+[MIT](LICENSE). You can use, change and share the code freely; just keep the copyright notice.
