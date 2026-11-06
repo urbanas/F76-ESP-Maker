@@ -34,6 +34,9 @@ sealed class PreviewScene
     public (float X, float Y, float Z) Min, Max;
     /// <summary>Box of everything, beam and icon included.</summary>
     public (float X, float Y, float Z) AllMin, AllMax;
+    /// <summary>The ground the game buries part of the model under (a plant built around its middle): nothing
+    /// below it is drawn, except what shows through walls. NaN: the model stands on its lowest point.</summary>
+    public float Ground = float.NaN;
     public string Note = "";
 }
 
@@ -42,13 +45,21 @@ sealed class PreviewScene
 static class ModelPreview
 {
     const string GlowTag = "itemfinder-preview-glow", BeamTag = "itemfinder-preview-beam", IconTag = "itemfinder-preview-icon", Icon3DTag = "itemfinder-preview-icon3d",
-                 ModelTag = "itemfinder-preview-model";
+                 ModelTag = "itemfinder-preview-model", LabelTag = "itemfinder-preview-label";
+    /// <summary>The label picture of the scene being loaded (previews load on several threads).</summary>
+    [ThreadStatic] static Rgba? labelTex;
     static readonly Dictionary<string, Rgba?> textures = new(StringComparer.OrdinalIgnoreCase);
     const int MaxTexture = 512;
 
     /// <param name="beamHere">The model carries the beam and icon (an entry's main model).</param>
-    public static PreviewScene Load(GameData game, string model, Style st, bool noIcon, bool harvestable, bool beamHere, bool keepOtherMods)
+    public static PreviewScene Load(GameData game, string model, Style st, bool noIcon, bool harvestable, bool beamHere, bool keepOtherMods,
+                                    string? name = null)
     {
+        // the name label: drawn like the build draws it (a flat camera-facing card with the text picture)
+        labelTex = null;
+        float labelRatio = 0;
+        if (beamHere && st.Label && !noIcon && !string.IsNullOrEmpty(name))
+            using (var lb = Icons.DrawLabel(st.LabelText.Trim().Length > 0 ? st.LabelText.Trim() : Icons.LabelText(name))) { labelTex = Bitmaps.ToRgba(lb); labelRatio = lb.Width / (float)lb.Height; }
         var path = @"meshes\" + model;
         var winner = game.Find(path);
         var src = (keepOtherMods ? winner : game.FindOriginal(path) ?? winner) ?? throw new FileNotFoundException("this model isn't in the game files");
@@ -60,7 +71,8 @@ static class ModelPreview
                                     st.BeamArrow ? NifPatch.ArrowSize(st.BeamWidth) is var ar ? ar.Gap + ar.Height : 0 : st.BeamLength, st.BeamWidth, harvestable,
                                     beamHere && !use3D && chosen != null ? IconTag : null, st.IconSize,
                                     beamHere && chosen != null ? Icons.Mask(chosen) : null, Icon3DTag, st.BeamArrow, // solid where flat can't show
-                                    beamHere && Models3D.Get(st.Icon) is Model3D m3 ? Models3D.MeshOf(m3) : null, ModelTag);
+                                    beamHere && Models3D.Get(st.Icon) is Model3D m3 ? Models3D.MeshOf(m3) : null, ModelTag,
+                                    labelTex != null ? LabelTag : null, st.LabelSize * labelRatio, st.LabelSize);
         var scene = new PreviewScene();
         byte[] patched = data;
         try { patched = NifPatch.Apply(data, opts).Data; }
@@ -95,9 +107,22 @@ static class ModelPreview
 
         var item = scene.Parts.Where(p => p.Kind is PartKind.Solid or PartKind.Blend).ToList();
         if (item.Count == 0) item = scene.Parts.Where(p => p.Kind != PartKind.Beam && !p.Billboard).ToList();
+        if (item.Count == 0 && src != (game.FindOriginal(path) ?? src))
+            throw new InvalidDataException($"{src.Archive.FileName} removes this model (empty in that mod) - nothing to show");
         if (item.Count == 0) throw new InvalidDataException("this model has nothing that can be drawn");
         (scene.Min, scene.Max) = Bounds(item);
         (scene.AllMin, scene.AllMax) = Bounds(scene.Parts);
+        // a plant built around its middle (Blight: 49 cm below to 49 cm above) is placed with that middle on the
+        // ground - the lower half is buried in the game. Stand it on its origin and cut off what's underground
+        // A landscape piece (a deathclaw nest: branches 40 cm into the ground; a disturbed grave: mostly underground,
+        // its hidden skirt has a "TEMP" placeholder texture) stands on its origin the same way
+        bool landscape = model.StartsWith(@"landscape\", StringComparison.OrdinalIgnoreCase);
+        if ((harvestable || landscape) && scene.Min.Z < -2 && scene.Max.Z > 2)
+        {
+            scene.Ground = 0;
+            scene.Min.Z = 0;
+            scene.AllMin.Z = Math.Max(0, scene.AllMin.Z);
+        }
         return scene;
     }
 
@@ -326,7 +351,7 @@ static class ModelPreview
         {
             GlowTag => PartKind.Glow,
             BeamTag => PartKind.Beam,
-            IconTag => PartKind.Icon,
+            IconTag or LabelTag => PartKind.Icon,
             Icon3DTag => PartKind.Icon3D,
             ModelTag => PartKind.Model,
             _ => shaderType == "BSEffectShaderProperty" ? PartKind.Effect : blend && part.TestRef < 0 ? PartKind.Blend : PartKind.Solid,
@@ -337,6 +362,7 @@ static class ModelPreview
             if (part.Tex == null && f.TypeOf(shader + 1) == "BSShaderTextureSet") part.Tex = Texture(game, NifFile.FirstTexture(f.Blocks[shader + 1].Data));
             if (part.Kind == PartKind.Effect && part.Tex == null) return null; // a bare effect (particles, light cones)
         }
+        else if (material == LabelTag) part.Tex = labelTex;
         else if (part.Kind is PartKind.Icon or PartKind.Model) part.Tex = iconTex;
 
         bool full = (attrs & 0x400) != 0;
@@ -462,44 +488,319 @@ static class ModelPreview
 
 /// <summary>Software renderer for a <see cref="PreviewScene"/>: z-buffered textured triangles with one light; the
 /// app's glow, beam and 3D icon add light like the game's additive materials do.</summary>
+/// <summary>Things drawn with the item: a floor grid under it (when <paramref name="Grid"/>) and solid props - a 1.8 m
+/// person, a house to compare sizes, walls around the item. Props hide what is behind them like any wall in the game.</summary>
+sealed record SizeGuide(float FloorZ, float CX, float CY, float Step, float Radius, bool Grid, PreviewPart[] Props)
+{
+    /// <summary>Plain boxes and roofs in flat colours, made into one solid part.</summary>
+    sealed class Mesh
+    {
+        readonly List<float> p = new();
+        readonly List<int> tri = new();
+        readonly List<byte> col = new();
+        readonly float ox, oy, oz;
+        public Mesh(float x, float y, float z) => (ox, oy, oz) = (x, y, z);
+
+        void Faces(int b, (int, int, int, int)[] quads, Color c, int corners)
+        {
+            for (int i = 0; i < corners; i++) col.AddRange(new[] { c.R, c.G, c.B, (byte)255 });
+            foreach (var (a, d, e, f) in quads) tri.AddRange(e == f ? new[] { b + a, b + d, b + e } : new[] { b + a, b + d, b + e, b + a, b + e, b + f });
+        }
+
+        public void Box(float x0, float x1, float y0, float y1, float z0, float z1, Color c)
+        {
+            int b = p.Count / 3;
+            for (int i = 0; i < 8; i++) p.AddRange(new[] { ox + ((i & 1) == 0 ? x0 : x1), oy + ((i & 2) == 0 ? y0 : y1), oz + ((i & 4) == 0 ? z0 : z1) });
+            Faces(b, new[] { (0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3) }, c, 8);
+        }
+
+        /// <summary>A gable roof over x0..x1 / y0..y1 from z0, its ridge along x, <paramref name="rise"/> high.</summary>
+        public void Roof(float x0, float x1, float y0, float y1, float z0, float rise, Color c)
+        {
+            int b = p.Count / 3;
+            float ym = (y0 + y1) / 2;
+            foreach (var (x, y, z) in new[] { (x0, y0, z0), (x1, y0, z0), (x0, y1, z0), (x1, y1, z0), (x0, ym, z0 + rise), (x1, ym, z0 + rise) })
+                p.AddRange(new[] { ox + x, oy + y, oz + z });
+            Faces(b, new[] { (0, 1, 5, 4), (2, 3, 5, 4), (0, 2, 4, 4), (1, 3, 5, 5), (0, 1, 3, 2) }, c, 6);
+        }
+
+        public PreviewPart Part(string name) =>
+            new() { Kind = PartKind.Solid, Name = name, P = p.ToArray(), Tri = tri.ToArray(), Col = col.ToArray() };
+
+        public int Corners => p.Count / 3;
+
+        /// <summary>Turns the corners from <paramref name="from"/> on around the upright line through x, y (mesh space).</summary>
+        public void Turn(int from, float a, float x, float y)
+        {
+            float c = MathF.Cos(a), s = MathF.Sin(a);
+            for (int i = from * 3; i < p.Count; i += 3)
+            {
+                float dx = p[i] - ox - x, dy = p[i + 1] - oy - y;
+                p[i] = ox + x + dx * c - dy * s; p[i + 1] = oy + y + dx * s + dy * c;
+            }
+        }
+
+        /// <summary>A thin upright blade from x, y: <paramref name="h"/> high, leaning along angle <paramref name="a"/>.</summary>
+        public void Blade(float x, float y, float h, float a, Color c)
+        {
+            int b = p.Count / 3;
+            float w = Math.Max(0.6f, h * 0.06f), lean = h * 0.3f;
+            float cx = MathF.Cos(a), sy = MathF.Sin(a);
+            p.AddRange(new[] { ox + x - w * sy, oy + y + w * cx, oz, ox + x + w * sy, oy + y - w * cx, oz, ox + x + lean * cx, oy + y + lean * sy, oz + h });
+            for (int i = 0; i < 3; i++) col.AddRange(new[] { (byte)(c.R * (i == 2 ? 1.25f : 0.8f)), (byte)(c.G * (i == 2 ? 1.15f : 0.8f)), (byte)(c.B * (i == 2 ? 1.1f : 0.8f)), (byte)255 });
+            tri.AddRange(new[] { b, b + 1, b + 2 });
+        }
+    }
+
+    /// <summary>Rubble and grass on the floor around the item (outside its footprint), always the same for one item:
+    /// does the look still stand out in a messy place?</summary>
+    public static PreviewPart JunkAround((float X, float Y, float Z) min, (float X, float Y, float Z) max, int seed)
+    {
+        var rnd = new Random(seed);
+        float cx = (min.X + max.X) / 2, cy = (min.Y + max.Y) / 2;
+        float inner = 0.5f * MathF.Sqrt((max.X - min.X) * (max.X - min.X) + (max.Y - min.Y) * (max.Y - min.Y)) + 6;
+        float outer = inner + Math.Max(120, inner * 1.5f);
+        var m = new Mesh(cx, cy, min.Z);
+        (float X, float Y) Spot()
+        {
+            float a = (float)(rnd.NextDouble() * MathF.Tau), r = inner + (outer - inner) * MathF.Sqrt((float)rnd.NextDouble());
+            return (r * MathF.Cos(a), r * MathF.Sin(a));
+        }
+        Color[] stone = { Color.FromArgb(120, 116, 108), Color.FromArgb(96, 90, 82), Color.FromArgb(138, 128, 112), Color.FromArgb(104, 84, 66) };
+        for (int i = 0; i < 40; i++) // broken concrete, bricks, bits of wood
+        {
+            var (x, y) = Spot();
+            float sx = 2 + (float)rnd.NextDouble() * 10, sy = 2 + (float)rnd.NextDouble() * 7, sz = 1 + (float)rnd.NextDouble() * 5;
+            int from = m.Corners;
+            m.Box(x - sx, x + sx, y - sy, y + sy, 0, sz, stone[rnd.Next(stone.Length)]);
+            m.Turn(from, (float)(rnd.NextDouble() * MathF.PI), x, y);
+        }
+        Color[] grass = { Color.FromArgb(92, 108, 52), Color.FromArgb(118, 112, 60), Color.FromArgb(78, 92, 48) };
+        for (int i = 0; i < 70; i++) // tufts of dry grass
+        {
+            var (x, y) = Spot();
+            var c = grass[rnd.Next(grass.Length)];
+            for (int b = 0; b < 5; b++)
+                m.Blade(x + (float)(rnd.NextDouble() - 0.5) * 6, y + (float)(rnd.NextDouble() - 0.5) * 6, 8 + (float)rnd.NextDouble() * 22, (float)(rnd.NextDouble() * MathF.Tau), c);
+        }
+        return m.Part("junk");
+    }
+
+    /// <summary>A plain 1.8 m figure (126 units) standing at x, y, z, its front facing -y.</summary>
+    public static PreviewPart PersonAt(float x, float y, float z)
+    {
+        var m = new Mesh(x, y, z);
+        var c = Color.FromArgb(140, 150, 165);
+        m.Box(-11, -2, -5, 5, 0, 59, c); m.Box(2, 11, -5, 5, 0, 59, c);       // legs (84 cm)
+        m.Box(-15, 15, -7, 7, 57, 103, c);                                    // body
+        m.Box(-22, -16, -4, 4, 60, 102, c); m.Box(16, 22, -4, 4, 60, 102, c); // arms
+        m.Box(-3, 3, -3, 3, 103, 108, c);                                     // neck
+        m.Box(-7, 7, -8, 7, 108, 126, c);                                     // head
+        return m.Part("person");
+    }
+
+    /// <summary>Half the house's width (x) and depth (y): 7 m × 6 m.</summary>
+    public const float HouseHalfX = 245, HouseHalfY = 210;
+
+    /// <summary>A two-storey house (7 m × 6 m, 8.4 m to the ridge) centred on x, y, its door facing -y.</summary>
+    public static PreviewPart HouseAt(float x, float y, float z)
+    {
+        var m = new Mesh(x, y, z);
+        float hx = HouseHalfX, hy = HouseHalfY, wall = 392; // 5.6 m: two floors
+        m.Box(-hx, hx, -hy, hy, 0, wall, Color.FromArgb(196, 186, 166));
+        m.Roof(-hx - 20, hx + 20, -hy - 20, hy + 20, wall, 182, Color.FromArgb(128, 64, 52));
+        m.Box(-hx * 0.85f, -hx * 0.85f + 50, -hy * 0.4f, -hy * 0.4f + 50, wall + 40, wall + 170, Color.FromArgb(110, 100, 95)); // chimney
+        var glass = Color.FromArgb(62, 82, 104);
+        m.Box(-35, 35, -hy - 3, -hy, 0, 147, Color.FromArgb(96, 64, 44)); // door, 2.1 m
+        foreach (var wx in new[] { -165f, 105f })
+            m.Box(wx, wx + 60, -hy - 3, -hy, 63, 133, glass);              // ground floor windows
+        foreach (var wx in new[] { -165f, -30f, 105f })
+            m.Box(wx, wx + 60, -hy - 3, -hy, 255, 325, glass);             // first floor windows
+        foreach (var wy in new[] { -110f, 50f })
+        {
+            m.Box(-hx - 3, -hx, wy, wy + 60, 63, 133, glass); m.Box(hx, hx + 3, wy, wy + 60, 63, 133, glass);
+            m.Box(-hx - 3, -hx, wy, wy + 60, 255, 325, glass); m.Box(hx, hx + 3, wy, wy + 60, 255, 325, glass);
+        }
+        return m.Part("house");
+    }
+
+    /// <summary>A closed shed around min..max (walls, roof): the item can't be seen in it - only what shows through
+    /// walls. At least 3 m high.</summary>
+    public static PreviewPart ShedAround((float X, float Y, float Z) min, (float X, float Y, float Z) max)
+    {
+        float size = Math.Max(max.X - min.X, Math.Max(max.Y - min.Y, max.Z - min.Z));
+        float gap = Math.Max(25, size * 0.15f), t = 8;
+        float x0 = min.X - gap, x1 = max.X + gap, y0 = min.Y - gap, y1 = max.Y + gap;
+        float top = Math.Max(min.Z + 210, max.Z + gap);
+        var m = new Mesh(0, 0, min.Z);
+        var wall = Color.FromArgb(150, 148, 140);
+        float h = top - min.Z;
+        // the front wall has an open doorway (90 cm x 2.1 m, smaller on a small shed): look in at the item, or
+        // stand to the side to see it through the wall
+        float dx = (x0 + x1) / 2, dw = Math.Min(63, (x1 - x0) * 0.6f) / 2, dh = Math.Min(147, h - 15);
+        m.Box(x0 - t, dx - dw, y0 - t, y0, 0, h, wall);
+        m.Box(dx + dw, x1 + t, y0 - t, y0, 0, h, wall);
+        m.Box(dx - dw, dx + dw, y0 - t, y0, dh, h, wall);
+        m.Box(x0 - t, x1 + t, y1, y1 + t, 0, h, wall);
+        m.Box(x0 - t, x0, y0, y1, 0, h, wall);
+        m.Box(x1, x1 + t, y0, y1, 0, h, wall);
+        m.Roof(x0 - t - 15, x1 + t + 15, y0 - t - 15, y1 + t + 15, h, Math.Min(140, (y1 - y0) * 0.3f), Color.FromArgb(96, 98, 104));
+        return m.Part("shed");
+    }
+}
+
+/// <summary>The light in the big view. Studio: the plain dark backdrop of the small view.</summary>
+enum Sky { Studio, Day, Dusk, Night, Fog }
+
+/// <summary>Colour vision to check a look with: normal, or the picture as someone with colour blindness sees it.</summary>
+enum Vision { Normal, Deuteranopia, Protanopia, Tritanopia }
+
+/// <summary>What the big view adds to a picture: the light, colour vision, other items beside it (each in its own look)
+/// and, when <see cref="Pick"/>, which item part is seen at each pixel.</summary>
+sealed class RenderExtras
+{
+    public Sky Sky;
+    public Vision Vision;
+    public List<(List<PreviewPart> Parts, Style Look)> Others = new();
+    public bool Pick;
+    /// <summary>Per pixel of the last picture (its width × height): the solid or see-through part drawn there.</summary>
+    public PreviewPart?[]? Hit;
+}
+
 static class PreviewRenderer
 {
-    public static Bitmap Render(PreviewScene scene, Style st, int w, int h, float yaw, float pitch, (float X, float Y, float Z) target, float dist)
+    public static Bitmap Render(PreviewScene scene, Style st, int w, int h, float yaw, float pitch, (float X, float Y, float Z) target, float dist,
+                                SizeGuide? guide = null, RenderExtras? x = null)
+    {
+        var (eye, look) = Orbit(yaw, pitch, target, dist);
+        return Render(scene, st, w, h, eye, look, 40, Math.Max(0.5f, dist * 0.005f), guide, x);
+    }
+
+    /// <summary>The turning camera's eye and look.</summary>
+    public static ((float X, float Y, float Z) Eye, (float X, float Y, float Z) Look) Orbit(float yaw, float pitch, (float X, float Y, float Z) target, float dist)
+    {
+        float cy = MathF.Cos(yaw), sy = MathF.Sin(yaw), cp = MathF.Cos(pitch), sp = MathF.Sin(pitch);
+        var eye = (X: target.X + dist * cp * cy, Y: target.Y + dist * cp * sy, Z: target.Z + dist * sp);
+        return (eye, (target.X - eye.X, target.Y - eye.Y, target.Z - eye.Z));
+    }
+
+    /// <summary>Where a point lands in a w × h picture from that camera; null behind it.</summary>
+    public static PointF? ToScreen((float X, float Y, float Z) eye, (float X, float Y, float Z) look, float fov, int w, int h, (float X, float Y, float Z) p)
+    {
+        var fwd = Norm(look);
+        var right = Norm(Cross(fwd, (0, 0, 1)));
+        var up = Cross(right, fwd);
+        float focal = 0.5f * h / MathF.Tan(fov / 2 * MathF.PI / 180);
+        var v = ToView(new Cam(eye, right, up, fwd, focal, w, h, 1, float.NaN, SkyLook.Of(Sky.Studio)), p);
+        return v.Z < 1 ? null : new PointF(w / 2f + v.X * focal / v.Z, h / 2f - v.Y * focal / v.Z);
+    }
+
+    /// <summary>A sky: its colour at the top, at the horizon, the ground; the sunlight's colour (strength in it) and the fog
+    /// (0 = none: how far in game units until only a third of the colour is left).</summary>
+    sealed record SkyLook(Sky Sky, (float R, float G, float B) Top, (float R, float G, float B) Horizon, (float R, float G, float B) Floor,
+                          (float R, float G, float B) Sun, float FogDist)
+    {
+        public static SkyLook Of(Sky s) => s switch
+        {
+            Sky.Day => new(s, (0.36f, 0.53f, 0.80f), (0.74f, 0.80f, 0.86f), (0.31f, 0.30f, 0.25f), (1.02f, 0.99f, 0.92f), 0),
+            Sky.Dusk => new(s, (0.16f, 0.14f, 0.30f), (0.86f, 0.48f, 0.28f), (0.13f, 0.10f, 0.09f), (0.66f, 0.45f, 0.32f), 0),
+            Sky.Night => new(s, (0.008f, 0.012f, 0.03f), (0.035f, 0.045f, 0.075f), (0.015f, 0.016f, 0.02f), (0.12f, 0.14f, 0.20f), 0),
+            Sky.Fog => new(s, (0.56f, 0.58f, 0.59f), (0.63f, 0.64f, 0.64f), (0.42f, 0.43f, 0.42f), (0.70f, 0.71f, 0.73f), 1000),
+            _ => new(s, default, default, default, (1, 1, 1), 0),
+        };
+        /// <summary>How much of a colour that far away is left (1 without fog).</summary>
+        public float Clear(float z) => FogDist <= 0 ? 1 : MathF.Exp(-z / FogDist);
+    }
+
+    /// <summary>The look's colours and strengths, worked out once per picture.</summary>
+    sealed record Paint(Color Glow, Color Beam, Color IconCol, Color ModelCol, float GlowK, float FillA, float OutlineA, float BeamA, float Shine, bool Fill, bool ThroughWalls)
+    {
+        public static Paint Of(Style st)
+        {
+            var iconCol = Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor);
+            float gs = Math.Clamp(st.GlowOpacity / 100f, 0.05f, 1f);
+            return new(Materials.Parse(st.GlowColor), Materials.Parse(st.BeamColor), iconCol,
+                       Models3D.Get(st.Icon) is { Tinted: false } ? Color.White : iconCol, // own colours, or the look's
+                       gs * 0.36f,
+                       Math.Min(1f, 0.28f * gs / 0.3f), Materials.OutlineAlpha(gs), // fill = 0.28 at 30 %; an outline is stronger at the edges
+                       Math.Min(1f, 0.75f * st.BeamStrength / 100f) * (st.BeamStrength > 100 ? st.BeamStrength / 100f : 1f),
+                       st.Brighten ? Math.Clamp(st.BrightenStrength, 25, 300) / 100f : 0, // the colour texture as a glow map
+                       st.GlowFill, st.ThroughWalls);
+        }
+    }
+
+    /// <summary>Colour blindness (Machado et al. 2009, full strength), on linear colour.</summary>
+    static readonly Dictionary<Vision, float[]> VisionMatrix = new()
+    {
+        [Vision.Protanopia] = new[] { 0.152286f, 1.052583f, -0.204868f, 0.114503f, 0.786281f, 0.099216f, -0.003882f, -0.048116f, 1.051998f },
+        [Vision.Deuteranopia] = new[] { 0.367322f, 0.860646f, -0.227968f, 0.280085f, 0.672501f, 0.047413f, -0.011820f, 0.042940f, 0.968881f },
+        [Vision.Tritanopia] = new[] { 1.255528f, -0.076749f, -0.178779f, -0.078411f, 0.930809f, 0.147602f, 0.004733f, 0.691367f, 0.303900f },
+    };
+
+    /// <summary>A camera standing at <paramref name="eye"/>, looking along <paramref name="look"/> (first person).</summary>
+    /// <param name="fov">The view's height in degrees.</param>
+    public static Bitmap Render(PreviewScene scene, Style st, int w, int h, (float X, float Y, float Z) eye, (float X, float Y, float Z) look, float fov,
+                                float near, SizeGuide? guide = null, RenderExtras? x = null)
     {
         w = Math.Max(16, w); h = Math.Max(16, h);
         var color = new float[w * h * 3];
         var depth = new float[w * h];
         Array.Fill(depth, float.MaxValue);
-        for (int y = 0; y < h; y++)
-        {
-            float k = 0.10f + 0.10f * y / h; // dark, a little lighter towards the bottom
-            for (int x = 0; x < w; x++) { int i = (y * w + x) * 3; color[i] = k * 0.9f; color[i + 1] = k * 0.95f; color[i + 2] = k * 1.05f; }
-        }
-        float cy = MathF.Cos(yaw), sy = MathF.Sin(yaw), cp = MathF.Cos(pitch), sp = MathF.Sin(pitch);
-        var eye = (X: target.X + dist * cp * cy, Y: target.Y + dist * cp * sy, Z: target.Z + dist * sp);
-        var fwd = Norm((target.X - eye.X, target.Y - eye.Y, target.Z - eye.Z));
+        var fwd = Norm(look);
         var right = Norm(Cross(fwd, (0, 0, 1)));
         var up = Cross(right, fwd);
-        float focal = 0.5f * h / MathF.Tan(20 * MathF.PI / 180); // 40 degree view
-        var light = Norm((-fwd.X * 0.5f + up.X * 0.7f - right.X * 0.5f, -fwd.Y * 0.5f + up.Y * 0.7f - right.Y * 0.5f, -fwd.Z * 0.5f + up.Z * 0.7f - right.Z * 0.5f));
-        var cam = new Cam(eye, right, up, fwd, focal, w, h, Math.Max(0.5f, dist * 0.005f));
-
-        var glow = Materials.Parse(st.GlowColor);
-        var beam = Materials.Parse(st.BeamColor);
-        var iconCol = Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor);
-        float glowK = Math.Clamp(st.GlowOpacity / 100f, 0.05f, 1f) * 0.36f;
-        float gs = Math.Clamp(st.GlowOpacity / 100f, 0.05f, 1f);
-        float fillA = Math.Min(1f, 0.28f * gs / 0.3f), outlineA = 0.3f + 0.7f * gs; // fill = 0.28 at 30 %; an outline is stronger at the edges
-        float beamA = Math.Min(1f, 0.75f * st.BeamStrength / 100f) * (st.BeamStrength > 100 ? st.BeamStrength / 100f : 1f);
-        // the item first (fills the depth buffer), then everything that adds or blends light
-        var modelCol = Models3D.Get(st.Icon) is { Tinted: false } ? Color.White : iconCol; // own colours, or the look's
-        foreach (var kind in new[] { PartKind.Solid, PartKind.Effect, PartKind.Blend, PartKind.Glow, PartKind.Icon3D, PartKind.Model, PartKind.Beam, PartKind.Icon })
-            foreach (var p in scene.Parts.Where(p => p.Kind == kind))
+        float focal = 0.5f * h / MathF.Tan(fov / 2 * MathF.PI / 180);
+        var sky = SkyLook.Of(x?.Sky ?? Sky.Studio);
+        for (int y = 0; y < h; y++)
+        {
+            (float R, float G, float B) c;
+            if (sky.Sky == Sky.Studio)
             {
-                bool xray = kind is PartKind.Glow or PartKind.Beam or PartKind.Icon or PartKind.Icon3D or PartKind.Model && st.ThroughWalls;
-                var col = kind switch { PartKind.Beam => beam, PartKind.Glow => glow, PartKind.Model => modelCol, _ => iconCol };
-                bool fill = st.GlowFill || p.Filled;
-                Draw(p, cam, color, depth, light, col, kind switch { PartKind.Glow => glowK, PartKind.Beam => beamA, _ => 1f }, xray, fill ? fillA : outlineA, !fill);
+                float k = 0.10f + 0.10f * y / h; // dark, a little lighter towards the bottom
+                c = (k * 0.9f, k * 0.95f, k * 1.05f);
+            }
+            else
+            {
+                // the ray through this row (no roll: the same for the whole row) - above or below the horizon
+                float dy = h / 2f - y - 0.5f, rz = fwd.Z * focal + up.Z * dy;
+                float el = rz / MathF.Sqrt(focal * focal + dy * dy);
+                if (el >= 0) { float t = MathF.Min(1, MathF.Sqrt(el * 1.6f)); c = Mix(sky.Horizon, sky.Top, t); }
+                else { float t = MathF.Min(1, -el * 6); c = Mix(Mix(sky.Horizon, sky.Floor, 0.75f), sky.Floor, t); } // haze where the ground meets the sky
+            }
+            for (int col = 0; col < w; col++) { int i = (y * w + col) * 3; color[i] = c.R; color[i + 1] = c.G; color[i + 2] = c.B; }
+        }
+        var light = Norm((-fwd.X * 0.5f + up.X * 0.7f - right.X * 0.5f, -fwd.Y * 0.5f + up.Y * 0.7f - right.Y * 0.5f, -fwd.Z * 0.5f + up.Z * 0.7f - right.Z * 0.5f));
+        var cam = new Cam(eye, right, up, fwd, focal, w, h, near, scene.Ground, sky);
+        var hit = x is { Pick: true } ? new PreviewPart?[w * h] : null;
+        if (x != null) x.Hit = hit;
+
+        if (guide != null)
+        {
+            if (guide.Grid) DrawGrid(guide, cam, color);
+            var plain = Paint.Of(new Style()) with { Shine = 0 };
+            foreach (var prop in guide.Props) Draw(prop, cam, color, depth, hit, light, Color.White, 1f, false, plain);
+        }
+        var looks = new List<(IEnumerable<PreviewPart> Parts, Paint Paint)> { (scene.Parts, Paint.Of(st)) };
+        if (x != null) looks.AddRange(x.Others.Select(o => ((IEnumerable<PreviewPart>)o.Parts, Paint.Of(o.Look))));
+        // the items first (fill the depth buffer), then everything that adds or blends light
+        foreach (var kind in new[] { PartKind.Solid, PartKind.Effect, PartKind.Blend, PartKind.Glow, PartKind.Icon3D, PartKind.Model, PartKind.Beam, PartKind.Icon })
+            foreach (var (parts, pt) in looks)
+                foreach (var p in parts.Where(p => p.Kind == kind))
+                {
+                    bool xray = kind is PartKind.Glow or PartKind.Beam or PartKind.Icon or PartKind.Icon3D or PartKind.Model && pt.ThroughWalls;
+                    var col = kind switch { PartKind.Beam => pt.Beam, PartKind.Glow => pt.Glow, PartKind.Model => pt.ModelCol, _ => pt.IconCol };
+                    bool fill = pt.Fill || p.Filled;
+                    Draw(p, cam, color, depth, hit, light, col, kind switch { PartKind.Glow => pt.GlowK, PartKind.Beam => pt.BeamA, _ => 1f }, xray, pt,
+                         fill ? pt.FillA : pt.OutlineA, !fill);
+                }
+
+        if (x != null && VisionMatrix.TryGetValue(x.Vision, out var m))
+            for (int i = 0; i < w * h * 3; i += 3)
+            {
+                float r = Math.Clamp(color[i], 0, 1), g = Math.Clamp(color[i + 1], 0, 1), b = Math.Clamp(color[i + 2], 0, 1);
+                color[i] = m[0] * r + m[1] * g + m[2] * b;
+                color[i + 1] = m[3] * r + m[4] * g + m[5] * b;
+                color[i + 2] = m[6] * r + m[7] * g + m[8] * b;
             }
 
         var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
@@ -512,6 +813,56 @@ static class PreviewRenderer
         for (int y = 0; y < h; y++) Marshal.Copy(px, y * w * 4, bd.Scan0 + y * bd.Stride, w * 4);
         bmp.UnlockBits(bd);
         return bmp;
+    }
+
+    /// <summary>Floor lines one square long each, fading out away from the item (the background, under everything).</summary>
+    static void DrawGrid(SizeGuide g, Cam c, float[] color)
+    {
+        int n = (int)(g.Radius / g.Step);
+        float r = n * g.Step;
+        for (int i = -n; i <= n; i++)
+        {
+            float o = i * g.Step;
+            for (int j = -n; j < n; j++)
+            {
+                float a0 = j * g.Step, a1 = a0 + g.Step, mid = (a0 + a1) / 2;
+                float fade = 1 - MathF.Sqrt(o * o + mid * mid) / r;
+                if (fade <= 0) continue;
+                float k = 0.35f * fade;
+                Line(c, color, (g.CX + a0, g.CY + o, g.FloorZ), (g.CX + a1, g.CY + o, g.FloorZ), k);
+                Line(c, color, (g.CX + o, g.CY + a0, g.FloorZ), (g.CX + o, g.CY + a1, g.FloorZ), k);
+            }
+        }
+    }
+
+    static (float X, float Y, float Z) ToView(Cam c, (float X, float Y, float Z) p)
+    {
+        float dx = p.X - c.Eye.X, dy = p.Y - c.Eye.Y, dz = p.Z - c.Eye.Z;
+        return (dx * c.Right.X + dy * c.Right.Y + dz * c.Right.Z, dx * c.Up.X + dy * c.Up.Y + dz * c.Up.Z, dx * c.Fwd.X + dy * c.Fwd.Y + dz * c.Fwd.Z);
+    }
+
+    static void Line(Cam c, float[] color, (float X, float Y, float Z) from, (float X, float Y, float Z) to, float k)
+    {
+        var a = ToView(c, from);
+        var b = ToView(c, to);
+        if (a.Z < c.Near && b.Z < c.Near) return;
+        if (a.Z < c.Near) { float t = (c.Near - a.Z) / (b.Z - a.Z); a = (a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t, c.Near); }
+        else if (b.Z < c.Near) { float t = (c.Near - b.Z) / (a.Z - b.Z); b = (b.X + (a.X - b.X) * t, b.Y + (a.Y - b.Y) * t, c.Near); }
+        float sx0 = c.W / 2f + a.X * c.Focal / a.Z, sy0 = c.H / 2f - a.Y * c.Focal / a.Z;
+        float sx1 = c.W / 2f + b.X * c.Focal / b.Z, sy1 = c.H / 2f - b.Y * c.Focal / b.Z;
+        float dx = sx1 - sx0, dy = sy1 - sy0;
+        int steps = (int)MathF.Ceiling(Math.Max(Math.Abs(dx), Math.Abs(dy)));
+        if (steps == 0 || steps > 4 * (c.W + c.H)) return; // (a square right at the camera)
+        // the lines in the light of the sky (dark at night), fading into fog
+        var (lr, lg, lb) = c.Sky.Sky == Sky.Studio ? (0.62f, 0.68f, 0.64f) : (0.55f * c.Sky.Sun.R, 0.58f * c.Sky.Sun.G, 0.52f * c.Sky.Sun.B);
+        for (int s = 0; s < steps; s++) // the end point is the next square's start
+        {
+            int x = (int)(sx0 + dx * s / steps), y = (int)(sy0 + dy * s / steps);
+            if (x < 0 || y < 0 || x >= c.W || y >= c.H) continue;
+            int ci = (y * c.W + x) * 3;
+            float kk = k * c.Sky.Clear(a.Z + (b.Z - a.Z) * s / steps);
+            color[ci] += (lr - color[ci]) * kk; color[ci + 1] += (lg - color[ci + 1]) * kk; color[ci + 2] += (lb - color[ci + 2]) * kk;
+        }
     }
 
     /// <summary>Bilinear, wrapping.</summary>
@@ -534,7 +885,10 @@ static class PreviewRenderer
         return (byte)(v * 255 + 0.5f);
     }
 
-    readonly record struct Cam((float X, float Y, float Z) Eye, (float X, float Y, float Z) Right, (float X, float Y, float Z) Up, (float X, float Y, float Z) Fwd, float Focal, int W, int H, float Near);
+    readonly record struct Cam((float X, float Y, float Z) Eye, (float X, float Y, float Z) Right, (float X, float Y, float Z) Up, (float X, float Y, float Z) Fwd, float Focal, int W, int H, float Near, float Ground, SkyLook Sky);
+
+    static (float R, float G, float B) Mix((float R, float G, float B) a, (float R, float G, float B) b, float t) =>
+        (a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t);
 
     static (float X, float Y, float Z) Cross((float X, float Y, float Z) a, (float X, float Y, float Z) b) => (a.Y * b.Z - a.Z * b.Y, a.Z * b.X - a.X * b.Z, a.X * b.Y - a.Y * b.X);
     static (float X, float Y, float Z) Norm((float X, float Y, float Z) a)
@@ -543,8 +897,12 @@ static class PreviewRenderer
         return l > 1e-9f ? (a.X / l, a.Y / l, a.Z / l) : (0, 0, 1);
     }
 
-    static void Draw(PreviewPart p, Cam c, float[] color, float[] depth, (float X, float Y, float Z) light, Color col, float strength, bool xray, float glowA = 0, bool outline = false)
+    static void Draw(PreviewPart p, Cam c, float[] color, float[] depth, PreviewPart?[]? hit, (float X, float Y, float Z) light, Color col, float strength, bool xray,
+                     Paint pt, float glowA = 0, bool outline = false)
     {
+        float shine = pt.Shine;
+        var sun = c.Sky.Sun;
+        var fogC = c.Sky.Horizon;
         int n = p.P.Length / 3;
         var vxs = new float[n]; var vys = new float[n]; var vzs = new float[n];
         var wx = new float[n]; var wy = new float[n]; var wz = new float[n];
@@ -621,6 +979,7 @@ static class PreviewRenderer
                     float pa = e0 * qa[i0] + e1 * qa[i1] + e2 * qa[i2];
                     float pb = e0 * qb[i0] + e1 * qb[i1] + e2 * qb[i2];
                     float pd = e0 * qd[i0] + e1 * qd[i1] + e2 * qd[i2];
+                    if (!xray && pa * wz[a] + pb * wz[b] + pd * wz[d] < c.Ground) continue; // buried (false when no ground: NaN)
 
                     float tr = 1, tg = 1, tb = 1, ta = 1;
                     if (tex != null && p.Uv != null)
@@ -638,6 +997,7 @@ static class PreviewRenderer
                         vb = (pa * p.Col[a * 4 + 2] + pb * p.Col[b * 4 + 2] + pd * p.Col[d * 4 + 2]) / 255f;
                     }
                     int ci = pi * 3;
+                    float clear = c.Sky.Clear(z); // fog: 1 = none
                     switch (p.Kind)
                     {
                         case PartKind.Solid:
@@ -653,19 +1013,28 @@ static class PreviewRenderer
                                 if (l > 1e-6f) { nx /= l; ny /= l; nz /= l; }
                             }
                             float lit = 0.32f + 0.78f * MathF.Abs(nx * light.X + ny * light.Y + nz * light.Z);
-                            float r = tr * vr * lit, g = tg * vg * lit, bl = tb * vb * lit;
-                            if (p.Kind == PartKind.Solid) { color[ci] = r; color[ci + 1] = g; color[ci + 2] = bl; depth[pi] = z; }
-                            else { color[ci] += (r - color[ci]) * ta; color[ci + 1] += (g - color[ci + 1]) * ta; color[ci + 2] += (bl - color[ci + 2]) * ta; }
+                            // the sky's light; Shine: its own colours as added light (the same day or night)
+                            float r = tr * vr * (lit * sun.R + shine), g = tg * vg * (lit * sun.G + shine), bl = tb * vb * (lit * sun.B + shine);
+                            if (clear < 1) { r = fogC.R + (r - fogC.R) * clear; g = fogC.G + (g - fogC.G) * clear; bl = fogC.B + (bl - fogC.B) * clear; }
+                            if (p.Kind == PartKind.Solid) { color[ci] = r; color[ci + 1] = g; color[ci + 2] = bl; depth[pi] = z; if (hit != null) hit[pi] = p; }
+                            else
+                            {
+                                color[ci] += (r - color[ci]) * ta; color[ci + 1] += (g - color[ci + 1]) * ta; color[ci + 2] += (bl - color[ci + 2]) * ta;
+                                if (hit != null && ta > 0.3f) hit[pi] = p;
+                            }
                             break;
                         }
                         case PartKind.Effect:
-                            color[ci] += tr * ta * vr * 0.7f; color[ci + 1] += tg * ta * vg * 0.7f; color[ci + 2] += tb * ta * vb * 0.7f;
+                        {
+                            float k = 0.7f * ta * clear;
+                            color[ci] += tr * vr * k; color[ci + 1] += tg * vg * k; color[ci + 2] += tb * vb * k;
                             break;
+                        }
                         case PartKind.Glow:
-                            if (p.TestRef >= 0) { color[ci] += cr * strength; color[ci + 1] += cg * strength; color[ci + 2] += cb * strength; } // cut-out: added light
+                            if (p.TestRef >= 0) { float k = strength * clear; color[ci] += cr * k; color[ci + 1] += cg * k; color[ci + 2] += cb * k; } // cut-out: added light
                             else
                             {
-                                float ga = glowA;
+                                float ga = glowA * clear;
                                 if (outline) // clear where the surface faces you, full colour towards the edges
                                 {
                                     var vd = Norm((c.Eye.X - wx[a], c.Eye.Y - wy[a], c.Eye.Z - wz[a]));
@@ -681,23 +1050,26 @@ static class PreviewRenderer
                             // brightest where the tube faces you, soft at its edges
                             var vd = Norm((c.Eye.X - wx[a], c.Eye.Y - wy[a], c.Eye.Z - wz[a]));
                             float facing = MathF.Abs(fn.X * vd.X + fn.Y * vd.Y + fn.Z * vd.Z);
-                            float k = strength * (0.15f + 0.6f * facing * facing);
+                            float k = strength * (0.15f + 0.6f * facing * facing) * clear;
                             color[ci] += cr * k; color[ci + 1] += cg * k; color[ci + 2] += cb * k;
                             break;
                         }
                         case PartKind.Icon:
                         {
-                            float k = ta * 1.15f;
+                            float k = ta * 1.15f * clear;
                             color[ci] += (cr * 1.1f - color[ci]) * Math.Min(1, k); color[ci + 1] += (cg * 1.1f - color[ci + 1]) * Math.Min(1, k); color[ci + 2] += (cb * 1.1f - color[ci + 2]) * Math.Min(1, k);
                             break;
                         }
                         case PartKind.Icon3D:
-                            color[ci] += cr * vr * 0.9f; color[ci + 1] += cg * vg * 0.9f; color[ci + 2] += cb * vb * 0.9f;
+                        {
+                            float k = 0.9f * clear;
+                            color[ci] += cr * vr * k; color[ci + 1] += cg * vg * k; color[ci + 2] += cb * vb * k;
                             break;
+                        }
                         case PartKind.Model:
                         {
                             // the material: texture x vertex colour x colour x 1.3, blended at 0.75
-                            float k = 0.75f * ta;
+                            float k = 0.75f * ta * clear;
                             color[ci] += (Math.Min(1, tr * vr * cr * 1.3f) - color[ci]) * k;
                             color[ci + 1] += (Math.Min(1, tg * vg * cg * 1.3f) - color[ci + 1]) * k;
                             color[ci + 2] += (Math.Min(1, tb * vb * cb * 1.3f) - color[ci + 2]) * k;
@@ -725,12 +1097,116 @@ sealed class ModelView : UserControl
     Func<string, List<string>> sharedWith = _ => new();
     bool filling;
     readonly Panel canvas = new DoubleBufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(26, 28, 32) };
-    readonly Label hint = new() { Dock = DockStyle.Bottom, Height = 22, TextAlign = ContentAlignment.MiddleLeft, ForeColor = SystemColors.GrayText,
-                                  Text = "Drag to turn · wheel to zoom · double-click to reset" };
-    readonly CheckBox whole = new() { Text = "Show the whole beam", AutoSize = true };
-    /// <summary>Preview only: off = the plain game model, to compare with the look (the mod doesn't change).</summary>
-    readonly CheckBox lookOn = new() { Text = "Show the look", AutoSize = true, Checked = true };
-    readonly FlowLayoutPanel previewRow = new() { Dock = DockStyle.Bottom, AutoSize = true, WrapContents = false };
+    /// <summary>A toggle button: on = pressed-in (soft accent), the same in both themes.</summary>
+    static CheckBox Toggle(string text, Padding margin)
+    {
+        // sized by hand: AutoSize cuts a flat toggle's text short
+        var b = new CheckBox { Text = text, Appearance = Appearance.Button, FlatStyle = FlatStyle.Flat, Margin = margin,
+                               TextAlign = ContentAlignment.MiddleCenter };
+        void Colour() => b.FlatAppearance.CheckedBackColor = Ui.AccentSoft;
+        void Fit() => b.Size = new Size(TextRenderer.MeasureText(text, b.Font).Width + 24, TextRenderer.MeasureText(text, b.Font).Height + 12);
+        Colour();
+        Fit();
+        b.FontChanged += (_, _) => Fit();
+        b.BackColorChanged += (_, _) => Colour(); // the theme changed
+        return b;
+    }
+    /// <summary>Camera menu: frame the tall beam too (only with a tall beam).</summary>
+    readonly ToolStripMenuItem whole = new("Fit the whole beam in the picture") { CheckOnClick = true };
+    /// <summary>Preview only, a two-button switch: "Apply look" or the plain game model ("Original"), to compare (the mod doesn't change).</summary>
+    readonly CheckBox lookOn = Toggle("Apply look", new Padding(3, 3, 0, 3));
+    readonly CheckBox lookOff = Toggle("Original", new Padding(0, 3, 12, 3));
+    /// <summary>The big window: walking, the keys box, the toolbar and the size line. The small view only turns and zooms.</summary>
+    bool isBig;
+    /// <summary>Things to put in the picture: a person, a house (sizes) and a shed around the item (through walls) -
+    /// the toolbar's "Scene" menu.</summary>
+    readonly ContextMenuStrip addMenu = new();
+    /// <summary>The big view's toolbar menus (Camera, Light, Colours) and the buttons that open them and show their setting.</summary>
+    readonly ContextMenuStrip cameraMenu = new(), lightMenu = new(), visionMenu = new();
+    Button? sceneButton, lightButton, visionButton;
+    static readonly string[] SkyNames = { "Studio", "Day", "Dusk", "Night", "Fog" };
+    static readonly string[] VisionNames = { "Normal", "Red-green (deuteranopia)", "Red-green (protanopia)", "Blue-yellow (tritanopia)" };
+    readonly ToolStripMenuItem addPerson = new("Person and floor grid (1.8 m)") { CheckOnClick = true };
+    readonly ToolStripMenuItem addHouse = new("House next to it (8.8 m high)") { CheckOnClick = true };
+    readonly ToolStripMenuItem addShed = new("Walls around it, with a door and windows - test \"Visible through walls\"") { CheckOnClick = true };
+    readonly ToolStripMenuItem addJunk = new("Scatter junk around it (rubble, grass, a few game items)") { CheckOnClick = true };
+    readonly ToolStripMenuItem hideLabels = new("Hide the name labels") { CheckOnClick = true };
+    bool AnyProps => addPerson.Checked || addHouse.Checked || addShed.Checked || addJunk.Checked || compares.Count > 0;
+
+    /// <summary>A selected item with its look, for "Compare with other items".</summary>
+    public sealed record CompareItem(Entry Entry, string Category, Style Look, IReadOnlySet<string> Off);
+    /// <summary>Set by the main window: the selected items with their looks.</summary>
+    public static Func<List<CompareItem>>? TickedItems;
+    /// <summary>Set by the main window: plain game items for "Scatter junk".</summary>
+    public static Func<IEnumerable<Entry>>? JunkItems;
+    const int MaxCompare = 12;
+    /// <summary>Other items standing in a row beside this one, each in its own look (they stay while you click through the list).</summary>
+    readonly List<(CompareItem Item, PreviewScene Scene)> compares = new();
+    /// <summary>Game items lying around for "Scatter junk" (loaded once).</summary>
+    List<PreviewScene>? junkScenes;
+    bool junkLoading;
+    /// <summary>The game's own models for the Add menu: a shop mannequin, a pre-war house, CAMP barn walls (plain, with a
+    /// door, with a big and a small window) and a flat barn roof. Loaded once for the app; one that can't be read is
+    /// drawn as the plain shape instead.</summary>
+    static Dictionary<string, PreviewScene>? propModels;
+    static bool propsLoading;
+    internal const string PropPerson = @"setdressing\mannequin\shroudmalemannequinclothes.nif", PropHouse = @"architecture\covenantsettlement\covenanthouse02.nif",
+                 PropWall = @"architecture\workshop\barn\workshop_barnwalla01.nif", PropDoor = @"architecture\workshop\barn\workshop_barnwallb01.nif",
+                 PropWindow = @"architecture\workshop\barn\workshop_barnwallc01.nif", PropSmallWindow = @"architecture\workshop\barn\workshop_barnwallf01.nif",
+                 PropRoof = @"architecture\workshop\barn\workshop_barnroofflata01.nif";
+    /// <summary>The compared items and junk as placed around the current item; rebuilt only when something moves.</summary>
+    string placedKey = "";
+    readonly List<(List<PreviewPart> Parts, string Name, (float X, float Y, float Z) Top)> placed = new();
+    List<PreviewPart> junkPlaced = new();
+    (float X, float Y, float Z) othersMin, othersMax;
+    readonly RenderExtras extras = new();
+    /// <summary>The camera of the last picture: the name labels use it.</summary>
+    (float X, float Y, float Z) shotEye, shotLook;
+    readonly ToolStripMenuItem spinOn = new("Spin slowly around the item") { CheckOnClick = true };
+    readonly ToolStripMenuItem showKeys = new("Show the keys box (mouse and keys)") { CheckOnClick = true };
+    readonly System.Windows.Forms.Timer spin = new() { Interval = 33 };
+    readonly System.Diagnostics.Stopwatch spinClock = new();
+
+    static Style Plain()
+    {
+        var s = new Style();
+        s.Glow = s.Beam = s.Brighten = false;
+        s.Icon = "";
+        return s;
+    }
+    readonly Button bigger = new() { Text = "⤢ Bigger view", AutoSize = true };
+    /// <summary>The controls box at the top left: open in the big view, a small "? Controls" tag in the small one;
+    /// a click on it (or Camera > Show the keys box) opens / folds it.</summary>
+    bool legendOpen { get => showKeys.Checked; set => showKeys.Checked = value; }
+    Rectangle legendBox;
+    bool legendClick;
+    (string Key, string What)[] Legend() => new[]
+    {
+        ("Drag", free ? "Circle the item" : "Turn the item"),
+        ("Right-drag", "Look around"),
+        ("Wheel", free ? "Step forward / back" : "Zoom"),
+        ("W A S D / arrows", "Walk (Shift: faster)"),
+        ("Q / E", "Down / up"),
+        ("Double-click", "Back to the start"),
+    };
+    /// <summary>You walked (keys) or stood back (10 / 30 / 100 m): a camera of your own at <see cref="eye"/>;
+    /// yaw / pitch are where you look. Off: the camera turns around the item.</summary>
+    bool free;
+    (float X, float Y, float Z) eye;
+    /// <summary>The turning camera as last drawn - walking starts from there.</summary>
+    (float X, float Y, float Z) orbitAt;
+    float orbitDist;
+    const float EyeHeight = 112; // eyes at 1.6 m
+    readonly HashSet<Keys> held = new();
+    readonly System.Windows.Forms.Timer walk = new() { Interval = 30 };
+    readonly System.Diagnostics.Stopwatch walkClock = new();
+    readonly FlowLayoutPanel previewRow = new() { Dock = DockStyle.Bottom, AutoSize = true, WrapContents = true };
+    enum CamView { Item, Whole }
+    CamView camView = CamView.Item;
+    /// <summary>This is the bigger view: it shows what the small one loaded (no parts list of its own).</summary>
+    (string? Model, List<string>? Gun, bool PartOff)? fixedTarget;
+    (string? Model, List<string>? Gun, bool PartOff) lastTarget;
+    SizeGuide? guide;
     GameData? game;
     Entry? entry;
     Style style = new();
@@ -744,10 +1220,83 @@ sealed class ModelView : UserControl
     const float StartZoom = 0.8f;
     float yaw = -0.9f, pitch = 0.35f, zoom = StartZoom;
     Point? drag;
+    /// <summary>The drag is with the right button: look around from where you stand.</summary>
+    bool lookDrag;
     int version;
     readonly System.Windows.Forms.Timer reload = new() { Interval = 250 };
 
-    sealed class DoubleBufferedPanel : Panel { public DoubleBufferedPanel() { DoubleBuffered = true; ResizeRedraw = true; } }
+    /// <summary>The picture: takes the keyboard (arrow keys too) for walking.</summary>
+    sealed class DoubleBufferedPanel : Panel
+    {
+        public DoubleBufferedPanel() { DoubleBuffered = true; ResizeRedraw = true; SetStyle(ControlStyles.Selectable, true); TabStop = true; }
+        protected override bool IsInputKey(Keys k) => (k & Keys.KeyCode) is Keys.Up or Keys.Down or Keys.Left or Keys.Right || base.IsInputKey(k);
+    }
+
+    /// <summary>A text box / number / list in this window has the keyboard (the settings beside the big view).</summary>
+    bool Typing()
+    {
+        Control? c = FindForm();
+        while (c is ContainerControl { ActiveControl: { } a }) c = a;
+        return c is TextBoxBase or NumericUpDown or ComboBox || c?.Parent is NumericUpDown;
+    }
+
+    static bool WalkKey(Keys k) => k is Keys.W or Keys.A or Keys.S or Keys.D or Keys.Q or Keys.E or Keys.Up or Keys.Down or Keys.Left or Keys.Right;
+
+    (float X, float Y, float Z) ItemCenter => scene == null ? default
+        : ((scene.Min.X + scene.Max.X) / 2, (scene.Min.Y + scene.Max.Y) / 2, (scene.Min.Z + scene.Max.Z) / 2);
+
+    /// <summary>Leave the turning camera: stand where it was, looking the same way.</summary>
+    void GoFree()
+    {
+        if (free || scene == null || orbitDist <= 0) return;
+        float cy = MathF.Cos(yaw), sy = MathF.Sin(yaw), cp = MathF.Cos(pitch), sp = MathF.Sin(pitch);
+        eye = (orbitAt.X + orbitDist * cp * cy, orbitAt.Y + orbitDist * cp * sy, Math.Max(scene.Min.Z + 20, orbitAt.Z + orbitDist * sp));
+        (yaw, pitch, free) = (yaw + MathF.PI, -pitch, true);
+    }
+
+    /// <summary>Back to turning around the item, as first shown.</summary>
+    void ResetView()
+    {
+        (free, yaw, pitch, zoom) = (false, -0.9f, 0.35f, StartZoom);
+        held.Clear();
+        MakeGuide();
+        Redraw();
+    }
+
+    /// <summary>Stand that far from the item (game units), eyes at 1.6 m, facing it - on the side you're on now.</summary>
+    void StandBack(float d)
+    {
+        if (scene == null) return;
+        GoFree();
+        if (!free) return;
+        var c = ItemCenter;
+        float a = MathF.Atan2(eye.Y - c.Y, eye.X - c.X);
+        eye = (c.X + d * MathF.Cos(a), c.Y + d * MathF.Sin(a), scene.Min.Z + EyeHeight);
+        FaceItem();
+        MakeGuide();
+        Redraw();
+    }
+
+    /// <summary>One step of walking with the held keys: faster far from the item, Shift three times faster.</summary>
+    void WalkStep()
+    {
+        float dt = Math.Min(0.1f, (float)walkClock.Elapsed.TotalSeconds);
+        walkClock.Restart();
+        if (held.Count == 0 || scene == null) { walk.Stop(); Redraw(); return; } // sharp again
+        GoFree();
+        var c = ItemCenter;
+        float dist = MathF.Sqrt((eye.X - c.X) * (eye.X - c.X) + (eye.Y - c.Y) * (eye.Y - c.Y) + (eye.Z - c.Z) * (eye.Z - c.Z));
+        float speed = Math.Max(250, dist * 0.6f) * ((ModifierKeys & Keys.Shift) != 0 ? 3 : 1) * dt; // 250 units ≈ 3.6 m a second
+        int fwd = (held.Contains(Keys.W) || held.Contains(Keys.Up) ? 1 : 0) - (held.Contains(Keys.S) || held.Contains(Keys.Down) ? 1 : 0);
+        int side = (held.Contains(Keys.D) || held.Contains(Keys.Right) ? 1 : 0) - (held.Contains(Keys.A) || held.Contains(Keys.Left) ? 1 : 0);
+        int rise = (held.Contains(Keys.E) ? 1 : 0) - (held.Contains(Keys.Q) ? 1 : 0);
+        float cy = MathF.Cos(yaw), sy = MathF.Sin(yaw);
+        // ground-level walking: forward is where you look, flattened; right is to its side
+        eye = (eye.X + speed * (fwd * cy + side * sy), eye.Y + speed * (fwd * sy - side * cy),
+               Math.Clamp(eye.Z + speed * 0.6f * rise, scene.Min.Z + 20, scene.Min.Z + 7000)); // 30 cm to 100 m up
+        MakeGuide();
+        Redraw();
+    }
 
     public ModelView()
     {
@@ -757,10 +1306,50 @@ sealed class ModelView : UserControl
         partsBox.VisibleChanged += (_, _) => partsSplit.Visible = partsBox.Visible;
         parts.Resize += (_, _) => FitPartsColumn();
         parts.HandleCreated += (_, _) => BeginInvoke(FitPartsColumn);
-        previewRow.Controls.Add(lookOn);
-        previewRow.Controls.Add(whole);
+        lookOn.Checked = true;
+        lookOn.AutoCheck = lookOff.AutoCheck = false; // a switch: clicking the lit one keeps it lit
+        lookOn.Click += (_, _) => lookOn.Checked = true;
+        lookOff.Click += (_, _) => lookOn.Checked = false;
+        previewRow.Controls.AddRange(new Control[] { lookOn, lookOff, bigger });
+        addMenu.Items.AddRange(new ToolStripItem[] { addPerson, addHouse, addShed, addJunk });
+        addMenu.Closing += (_, e) => { if (e.CloseReason == ToolStripDropDownCloseReason.ItemClicked) e.Cancel = true; }; // tick several
+        addMenu.Opening += (_, _) => FillAddMenu();
+        foreach (var it in new[] { addPerson, addHouse, addShed, addJunk, hideLabels }) it.CheckedChanged += (_, _) => { if (!filling) { MakeGuide(); Redraw(); } };
+        addJunk.CheckedChanged += (_, _) => { if (addJunk.Checked) LoadJunk(); };
+        // Light and Colours: pick one (a dot on the current one); the toolbar button says which
+        for (int i = 0; i < SkyNames.Length; i++)
+        {
+            int n = i;
+            lightMenu.Items.Add(new ToolStripMenuItem(SkyNames[i], null, (_, _) => { extras.Sky = (Sky)n; Redraw(); canvas.Focus(); }) { Checked = i == 0 });
+        }
+        for (int i = 0; i < VisionNames.Length; i++)
+        {
+            int n = i;
+            visionMenu.Items.Add(new ToolStripMenuItem(VisionNames[i], null, (_, _) => { extras.Vision = (Vision)n; Redraw(); canvas.Focus(); }) { Checked = i == 0 });
+        }
+        lightMenu.Items[1].ToolTipText = "The sky by day, at dusk, at night or in fog: sky colour, light level and haze";
+        visionMenu.Items[0].ToolTipText = "See the picture as someone with colour blindness does - does your colour still stand out?";
+        lightMenu.Opening += (_, _) => { for (int i = 0; i < lightMenu.Items.Count; i++) ((ToolStripMenuItem)lightMenu.Items[i]).Checked = i == (int)extras.Sky; };
+        visionMenu.Opening += (_, _) => { for (int i = 0; i < visionMenu.Items.Count; i++) ((ToolStripMenuItem)visionMenu.Items[i]).Checked = i == (int)extras.Vision; };
+        spinOn.CheckedChanged += (_, _) => { if (spinOn.Checked) { spinClock.Restart(); spin.Start(); } else spin.Stop(); canvas.Focus(); };
+        showKeys.CheckedChanged += (_, _) => canvas.Invalidate();
+        whole.ToolTipText = "Move the camera back so the whole tall beam fits in the picture (only with a tall beam)";
+        cameraMenu.Items.AddRange(new ToolStripItem[]
+        {
+            new ToolStripMenuItem("Reset - back to turning around the item", null, (_, _) => { ResetView(); canvas.Focus(); }) { ShortcutKeyDisplayString = "Double-click" },
+            new ToolStripSeparator(),
+            new ToolStripMenuItem("Stand back 10 m", null, (_, _) => { StandBack(700); canvas.Focus(); }) { ToolTipText = "Stand 10 m from the item, eyes at 1.6 m, facing it" },
+            new ToolStripMenuItem("Stand back 30 m", null, (_, _) => { StandBack(2100); canvas.Focus(); }) { ToolTipText = "Stand 30 m from the item, eyes at 1.6 m, facing it" },
+            new ToolStripMenuItem("Stand back 100 m", null, (_, _) => { StandBack(7000); canvas.Focus(); }) { ToolTipText = "Stand 100 m from the item, eyes at 1.6 m, facing it" },
+            new ToolStripSeparator(),
+            spinOn, whole, showKeys,
+        });
+        spin.Tick += (_, _) => SpinStep();
+        var tips = new ToolTip { AutoPopDelay = 20000 };
+        tips.SetToolTip(bigger, "Open the picture in a big window (Esc closes it)");
+        tips.SetToolTip(lookOn, "Show the item with your look applied (glow, beam, icon)");
+        tips.SetToolTip(lookOff, "Show the original game model, to compare (preview only - the mod doesn't change)");
         Controls.Add(previewRow);
-        Controls.Add(hint);
         parts.Columns.Add("Part", 220);
         var header = new Label { Dock = DockStyle.Top, Height = 20, Text = "Parts - deselect to leave out" };
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 32, WrapContents = false };
@@ -790,7 +1379,12 @@ sealed class ModelView : UserControl
         partsBox.Controls.Add(header);
         partsBox.Controls.Add(buttons);
         partsBox.Controls.Add(partsNote);
-        parts.SelectedIndexChanged += (_, _) => { if (!filling && parts.Created && parts.SelectedItems.Count > 0) { zoom = StartZoom; Load(); } };
+        parts.SelectedIndexChanged += (_, _) =>
+        {
+            if (filling || !parts.Created) return;
+            picked = parts.SelectedItems.Count > 0 ? parts.SelectedItems[0].Tag as string : null;
+            if (picked != null) { zoom = StartZoom; Load(); }
+        };
         parts.ItemChecked += (_, e) =>
         {
             // the list re-sends these while Windows creates it - only real clicks count
@@ -804,21 +1398,71 @@ sealed class ModelView : UserControl
         };
         canvas.Paint += PaintCanvas;
         canvas.Resize += (_, _) => Redraw();
-        canvas.MouseDown += (_, e) => { if (e.Button == MouseButtons.Left) drag = e.Location; };
-        canvas.MouseUp += (_, _) => drag = null;
+        canvas.MouseDown += (_, e) =>
+        {
+            canvas.Focus();
+            legendClick = legendBox.Contains(e.Location);
+            if (legendClick) { if (e.Button == MouseButtons.Left) { legendOpen = !legendOpen; canvas.Invalidate(); } return; }
+            if (e.Button == MouseButtons.Left || isBig && e.Button == MouseButtons.Right) (drag, lookDrag) = (e.Location, e.Button == MouseButtons.Right);
+        };
+        canvas.MouseUp += (_, _) => { if (drag == null) return; drag = null; if (frame != null && frame.Width != canvas.Width) Redraw(); }; // sharp again
+        canvas.KeyDown += (_, e) =>
+        {
+            if (!isBig || !WalkKey(e.KeyCode) || scene == null) return;
+            e.Handled = e.SuppressKeyPress = true;
+            if (held.Add(e.KeyCode) && !walk.Enabled) { walkClock.Restart(); walk.Start(); WalkStep(); }
+        };
+        canvas.KeyUp += (_, e) => held.Remove(e.KeyCode);
+        canvas.LostFocus += (_, _) => held.Clear();
+        walk.Tick += (_, _) => WalkStep();
         canvas.MouseMove += (_, e) =>
         {
             if (drag is not Point d) return;
-            yaw -= (e.X - d.X) * 0.01f;
-            pitch = Math.Clamp(pitch + (e.Y - d.Y) * 0.01f, -1.45f, 1.45f);
+            float mx = e.X - d.X, my = e.Y - d.Y;
+            if (lookDrag) // right button: turn your head as in a game - mouse right looks right, up looks up
+            {
+                GoFree();
+                yaw -= mx * 0.005f;
+                pitch = Math.Clamp(pitch - my * 0.005f, -1.45f, 1.45f);
+            }
+            else if (free && scene != null) // left button after walking: circle the item at the same distance, facing it
+            {
+                var c = ItemCenter;
+                float dx = eye.X - c.X, dy = eye.Y - c.Y, dz = eye.Z - c.Z, r = Math.Max(1, MathF.Sqrt(dx * dx + dy * dy + dz * dz));
+                float a = MathF.Atan2(dy, dx) - mx * 0.01f, el = Math.Clamp(MathF.Asin(Math.Clamp(dz / r, -1, 1)) + my * 0.01f, -1.45f, 1.45f);
+                eye = (c.X + r * MathF.Cos(el) * MathF.Cos(a), c.Y + r * MathF.Cos(el) * MathF.Sin(a), Math.Max(scene.Min.Z + 20, c.Z + r * MathF.Sin(el)));
+                FaceItem();
+                MakeGuide();
+            }
+            else // left button: turn the item (the camera circles it)
+            {
+                yaw -= mx * 0.01f;
+                pitch = Math.Clamp(pitch + my * 0.01f, -1.45f, 1.45f);
+            }
             drag = e.Location;
             Redraw();
         };
-        canvas.MouseWheel += (_, e) => { zoom = Math.Clamp(zoom * (e.Delta > 0 ? 1.15f : 1 / 1.15f), 0.02f, 20f); Redraw(); };
-        canvas.MouseEnter += (_, _) => canvas.Focus();
-        canvas.DoubleClick += (_, _) => { yaw = -0.9f; pitch = 0.35f; zoom = StartZoom; Redraw(); };
-        whole.CheckedChanged += (_, _) => { zoom = StartZoom; Redraw(); };
-        lookOn.CheckedChanged += (_, _) => Load();
+        canvas.MouseWheel += (_, e) =>
+        {
+            if (free && scene != null) // a step where you look: an eighth of the way to the item, at least 30 cm
+            {
+                var c = ItemCenter;
+                float dist = MathF.Sqrt((eye.X - c.X) * (eye.X - c.X) + (eye.Y - c.Y) * (eye.Y - c.Y) + (eye.Z - c.Z) * (eye.Z - c.Z));
+                float k = Math.Max(20, dist / 8) * (e.Delta > 0 ? 1 : -1), cp = MathF.Cos(pitch);
+                eye = (eye.X + k * cp * MathF.Cos(yaw), eye.Y + k * cp * MathF.Sin(yaw), Math.Clamp(eye.Z + k * MathF.Sin(pitch), scene.Min.Z + 20, scene.Min.Z + 7000));
+                MakeGuide();
+            }
+            else zoom = Math.Clamp(zoom * (e.Delta > 0 ? 1.15f : 1 / 1.15f), 0.02f, 20f);
+            Redraw();
+        };
+        // the big window takes the keys as soon as the mouse is over the picture; the small one on a click
+        // (it sits beside the look's text boxes - passing over it mustn't steal the typing)
+        canvas.MouseEnter += (_, _) => { if (fixedTarget != null && !Typing()) canvas.Focus(); };
+        canvas.DoubleClick += (_, _) => { if (!legendClick) ResetView(); };
+        canvas.MouseMove += (_, e) => canvas.Cursor = drag == null && legendBox.Contains(e.Location) ? Cursors.Hand : Cursors.Default;
+        whole.CheckedChanged += (_, _) => { if (filling) return; camView = whole.Checked ? CamView.Whole : CamView.Item; ResetView(); };
+        bigger.Click += (_, _) => OpenBig();
+        lookOn.CheckedChanged += (_, _) => { lookOff.Checked = !lookOn.Checked; if (!filling) Load(); };
         reload.Tick += (_, _) => { reload.Stop(); Load(); };
     }
 
@@ -829,6 +1473,7 @@ sealed class ModelView : UserControl
     public void Show(GameData game, Entry e, Style st, bool keepOtherMods, IReadOnlySet<string>? off = null, Func<string, List<string>>? shared = null,
                      bool ticked = true, string? focusPart = null, IReadOnlyDictionary<string, Style>? partLooks = null)
     {
+        if (e != entry && free) free = false; // another item: turn around it again
         this.game = game; entry = e; style = st.Clone(); this.keepOtherMods = keepOtherMods; this.ticked = ticked;
         this.partLooks = partLooks?.ToDictionary(kv => kv.Key, kv => kv.Value.Clone()) ?? new();
         savedOff = off?.ToHashSet() ?? new();
@@ -861,6 +1506,8 @@ sealed class ModelView : UserControl
         // the part asked for (an ingredient double-clicked in the list), else the first
         var first = parts.Items.Cast<ListViewItem>().FirstOrDefault(i => focusPart != null && (string?)i.Tag == focusPart) ?? (parts.Items.Count > 0 ? parts.Items[0] : null);
         if (first != null) { first.Selected = true; first.Focused = true; first.EnsureVisible(); }
+        // no part list on screen and no part asked for: a weapon shows whole
+        picked = ShowParts || focusPart != null || !e.Assembled ? first?.Tag as string : null;
         filling = false;
         Load(); // the first part (before the window exists the list sends no selection event)
     }
@@ -878,7 +1525,10 @@ sealed class ModelView : UserControl
     /// <summary>"◆ name  *": ◆ = its own look, * = also part of another entry.</summary>
     string ItemText(string m) => (partLooks.ContainsKey(m) ? "◆ " : "") + Label(m) + (sharedWith(m).Count > 0 ? "  *" : "");
 
-    string? Selected() => parts.SelectedItems.Count > 0 ? parts.SelectedItems[0].Tag as string : null;
+    /// <summary>The part shown. Kept here, not read from the list: the hidden list (pop-up, ShowParts off) has no
+    /// window, and a ListView without one reports no selection - every part would show the main model.</summary>
+    string? picked;
+    string? Selected() => picked;
 
     /// <summary>The selected part's own look: the look settings and a picture of just that part.</summary>
     void EditPartLook()
@@ -1000,34 +1650,173 @@ sealed class ModelView : UserControl
         set { style = value.Clone(); reload.Stop(); reload.Start(); }
     }
 
+    /// <summary>What to load: the picked part (or the main model), the whole gun when no part is picked, and whether
+    /// the picked part is left out of the mod. The bigger view keeps what the small one showed.</summary>
+    (string? Model, List<string>? Gun, bool PartOff) Target()
+    {
+        if (fixedTarget is { } t) return t;
+        var model = picked ?? entry!.Models.FirstOrDefault();
+        var off = OffParts;
+        // a weapon with no part picked: the whole gun (its parts left in the mod)
+        var gun = entry!.Assembled && picked == null ? entry.Models.Where(m => !off.Contains(m)).ToList() : null;
+        return (model, gun, picked != null && parts.Items.Cast<ListViewItem>().FirstOrDefault(i => (string?)i.Tag == picked)?.Checked == false);
+    }
+
+    /// <summary>The picture in a big window: same item and look, a camera choice, the size guide on.</summary>
+    /// <summary>The open bigger view: not modal, it follows every change made here (look edits, another part).</summary>
+    ModelView? big;
+    Form? bigForm;
+    /// <summary>The look settings beside this preview: the bigger view borrows them while it is open.</summary>
+    public Control? Settings { get; set; }
+
+    void OpenBig()
+    {
+        if (game == null || entry == null || scene == null) return;
+        if (bigForm != null) { bigForm.Activate(); return; }
+        var owner = FindForm();
+        var area = Screen.FromControl(this).WorkingArea;
+        var f = new Form
+        {
+            Text = "3D view - " + entry.Name, StartPosition = FormStartPosition.CenterScreen, Size = new Size(area.Width * 3 / 4, area.Height * 3 / 4),
+            MinimizeBox = false, ShowIcon = false, ShowInTaskbar = false, KeyPreview = true, Font = owner?.Font ?? Font, BackColor = SystemColors.Control,
+        };
+        var view = new ModelView { Dock = DockStyle.Fill, ShowParts = false };
+        view.CopyFrom(this);
+        f.Controls.Add(view);
+        // the look settings move in on the right (one place to look and edit); they go back when it closes
+        Action giveBack = () => { };
+        if (Settings is { Parent: { } home } s)
+        {
+            int at = home.Controls.GetChildIndex(s);
+            var dock = s.Dock;
+            var stand = new Label
+            {
+                Dock = dock, Size = s.Size, TextAlign = ContentAlignment.MiddleCenter, ForeColor = SystemColors.GrayText, Padding = new Padding(16),
+                Text = "The look settings are in the 3D view window - close it to edit them here.",
+            };
+            var side = new Panel { Dock = DockStyle.Right, Width = Math.Max(360, s.Width) + 12, Padding = new Padding(8, 4, 4, 4) };
+            home.Controls.Add(stand);
+            home.Controls.SetChildIndex(stand, at);
+            s.Dock = DockStyle.Fill;
+            side.Controls.Add(s);
+            f.Controls.Add(new Splitter { Dock = DockStyle.Right, Width = 6, MinSize = 300, MinExtra = 300 });
+            f.Controls.Add(side);
+            f.Width = Math.Min(area.Width, f.Width + side.Width);
+            giveBack = () =>
+            {
+                side.Controls.Remove(s);
+                s.Dock = dock;
+                home.Controls.Remove(stand);
+                stand.Dispose();
+                home.Controls.Add(s);
+                home.Controls.SetChildIndex(s, at);
+            };
+        }
+        f.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) f.Close(); };
+        f.HandleCreated += (_, _) => Ui.TitleBar(f);
+        // the window it came from closes (the look pop-up hides): this one goes too
+        EventHandler gone = (_, _) => { if (owner is { Visible: false }) f.Close(); };
+        if (owner != null) owner.VisibleChanged += gone;
+        f.FormClosed += (_, _) => { if (owner != null) owner.VisibleChanged -= gone; giveBack(); big = null; bigForm = null; f.Dispose(); };
+        Ui.Apply(f);
+        (big, bigForm) = (view, f);
+        f.Show(owner);
+    }
+
+    /// <summary>The bigger view takes the small one's new item / look; its own camera stays unless the model changed.</summary>
+    void Follow(ModelView o)
+    {
+        bool same = entry == o.entry && fixedTarget?.Model == o.lastTarget.Model && fixedTarget?.Gun == null == (o.lastTarget.Gun == null);
+        (game, entry, style, shown, scene, keepOtherMods, ticked, partLooks) = (o.game, o.entry, o.style.Clone(), o.shown, o.scene, o.keepOtherMods, o.ticked, o.partLooks);
+        (fixedTarget, message, frameAll) = (o.lastTarget, o.message, o.frameAll);
+        BeamCheck();
+        if (!same) (free, yaw, pitch, zoom) = (false, o.free ? -0.9f : o.yaw, o.free ? 0.35f : o.pitch, StartZoom);
+        if (FindForm() is { } f && o.entry != null) f.Text = "3D view - " + o.entry.Name;
+        MakeGuide();
+        Redraw();
+    }
+
+    void CopyFrom(ModelView o)
+    {
+        filling = true;
+        isBig = true;
+        (game, entry, style, shown, scene, keepOtherMods, ticked, partLooks) = (o.game, o.entry, o.style.Clone(), o.shown, o.scene, o.keepOtherMods, o.ticked, o.partLooks);
+        (fixedTarget, message, frameAll, yaw, pitch) = (o.lastTarget, o.message, o.frameAll, o.yaw, o.pitch);
+        (free, eye, zoom) = (o.free, o.eye, o.zoom);
+        lookOn.Checked = o.lookOn.Checked;
+        whole.Checked = o.whole.Checked;
+        addPerson.Checked = true; // the big view starts with the person
+        legendOpen = true; // and the controls on show
+        (addHouse.Checked, addShed.Checked) = (o.addHouse.Checked, o.addShed.Checked);
+        filling = false;
+        BeamCheck();
+        partsBox.Visible = false;
+        previewRow.Controls.Clear();
+        var tips = new ToolTip { AutoPopDelay = 20000 };
+        Button B(string t, string tip, Action a) { var b = new Button { Text = t, AutoSize = true }; b.Click += (_, _) => { a(); canvas.Focus(); }; tips.SetToolTip(b, tip); return b; }
+        // the toolbar at the top: the two switches, then a menu per topic (each button says its setting), then Save
+        Button Drop(ContextMenuStrip m, string tip)
+        {
+            var b = new Button { AutoSize = true, Margin = new Padding(3, 3, 3, 3) };
+            b.Click += (_, _) => m.Show(b, new Point(0, b.Height));
+            tips.SetToolTip(b, tip);
+            return b;
+        }
+        sceneButton = Drop(addMenu, "Put things in the picture: a person for size, a house, walls around it, junk, or other items to compare");
+        lightButton = Drop(lightMenu, "The light: studio, or the sky by day, at dusk, at night or in fog");
+        visionButton = Drop(visionMenu, "See the picture as someone with colour blindness does - does your colour still stand out?");
+        var camera = Drop(cameraMenu, "Reset the view, stand back 10 / 30 / 100 m, spin, fit a tall beam, the keys box");
+        camera.Text = "Camera ▾";
+        camera.Margin = new Padding(12, 3, 3, 3);
+        var save = B("Save picture...", "Save the picture as it is now as a PNG file", SavePicture);
+        save.Margin = new Padding(12, 3, 3, 3);
+        previewRow.Dock = DockStyle.Top;
+        previewRow.Padding = new Padding(4, 4, 4, 2);
+        previewRow.Controls.AddRange(new Control[] { lookOn, lookOff, camera, sceneButton, lightButton, visionButton, save });
+        UpdateBar();
+        MakeGuide();
+    }
+
+    /// <summary>The toolbar buttons say what is set: how many things are in the scene, the light, the colours.</summary>
+    void UpdateBar()
+    {
+        if (sceneButton == null || lightButton == null || visionButton == null) return;
+        int n = new[] { addPerson, addHouse, addShed, addJunk }.Count(i => i.Checked) + compares.Count;
+        string scene = n > 0 ? $"Scene ({n}) ▾" : "Scene ▾", light = $"Light: {SkyNames[(int)extras.Sky]} ▾",
+               vision = extras.Vision == Vision.Normal ? "Colours: Normal ▾" : $"Colours: {VisionNames[(int)extras.Vision]} ▾";
+        if (sceneButton.Text != scene) sceneButton.Text = scene;
+        if (lightButton.Text != light) lightButton.Text = light;
+        if (visionButton.Text != vision) visionButton.Text = vision;
+    }
+
     async void Load()
     {
         if (game == null || entry == null) return;
-        var model = parts.SelectedItems.Count > 0 ? parts.SelectedItems[0].Tag as string : entry.Models.FirstOrDefault();
+        var (model, gun, partOff) = Target();
+        lastTarget = (model, gun, partOff);
         if (model == null)
         {
             // only recolours a texture (an invisible enemy's shimmer): nothing to turn around
             scene = null;
             message = "Nothing to show in 3D - this one recolours the shimmer of invisible enemies (see Details in the list).";
-            whole.Visible = false;
+            whole.Enabled = false;
             Redraw();
+            big?.Follow(this);
             return;
         }
         int v = ++version;
         var (g, e, st, keep) = (game, entry, style.Clone(), keepOtherMods);
         bool ownLook = partLooks.TryGetValue(model, out var ownStyle);
         if (ownLook) st = ownStyle!.Clone(); // a part with its own look: that look, with its own beam / icon
-        if (!ticked || !lookOn.Checked || parts.SelectedItems.Count > 0 && !parts.SelectedItems[0].Checked) { st.Glow = st.Beam = false; st.Icon = ""; } // as in the game
+        bool plain = !ticked || partOff;
+        if (plain || !lookOn.Checked) { st.Glow = st.Beam = st.Brighten = st.Label = false; st.Icon = ""; } // as in the game
         bool beamHere = ownLook || e.BeamModels == null || e.BeamModels.Contains(model);
         message = scene == null ? "Loading..." : message;
         canvas.Invalidate();
         try
         {
-            // a weapon with no part picked: the whole gun (its parts left in the mod)
-            var off = OffParts;
-            var gun = e.Assembled && parts.SelectedItems.Count == 0 ? e.Models.Where(m => !off.Contains(m)).ToList() : null;
             var s = await Task.Run(() => gun is { Count: > 0 } ? ModelPreview.LoadAll(g, gun, st, e.NoIcon, e.Harvestable, beamHere, keep)
-                                                       : ModelPreview.Load(g, model, st, e.NoIcon, e.Harvestable, beamHere, keep));
+                                                       : ModelPreview.Load(g, model, st, e.NoIcon, e.Harvestable, beamHere, keep, e.Name));
             if (v != version) return;
             scene = s;
             shown = st; // the colours to draw it in: a part's own look, if it has one
@@ -1045,9 +1834,518 @@ sealed class ModelView : UserControl
         // an arrow or an icon sits close above the item: always in the picture. Only a tall beam would shrink the item
         // to a dot - that one is in view on request
         frameAll = !(st.Beam && !st.BeamArrow);
-        whole.Visible = scene != null && st.Beam && !st.BeamArrow;
-        whole.Text = "Show the whole beam";
+        BeamCheck();
+        MakeGuide();
         Redraw();
+        big?.Follow(this);
+    }
+
+    /// <summary>"Fit the whole beam" only in the big view (the small one is too small for it) and only with a tall beam.</summary>
+    void BeamCheck()
+    {
+        whole.Enabled = isBig && scene != null && shown.Beam && !shown.BeamArrow;
+        camView = whole.Enabled && whole.Checked ? CamView.Whole : CamView.Item;
+    }
+
+    /// <summary>The floor grid and what was added (none when nothing is, except from 30 m - you stand on the grid there):
+    /// 10 cm squares under a small item, else 1 m. As first seen, the person stands half a metre to the item's right,
+    /// the house to its left; the shed closes around it.</summary>
+    void MakeGuide()
+    {
+        guide = null;
+        Place();
+        if (scene == null || !AnyProps && !free) return;
+        var (min, max) = (scene.Min, scene.Max);
+        float cx = (min.X + max.X) / 2, cy = (min.Y + max.Y) / 2;
+        float size = Math.Max(max.X - min.X, Math.Max(max.Y - min.Y, max.Z - min.Z));
+        float d = 0.5f * MathF.Sqrt((max.X - min.X) * (max.X - min.X) + (max.Y - min.Y) * (max.Y - min.Y)) + 35;
+        if (addShed.Checked) d += Math.Max(25, size * 0.15f) + 40; // the others stand outside the shed
+        if ((addPerson.Checked || addHouse.Checked || addShed.Checked) && propModels == null) LoadProps();
+        var house = propModels?.GetValueOrDefault(PropHouse);
+        var person = propModels?.GetValueOrDefault(PropPerson);
+        var walls = propModels != null && propModels.ContainsKey(PropWall) ? WallsAround(propModels, min, max) : null;
+        if (walls != null) d = Math.Max(d, (Math.Max(walls.Value.HalfX, walls.Value.HalfY) + 45) / 0.78f); // the person stands outside
+        // a house's corner from its middle (the drawn one: 3.2 m)
+        float houseR = house == null ? 322 : MathF.Sqrt(MathF.Pow(Math.Max(-house.Min.X, house.Max.X), 2) + MathF.Pow(Math.Max(-house.Min.Y, house.Max.Y), 2));
+        float hd = d + houseR + 10;
+        var props = new List<PreviewPart>();
+        // the compared items stand in a row to the right (+x): the person moves to the left then
+        // the person stands right beside the item's side (outside the walls), level with its middle
+        float side = walls != null ? walls.Value.HalfX + 45 : addShed.Checked ? 0.5f * (max.X - min.X) + Math.Max(25, size * 0.15f) + 70 : 0.5f * (max.X - min.X) + 45;
+        float px = cx + (placed.Count > 0 ? -side : side), py = cy;
+        if (addPerson.Checked)
+        {
+            if (person != null) props.AddRange(Stand(person, px, py, min.Z, MathF.PI)); // the mannequin faces +y: turn him round
+            else props.Add(SizeGuide.PersonAt(px, py, min.Z));
+        }
+        if (addHouse.Checked)
+        {
+            if (house != null) props.AddRange(Stand(house, cx - 0.78f * hd, cy - 0.62f * hd, min.Z));
+            else props.Add(SizeGuide.HouseAt(cx - 0.78f * hd, cy - 0.62f * hd, min.Z));
+        }
+        if (addShed.Checked)
+        {
+            if (walls != null) props.AddRange(walls.Value.Parts);
+            else props.Add(SizeGuide.ShedAround(min, max));
+        }
+        if (addJunk.Checked) { props.Add(SizeGuide.JunkAround(min, max, (entry?.Id ?? "").Aggregate(17, (h, ch) => h * 31 + ch))); props.AddRange(junkPlaced); }
+        // small squares under a small item seen close; 1 m once you walk (you stand on the grid)
+        float step = camView == CamView.Item && !free && size < 42 && !addHouse.Checked && !addShed.Checked ? 7 : 70; // 60 cm = 42 units
+        float radius = free ? MathF.Sqrt((eye.X - cx) * (eye.X - cx) + (eye.Y - cy) * (eye.Y - cy)) + 700
+                     : camView == CamView.Whole ? Math.Max(700, (scene.AllMax.Z - min.Z) * 0.6f)
+                     : Math.Max(d + 60, size * 1.5f);
+        if (addHouse.Checked) radius = Math.Max(radius, hd + 400);
+        if (placed.Count > 0) radius = Math.Max(radius, othersMax.X - cx + 150);
+        guide = new SizeGuide(min.Z, cx, cy, step, Math.Min(radius, step * 50), true, props.ToArray());
+    }
+
+    /// <summary>Loads the Add menu's game models (<see cref="propModels"/>) once, then redraws with them.</summary>
+    async void LoadProps()
+    {
+        if (propModels != null || propsLoading || game == null) return;
+        propsLoading = true;
+        var g = game;
+        propModels = await Task.Run(() => LoadPropModels(g));
+        propsLoading = false;
+        if (IsDisposed) return;
+        MakeGuide();
+        Redraw();
+    }
+
+    internal static Dictionary<string, PreviewScene> LoadPropModels(GameData g)
+    {
+        var r = new Dictionary<string, PreviewScene>();
+        foreach (var m in new[] { PropPerson, PropHouse, PropWall, PropDoor, PropWindow, PropSmallWindow, PropRoof })
+            try { r[m] = ModelPreview.Load(g, m, Plain(), true, false, false, false); } catch (Exception) { }
+        return r;
+    }
+
+    /// <summary>A game model's own parts standing with its origin at x, y, z, turned by <paramref name="turn"/> around it;
+    /// what lies under the origin (a house's cellar wall) is cut off.</summary>
+    internal static IEnumerable<PreviewPart> Stand(PreviewScene s, float x, float y, float z, float turn = 0) =>
+        s.Parts.Where(p => p.Kind == PartKind.Solid).Select(p => CutBelow(Moved(p, (x, y, z), turn, default, 0), z)).Where(p => p.Tri.Length > 0);
+
+    /// <summary>The part with everything under height <paramref name="g"/> cut away: triangles that cross it are cut along
+    /// it (the floor draws nothing, so a cellar wall reaching into the ground would show under it).</summary>
+    static PreviewPart CutBelow(PreviewPart p, float g)
+    {
+        bool any = false;
+        for (int i = 2; i < p.P.Length; i += 3) if (p.P[i] < g) { any = true; break; }
+        if (!any) return p;
+        var pos = new List<float>(p.P);
+        var nor = p.N != null && p.N.Length == p.P.Length ? new List<float>(p.N) : null;
+        var uv = p.Uv != null && p.Uv.Length / 2 == p.P.Length / 3 ? new List<float>(p.Uv) : null;
+        var col = p.Col != null && p.Col.Length / 4 == p.P.Length / 3 ? new List<byte>(p.Col) : null;
+        var tri = new List<int>(p.Tri.Length);
+        int Between(int a, int b)
+        {
+            float za = pos[a * 3 + 2], zb = pos[b * 3 + 2], t = (g - za) / (zb - za);
+            int n = pos.Count / 3;
+            for (int k = 0; k < 3; k++) pos.Add(pos[a * 3 + k] + (pos[b * 3 + k] - pos[a * 3 + k]) * t);
+            if (nor != null) for (int k = 0; k < 3; k++) nor.Add(nor[a * 3 + k] + (nor[b * 3 + k] - nor[a * 3 + k]) * t);
+            if (uv != null) for (int k = 0; k < 2; k++) uv.Add(uv[a * 2 + k] + (uv[b * 2 + k] - uv[a * 2 + k]) * t);
+            if (col != null) for (int k = 0; k < 4; k++) col.Add((byte)(col[a * 4 + k] + (col[b * 4 + k] - col[a * 4 + k]) * t));
+            return n;
+        }
+        var poly = new List<int>(4);
+        for (int t = 0; t + 2 < p.Tri.Length; t += 3)
+        {
+            poly.Clear();
+            for (int e = 0; e < 3; e++)
+            {
+                int a = p.Tri[t + e], b = p.Tri[t + (e + 1) % 3];
+                bool ain = pos[a * 3 + 2] >= g, bin = pos[b * 3 + 2] >= g;
+                if (ain) poly.Add(a);
+                if (ain != bin) poly.Add(Between(a, b));
+            }
+            for (int k = 1; k + 1 < poly.Count; k++) tri.AddRange(new[] { poly[0], poly[k], poly[k + 1] });
+        }
+        return new PreviewPart
+        {
+            Kind = p.Kind, Name = p.Name, P = pos.ToArray(), N = nor?.ToArray() ?? p.N, Uv = uv?.ToArray() ?? p.Uv, Col = col?.ToArray() ?? p.Col,
+            Tri = tri.ToArray(), Tex = p.Tex, TestRef = p.TestRef, Billboard = p.Billboard, Anchor = p.Anchor, Skinned = p.Skinned, Filled = p.Filled,
+        };
+    }
+
+    /// <summary>A closed CAMP barn room around min..max, of whole wall panels (3.7 m): a door in the middle of the front
+    /// (-y), a big window in the middle of each side, a small one at the back, a flat roof. Half its width and depth.</summary>
+    internal static (List<PreviewPart> Parts, float HalfX, float HalfY)? WallsAround(Dictionary<string, PreviewScene>? models, (float X, float Y, float Z) min, (float X, float Y, float Z) max)
+    {
+        if (models == null || !models.TryGetValue(PropWall, out var wall)) return null;
+        float w = wall.Max.X - wall.Min.X, h = wall.Max.Z - wall.Min.Z;
+        if (w < 50 || h < 50) return null;
+        float size = Math.Max(max.X - min.X, Math.Max(max.Y - min.Y, max.Z - min.Z)), gap = Math.Max(25, size * 0.15f);
+        int nx = Math.Max(1, (int)MathF.Ceiling((max.X - min.X + 2 * gap) / w)), ny = Math.Max(1, (int)MathF.Ceiling((max.Y - min.Y + 2 * gap) / w));
+        int nz = Math.Max(1, (int)MathF.Ceiling((max.Z - min.Z + gap) / h));
+        float cx = (min.X + max.X) / 2, cy = (min.Y + max.Y) / 2, hx = nx * w / 2, hy = ny * w / 2;
+        var parts = new List<PreviewPart>();
+        PreviewScene Pick(string model) => models.GetValueOrDefault(model) ?? wall;
+        // a panel stands on its origin, centred on it, its outside to -y; turned, it lines another side
+        void Side(int n, Func<int, (float X, float Y)> at, float turn, string middle)
+        {
+            for (int row = 0; row < nz; row++)
+                for (int i = 0; i < n; i++)
+                {
+                    var (x, y) = at(i);
+                    parts.AddRange(Stand(row == 0 && i == n / 2 ? Pick(middle) : wall, x, y, min.Z + row * h, turn));
+                }
+        }
+        Side(nx, i => (cx - hx + w * (i + 0.5f), cy - hy), 0, PropDoor);
+        Side(nx, i => (cx + hx - w * (i + 0.5f), cy + hy), MathF.PI, PropSmallWindow);
+        Side(ny, i => (cx + hx, cy - hy + w * (i + 0.5f)), MathF.PI / 2, PropWindow);
+        Side(ny, i => (cx - hx, cy + hy - w * (i + 0.5f)), -MathF.PI / 2, PropWindow);
+        if (models.TryGetValue(PropRoof, out var roof))
+        {
+            float rw = Math.Max(50, roof.Max.X - roof.Min.X), rd = Math.Max(50, roof.Max.Y - roof.Min.Y);
+            for (float x = cx - hx + rw / 2; x < cx + hx; x += rw)
+                for (float y = cy - hy + rd / 2; y < cy + hy; y += rd)
+                    parts.AddRange(roof.Parts.Where(p => p.Kind == PartKind.Solid).Select(p => Moved(p, (x, y, min.Z + nz * h - roof.Min.Z))));
+        }
+        return (parts, hx, hy);
+    }
+
+    /// <summary>A copy of a part turned by <paramref name="turn"/> around the upright line through <paramref name="pivot"/>,
+    /// then moved; triangles wholly under <paramref name="ground"/> (a plant's buried half) are left out.</summary>
+    static PreviewPart Moved(PreviewPart p, (float X, float Y, float Z) by, float turn = 0, (float X, float Y) pivot = default, float ground = float.NaN)
+    {
+        float c = MathF.Cos(turn), s = MathF.Sin(turn);
+        (float, float) T(float x, float y) => turn == 0 ? (x, y) : (pivot.X + (x - pivot.X) * c - (y - pivot.Y) * s, pivot.Y + (x - pivot.X) * s + (y - pivot.Y) * c);
+        var q = new PreviewPart
+        {
+            Kind = p.Kind, Name = p.Name, N = p.N, Uv = p.Uv, Col = p.Col, Tri = p.Tri, Tex = p.Tex, TestRef = p.TestRef,
+            Billboard = p.Billboard, Skinned = p.Skinned, Filled = p.Filled, P = p.P,
+        };
+        if (p.Billboard)
+        {
+            var (ax, ay) = T(p.Anchor.X, p.Anchor.Y);
+            q.Anchor = (ax + by.X, ay + by.Y, p.Anchor.Z + by.Z);
+            return q;
+        }
+        q.P = new float[p.P.Length];
+        for (int i = 0; i + 2 < p.P.Length; i += 3)
+        {
+            var (x, y) = T(p.P[i], p.P[i + 1]);
+            q.P[i] = x + by.X; q.P[i + 1] = y + by.Y; q.P[i + 2] = p.P[i + 2] + by.Z;
+        }
+        if (turn != 0 && p.N != null)
+        {
+            q.N = new float[p.N.Length];
+            for (int i = 0; i + 2 < p.N.Length; i += 3)
+            {
+                q.N[i] = p.N[i] * c - p.N[i + 1] * s; q.N[i + 1] = p.N[i] * s + p.N[i + 1] * c; q.N[i + 2] = p.N[i + 2];
+            }
+        }
+        if (!float.IsNaN(ground))
+        {
+            float g = ground + by.Z;
+            var keep = new List<int>(p.Tri.Length);
+            for (int t = 0; t + 2 < p.Tri.Length; t += 3)
+                if (q.P[p.Tri[t] * 3 + 2] >= g || q.P[p.Tri[t + 1] * 3 + 2] >= g || q.P[p.Tri[t + 2] * 3 + 2] >= g)
+                    keep.AddRange(new[] { p.Tri[t], p.Tri[t + 1], p.Tri[t + 2] });
+            q.Tri = keep.ToArray();
+        }
+        return q;
+    }
+
+    /// <summary>The compared items in a row to the right of this one (on its floor, centred on its depth, real sizes),
+    /// and the junk lying around it. Redone only when the item, the list or "Apply look" changed.</summary>
+    void Place()
+    {
+        var others = compares.Where(c => c.Item.Entry != entry).ToList();
+        string key = scene == null ? "" : $"{scene.Min}{scene.Max}|{lookOn.Checked}|{string.Join(",", others.Select(o => o.Item.Entry.Id))}|{addJunk.Checked}{junkScenes?.Count}|{entry?.Id}";
+        if (key == placedKey) return;
+        placedKey = key;
+        placed.Clear();
+        extras.Others.Clear();
+        junkPlaced = new();
+        if (scene == null) return;
+        var (min, max) = (scene.Min, scene.Max);
+        float cy = (min.Y + max.Y) / 2;
+        float biggest = others.Select(o => Math.Max(o.Scene.Max.X - o.Scene.Min.X, o.Scene.Max.Y - o.Scene.Min.Y)).Append(max.X - min.X).Max();
+        float gap = Math.Max(35, biggest * 0.3f), x = max.X + gap;
+        (othersMin, othersMax) = (min, max);
+        // with "Original" only the game's own model (no glow, beam or icon)
+        bool Own(PreviewPart p) => lookOn.Checked || p.Kind is PartKind.Solid or PartKind.Blend or PartKind.Effect;
+        foreach (var (item, s) in others)
+        {
+            var by = (x - s.Min.X, cy - (s.Min.Y + s.Max.Y) / 2, min.Z - s.Min.Z);
+            var parts = s.Parts.Where(Own).Select(p => Moved(p, by, ground: s.Ground)).ToList();
+            float w = s.Max.X - s.Min.X;
+            placed.Add((parts, item.Entry.Name, (x + w / 2, cy, s.Max.Z + by.Item3)));
+            extras.Others.Add((parts, lookOn.Checked ? item.Look : Plain()));
+            othersMax = (Math.Max(othersMax.X, x + w), Math.Max(othersMax.Y, cy + (s.Max.Y - s.Min.Y) / 2), Math.Max(othersMax.Z, s.Max.Z + by.Item3));
+            othersMin = (othersMin.X, Math.Min(othersMin.Y, cy - (s.Max.Y - s.Min.Y) / 2), othersMin.Z);
+            x += w + gap;
+        }
+        if (addJunk.Checked && junkScenes != null)
+        {
+            // a few game items lying around, each turned its own way, outside the item's footprint
+            var rnd = new Random(7 + junkScenes.Count);
+            float cx = (min.X + max.X) / 2;
+            float inner = 0.5f * MathF.Sqrt((max.X - min.X) * (max.X - min.X) + (max.Y - min.Y) * (max.Y - min.Y)) + 20;
+            foreach (var j in junkScenes)
+            {
+                float a = (float)(rnd.NextDouble() * MathF.Tau), r = inner + 15 + (float)rnd.NextDouble() * Math.Max(90, inner);
+                var jc = ((j.Min.X + j.Max.X) / 2, (j.Min.Y + j.Max.Y) / 2);
+                var by = (cx + r * MathF.Cos(a) - jc.Item1, cy + r * MathF.Sin(a) - jc.Item2, min.Z - j.Min.Z);
+                junkPlaced.AddRange(j.Parts.Where(p => p.Kind == PartKind.Solid).Select(p => Moved(p, by, (float)(rnd.NextDouble() * MathF.Tau), jc, j.Ground)));
+            }
+        }
+    }
+
+    /// <summary>The Add menu's lower half: "Other items...", each compared item (click removes it), "Remove all", labels.</summary>
+    void FillAddMenu()
+    {
+        while (addMenu.Items.Count > 4) addMenu.Items.RemoveAt(4);
+        addMenu.Items.Add(new ToolStripSeparator());
+        var pick = new ToolStripMenuItem("Compare with other items...", null, (_, _) => { addMenu.Close(); BeginInvoke(PickOthers); });
+        pick.Enabled = TickedItems != null;
+        addMenu.Items.Add(pick);
+        foreach (var c in compares.ToList())
+        {
+            var it = new ToolStripMenuItem("    ✕  " + c.Item.Entry.Name) { ToolTipText = "Remove it from the picture" };
+            it.Click += (_, _) => { compares.Remove(c); addMenu.Items.Remove(it); MakeGuide(); Redraw(); };
+            addMenu.Items.Add(it);
+        }
+        if (compares.Count > 0)
+        {
+            addMenu.Items.Add(new ToolStripMenuItem("    Remove all", null, (_, _) => { compares.Clear(); addMenu.Close(); MakeGuide(); Redraw(); }));
+            addMenu.Items.Add(hideLabels);
+        }
+    }
+
+    /// <summary>Selected items to stand beside this one: search, a category, the look's colour; up to 12.</summary>
+    void PickOthers()
+    {
+        if (TickedItems == null || game == null) return;
+        var all = TickedItems().Where(c => c.Entry != entry).ToList();
+        if (all.Count == 0) { MessageBox.Show(FindForm(), "Select some other items first (tick them in the list) - then they can stand beside this one.", "Compare"); return; }
+        var on = compares.Select(c => c.Item.Entry.Id).ToHashSet();
+        using var dlg = Ui.Dialog(new Form
+        {
+            Text = "Compare with other items", StartPosition = FormStartPosition.CenterParent, Size = new Size(620, 560), MinimumSize = new Size(480, 360),
+            Font = Font, ShowIcon = false, MinimizeBox = false, MaximizeBox = false, ShowInTaskbar = false,
+        });
+        var search = new TextBox { PlaceholderText = "Search", Width = 200, Margin = new Padding(3, 5, 3, 3) };
+        var cat = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, Margin = new Padding(3, 5, 3, 3) };
+        cat.Items.Add("All categories");
+        cat.Items.AddRange(all.Select(c => c.Category).Distinct().OrderBy(c => c).Cast<object>().ToArray());
+        cat.SelectedIndex = 0;
+        var oneEach = new Button { Text = "One of each look", AutoSize = true };
+        var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(4) };
+        top.Controls.AddRange(new Control[] { search, cat, oneEach });
+        var list = new ListView { Dock = DockStyle.Fill, View = View.Details, CheckBoxes = true, FullRowSelect = true, HeaderStyle = ColumnHeaderStyle.Nonclickable };
+        list.Columns.Add("Item", 300);
+        list.Columns.Add("Category", 220);
+        var dots = new ImageList { ImageSize = new Size(14, 14), ColorDepth = ColorDepth.Depth32Bit };
+        list.SmallImageList = dots;
+        static string Colour(Style s) => s.Glow ? s.GlowColor : s.Beam ? s.BeamColor : s.GlowColor;
+        string Dot(Style s)
+        {
+            var k = Colour(s);
+            if (!dots.Images.ContainsKey(k))
+            {
+                var b = new Bitmap(14, 14);
+                using (var g = Graphics.FromImage(b))
+                {
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    using var br = new SolidBrush(Materials.Parse(k));
+                    g.FillEllipse(br, 1, 1, 12, 12);
+                    g.DrawEllipse(Pens.Gray, 1, 1, 12, 12);
+                }
+                dots.Images.Add(k, b);
+            }
+            return k;
+        }
+        var count = new Label { AutoSize = true, Padding = new Padding(0, 9, 12, 0) };
+        var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 90, Height = 30 };
+        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Height = 30 };
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 42, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(4) };
+        buttons.Controls.AddRange(new Control[] { cancel, ok, count });
+        void Count() => count.Text = $"{on.Count} of at most {MaxCompare} picked";
+        bool refill = false;
+        void Fill()
+        {
+            refill = true;
+            list.BeginUpdate();
+            list.Items.Clear();
+            string q = search.Text.Trim();
+            foreach (var c in all.Where(c => (cat.SelectedIndex <= 0 || c.Category == (string)cat.SelectedItem!) &&
+                                             (q.Length == 0 || c.Entry.Name.Contains(q, StringComparison.OrdinalIgnoreCase))).OrderBy(c => c.Entry.Name))
+                list.Items.Add(new ListViewItem(new[] { c.Entry.Name, c.Category }) { Tag = c, Checked = on.Contains(c.Entry.Id), ImageKey = Dot(c.Look) });
+            list.EndUpdate();
+            refill = false;
+            Count();
+        }
+        list.ItemCheck += (_, e) =>
+        {
+            if (refill || list.Items[e.Index].Tag is not CompareItem c) return;
+            if (e.NewValue == CheckState.Checked && !on.Contains(c.Entry.Id) && on.Count >= MaxCompare) { e.NewValue = CheckState.Unchecked; count.Text = $"At most {MaxCompare} - untick one first"; return; }
+            if (e.NewValue == CheckState.Checked) on.Add(c.Entry.Id); else on.Remove(c.Entry.Id);
+            BeginInvoke(Count);
+        };
+        oneEach.Click += (_, _) =>
+        {
+            // one item for each look not shown yet (by colour and kind), from what the list shows now
+            var looks = all.Where(c => on.Contains(c.Entry.Id)).Select(c => System.Text.Json.JsonSerializer.Serialize(c.Look, Json.Options)).ToHashSet();
+            foreach (ListViewItem i in list.Items)
+                if (on.Count < MaxCompare && i.Tag is CompareItem c && looks.Add(System.Text.Json.JsonSerializer.Serialize(c.Look, Json.Options)))
+                    on.Add(c.Entry.Id);
+            Fill();
+        };
+        search.TextChanged += (_, _) => Fill();
+        cat.SelectedIndexChanged += (_, _) => Fill();
+        dlg.Controls.Add(list);
+        dlg.Controls.Add(top);
+        dlg.Controls.Add(buttons);
+        dlg.AcceptButton = ok; dlg.CancelButton = cancel;
+        Fill();
+        Ui.Apply(dlg);
+        if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+        compares.RemoveAll(c => !on.Contains(c.Item.Entry.Id));
+        AddOthers(all.Where(c => on.Contains(c.Entry.Id) && compares.All(k => k.Item.Entry.Id != c.Entry.Id)).ToList());
+    }
+
+    /// <summary>The model the small preview shows first: the whole gun, else the one carrying the beam, else the biggest.</summary>
+    static PreviewScene LoadMain(GameData g, Entry e, Style st, IReadOnlySet<string> off, bool keep)
+    {
+        var models = e.Models.Where(m => !off.Contains(m)).ToList();
+        if (models.Count == 0) models = e.Models;
+        if (e.Assembled && models.Count > 1) return ModelPreview.LoadAll(g, models, st, e.NoIcon, e.Harvestable, true, keep);
+        var main = e.BeamModels?.FirstOrDefault(models.Contains) ?? models.OrderByDescending(m => g.Find(@"meshes\" + m)?.Size ?? 0).First();
+        return ModelPreview.Load(g, main, st, e.NoIcon, e.Harvestable, true, keep, e.Name);
+    }
+
+    async void AddOthers(List<CompareItem> add)
+    {
+        if (game == null) { MakeGuide(); Redraw(); return; }
+        if (add.Count == 0) { MakeGuide(); Redraw(); return; }
+        var (g, keep) = (game, keepOtherMods);
+        var old = message;
+        message = $"Loading {add.Count} item(s)...";
+        canvas.Invalidate();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var got = await Task.Run(() =>
+        {
+            var r = new List<(CompareItem, PreviewScene)>();
+            foreach (var c in add) // one by one: the texture cache isn't shared safely
+                try { r.Add((c, LoadMain(g, c.Entry, c.Look, c.Off, keep))); } catch (Exception) { }
+            return r;
+        });
+        compares.AddRange(got);
+        message = old;
+        if (got.Count < add.Count) message = $"{add.Count - got.Count} of the items can't be shown in 3D." + (old.Length > 0 ? "\n" + old : "");
+        System.Diagnostics.Debug.WriteLine($"compare: {got.Count} loaded in {clock.ElapsedMilliseconds} ms");
+        MakeGuide();
+        Redraw();
+    }
+
+    /// <summary>"Scatter junk": a few plain game items (always the same ones), loaded once.</summary>
+    async void LoadJunk()
+    {
+        if (junkScenes != null || junkLoading || game == null || JunkItems == null) return;
+        junkLoading = true;
+        var g = game;
+        var pool = JunkItems().ToList();
+        var rnd = new Random(76);
+        var pick = pool.OrderBy(_ => rnd.Next()).Take(10).ToList();
+        junkScenes = await Task.Run(() =>
+        {
+            var r = new List<PreviewScene>();
+            foreach (var e in pick)
+            {
+                if (r.Count == 6) break;
+                try { var s = LoadMain(g, e, Plain(), new HashSet<string>(), false); if (s.Max.Z - s.Min.Z < 120) r.Add(s); } catch (Exception) { } // small things only
+            }
+            return r;
+        });
+        junkLoading = false;
+        MakeGuide();
+        Redraw();
+    }
+
+    /// <summary>"Spin": a slow turn around the item (about 20 s a round).</summary>
+    void SpinStep()
+    {
+        float dt = Math.Min(0.1f, (float)spinClock.Elapsed.TotalSeconds);
+        spinClock.Restart();
+        if (drag != null || scene == null) return;
+        float a = 0.3f * dt;
+        if (free)
+        {
+            var c = ItemCenter;
+            float dx = eye.X - c.X, dy = eye.Y - c.Y, co = MathF.Cos(a), si = MathF.Sin(a);
+            eye = (c.X + dx * co - dy * si, c.Y + dx * si + dy * co, eye.Z);
+            yaw += a;
+            MakeGuide();
+        }
+        else yaw += a;
+        Redraw();
+    }
+
+    /// <summary>The picture as it is now (with the name labels) as a PNG.</summary>
+    void SavePicture()
+    {
+        if (scene == null) return;
+        if (frame == null || frame.Width != canvas.Width) { Redraw(); canvas.Update(); } // sharp
+        if (frame == null) return;
+        string name = string.Concat((entry?.Name ?? "item").Split(Path.GetInvalidFileNameChars())).Trim();
+        using var dlg = new SaveFileDialog { Filter = "PNG picture|*.png", FileName = (name.Length > 0 ? name : "item") + ".png" };
+        if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+        try
+        {
+            using var bmp = new Bitmap(frame.Width, frame.Height);
+            using (var g = Graphics.FromImage(bmp)) { g.DrawImageUnscaled(frame, 0, 0); DrawLabels(g); }
+            bmp.Save(dlg.FileName, ImageFormat.Png);
+        }
+        catch (Exception ex) { MessageBox.Show(FindForm(), "Can't save the picture: " + ex.Message, "Save picture"); }
+    }
+
+    /// <summary>The names floating above the items when others stand beside this one.</summary>
+    void DrawLabels(Graphics g)
+    {
+        if (placed.Count == 0 || hideLabels.Checked || scene == null || entry == null) return;
+        var all = placed.Select(p => (p.Name, p.Top)).Prepend((entry.Name, ((scene.Min.X + scene.Max.X) / 2, (scene.Min.Y + scene.Max.Y) / 2, scene.Max.Z)));
+        foreach (var (name, top) in all)
+        {
+            if (PreviewRenderer.ToScreen(shotEye, shotLook, 40, canvas.Width, canvas.Height, (top.Item1, top.Item2, top.Item3 + 6)) is not PointF at) continue;
+            var sz = TextRenderer.MeasureText(g, name, Font);
+            var box = new Rectangle((int)at.X - sz.Width / 2 - 4, (int)at.Y - sz.Height - 8, sz.Width + 8, sz.Height + 4);
+            using (var band = new SolidBrush(Color.FromArgb(170, 20, 22, 26))) g.FillRectangle(band, box);
+            TextRenderer.DrawText(g, name, Font, new Point(box.X + 4, box.Y + 2), Color.Gainsboro);
+        }
+    }
+
+    /// <summary>Where you stand: look straight at the item.</summary>
+    void FaceItem()
+    {
+        var c = ItemCenter;
+        yaw = MathF.Atan2(c.Y - eye.Y, c.X - eye.X);
+        pitch = MathF.Atan2(c.Z - eye.Z, MathF.Sqrt((c.X - eye.X) * (c.X - eye.X) + (c.Y - eye.Y) * (c.Y - eye.Y)));
+    }
+
+    /// <summary>Game units as cm or m (1 unit ≈ 1.43 cm).</summary>
+    static string Len(float units)
+    {
+        float cm = units * 1.43f;
+        return cm >= 100 ? $"{cm / 100:0.#} m" : $"{Math.Max(1, cm):0} cm";
+    }
+
+    string SizeText()
+    {
+        if (scene == null) return "";
+        var (a, b) = (scene.Min, scene.Max);
+        string t = $"Item {Len(b.X - a.X)} × {Len(b.Y - a.Y)}, {Len(b.Z - a.Z)} high" + (float.IsNaN(scene.Ground) ? "" : " above the ground (the rest is buried)");
+        if (shown.Beam && !shown.BeamArrow) t += $" · beam {Len(shown.BeamLength)}";
+        if (addPerson.Checked && guide != null) t += " · person 1.8 m";
+        if (addHouse.Checked && guide != null) t += " · house 8.4 m";
+        if (guide != null) t += $" · grid {Len(guide.Step)} squares";
+        if (free)
+        {
+            var c = ItemCenter;
+            t += $" · you: {Len(MathF.Sqrt((eye.X - c.X) * (eye.X - c.X) + (eye.Y - c.Y) * (eye.Y - c.Y)))} away, eyes {Len(eye.Z - a.Z)} up";
+        }
+        return t;
     }
 
     void Redraw()
@@ -1055,6 +2353,7 @@ sealed class ModelView : UserControl
         frame?.Dispose();
         frame = null;
         canvas.Invalidate();
+        UpdateBar();
     }
 
     void PaintCanvas(object? sender, PaintEventArgs pe)
@@ -1062,28 +2361,104 @@ sealed class ModelView : UserControl
         var g = pe.Graphics;
         if (scene != null && frame == null && canvas.Width > 16 && canvas.Height > 16)
         {
-            var (min, max) = frameAll || whole.Checked && whole.Visible ? (scene.AllMin, scene.AllMax) : (scene.Min, scene.Max);
+            var (min, max) = frameAll || camView == CamView.Whole ? (scene.AllMin, scene.AllMax) : (scene.Min, scene.Max);
+            // it turns around the item; what was added only widens the picture (else the item swings off to a side)
             var target = ((min.X + max.X) / 2, (min.Y + max.Y) / 2, (min.Z + max.Z) / 2);
-            float radius = Math.Max(1f, 0.5f * MathF.Sqrt((max.X - min.X) * (max.X - min.X) + (max.Y - min.Y) * (max.Y - min.Y) + (max.Z - min.Z) * (max.Z - min.Z)));
+            if (guide != null) // what was added in the picture too
+                foreach (var prop in guide.Props)
+                    for (int i = 0; i + 2 < prop.P.Length; i += 3)
+                    {
+                        min = (Math.Min(min.X, prop.P[i]), Math.Min(min.Y, prop.P[i + 1]), Math.Min(min.Z, prop.P[i + 2]));
+                        max = (Math.Max(max.X, prop.P[i]), Math.Max(max.Y, prop.P[i + 1]), Math.Max(max.Z, prop.P[i + 2]));
+                    }
+            if (placed.Count > 0) // the compared items too
+            {
+                min = (Math.Min(min.X, othersMin.X), Math.Min(min.Y, othersMin.Y), Math.Min(min.Z, othersMin.Z));
+                max = (Math.Max(max.X, othersMax.X), Math.Max(max.Y, othersMax.Y), Math.Max(max.Z, othersMax.Z));
+            }
+            // the farthest corner of everything, seen from the item
+            float fx = Math.Max(target.Item1 - min.X, max.X - target.Item1), fy = Math.Max(target.Item2 - min.Y, max.Y - target.Item2),
+                  fz = Math.Max(target.Item3 - min.Z, max.Z - target.Item3);
+            float radius = Math.Max(1f, MathF.Sqrt(fx * fx + fy * fy + fz * fz));
             float dist = radius / MathF.Sin(18 * MathF.PI / 180) / zoom;
-            try { frame = PreviewRenderer.Render(scene, shown, canvas.Width, canvas.Height, yaw, pitch, target, dist); }
+            // a big picture is drawn at half size while it turns, then sharp
+            (orbitAt, orbitDist) = (target, dist); // walking starts from here
+            // (coarser with several items beside it)
+            // (spinning: only with several items - one item spins sharp)
+            int s = (drag != null || walk.Enabled) && (canvas.Width * canvas.Height > 400_000 || placed.Count > 3)
+                    || spin.Enabled && placed.Count > 3 ? (placed.Count > 6 ? 3 : 2) : 1;
+            try
+            {
+                // free: you stand somewhere, looking where you turn (the same lens as the turning camera: no jump)
+                var (at, look) = free ? (eye, (MathF.Cos(pitch) * MathF.Cos(yaw), MathF.Cos(pitch) * MathF.Sin(yaw), MathF.Sin(pitch)))
+                                      : PreviewRenderer.Orbit(yaw, pitch, target, dist);
+                (shotEye, shotLook) = (at, look);
+                frame = PreviewRenderer.Render(scene, shown, canvas.Width / s, canvas.Height / s, at, look, 40, free ? 2 : Math.Max(0.5f, dist * 0.005f), guide,
+                                               isBig ? extras : null);
+            }
             catch (Exception ex) { message = "Can't draw this model: " + ex.Message; }
         }
-        if (frame != null) g.DrawImageUnscaled(frame, 0, 0);
+        if (frame != null && frame.Width == canvas.Width) g.DrawImageUnscaled(frame, 0, 0);
+        else if (frame != null)
+        {
+            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+            g.DrawImage(frame, 0, 0, canvas.Width, canvas.Height);
+        }
         else g.Clear(canvas.BackColor);
+        if (scene != null && isBig) DrawLabels(g);
+        if (scene != null && isBig)
+        {
+            var size = SizeText();
+            var sz = TextRenderer.MeasureText(g, size, Font);
+            using (var band = new SolidBrush(Color.FromArgb(160, 20, 22, 26))) g.FillRectangle(band, 4, canvas.Height - sz.Height - 10, sz.Width + 8, sz.Height + 6);
+            TextRenderer.DrawText(g, size, Font, new Point(8, canvas.Height - sz.Height - 7), Color.Gainsboro);
+        }
+        int top = 4;
+        if (scene != null && isBig)
+        {
+            DrawLegend(g);
+            top = legendBox.Bottom + 6;
+        }
+        else legendBox = Rectangle.Empty;
         if (message.Length > 0)
         {
             // on a dark band, readable over a bright beam
-            var box = new Rectangle(8, 8, canvas.Width - 16, canvas.Height - 16);
+            var box = new Rectangle(8, top + 4, canvas.Width - 16, Math.Max(20, canvas.Height - top - 12));
             var size = TextRenderer.MeasureText(g, message, Font, box.Size, TextFormatFlags.WordBreak);
-            using (var band = new SolidBrush(Color.FromArgb(190, 20, 22, 26))) g.FillRectangle(band, 4, 4, size.Width + 8, size.Height + 8);
+            using (var band = new SolidBrush(Color.FromArgb(190, 20, 22, 26))) g.FillRectangle(band, 4, top, size.Width + 8, size.Height + 8);
             TextRenderer.DrawText(g, message, Font, box, Color.Gainsboro, TextFormatFlags.WordBreak);
+        }
+    }
+
+    /// <summary>The controls box (a legend): keys in bold on the left, what they do on the right; folded, just its title.</summary>
+    void DrawLegend(Graphics g)
+    {
+        using var bold = new Font(Font, FontStyle.Bold);
+        const int pad = 8, gapCol = 14;
+        var title = legendOpen ? "Controls  ▴" : "? Controls";
+        var ts = TextRenderer.MeasureText(g, title, bold);
+        int lineH = ts.Height + 3, w = ts.Width, h = ts.Height, keyW = 0;
+        var rows = legendOpen ? Legend() : Array.Empty<(string Key, string What)>();
+        foreach (var (k, _) in rows) keyW = Math.Max(keyW, TextRenderer.MeasureText(g, k, bold).Width);
+        foreach (var (_, d) in rows) w = Math.Max(w, keyW + gapCol + TextRenderer.MeasureText(g, d, Font).Width);
+        if (rows.Length > 0) h += 6 + rows.Length * lineH;
+        legendBox = new Rectangle(4, 4, w + 2 * pad, h + 2 * pad - 4);
+        using (var band = new SolidBrush(Color.FromArgb(200, 20, 22, 26))) g.FillRectangle(band, legendBox);
+        using (var edge = new Pen(Color.FromArgb(70, 255, 255, 255))) g.DrawRectangle(edge, legendBox);
+        int x = legendBox.X + pad, y = legendBox.Y + pad - 2;
+        TextRenderer.DrawText(g, title, bold, new Point(x, y), Color.Gainsboro);
+        y += ts.Height + 6;
+        foreach (var (k, d) in rows)
+        {
+            TextRenderer.DrawText(g, k, bold, new Point(x, y), Color.FromArgb(240, 200, 120));
+            TextRenderer.DrawText(g, d, Font, new Point(x + keyW + gapCol, y), Color.Gainsboro);
+            y += lineH;
         }
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { frame?.Dispose(); reload.Dispose(); }
+        if (disposing) { addMenu.Dispose(); cameraMenu.Dispose(); lightMenu.Dispose(); visionMenu.Dispose(); frame?.Dispose(); reload.Dispose(); walk.Dispose(); spin.Dispose(); hideLabels.Dispose(); }
         base.Dispose(disposing);
     }
 }

@@ -35,10 +35,10 @@ public sealed class EsmRecord
 /// SeventySix.esm changes (so it is rebuilt automatically after a game update).</summary>
 public sealed class GameIndex
 {
-    const int CacheVersion = 11; // 5: ARMA additional races (Parts); 6: NPC_ (race, default outfit) and OTFT (items); 7: MISC components (MCQP) + CMPO; 8: WEAP first FULL; 9: WEAP default mods (Parts) + OMOD; 10: FURN; 11: ARMO ground models
+    const int CacheVersion = 12; // 5: ARMA additional races (Parts); 6: NPC_ (race, default outfit) and OTFT (items); 7: MISC components (MCQP) + CMPO; 8: WEAP first FULL; 9: WEAP default mods (Parts) + OMOD; 10: FURN; 11: ARMO ground models; 12: DOOR + MSTT (Everything else)
     /// <summary>Record types that are things lying or standing in the world.</summary>
     public static readonly HashSet<string> WorldTypes = new() { "MISC", "ALCH", "INGR", "BOOK", "NOTE", "FLOR", "AMMO", "KEYM", "WEAP", "CONT", "ACTI" };
-    static readonly HashSet<string> OtherTypes = new() { "LVLI", "COBJ", "MGEF", "RACE", "ARMA", "ARMO", "KYWD", "NPC_", "OTFT", "CMPO", "OMOD", "FURN" };
+    static readonly HashSet<string> OtherTypes = new() { "LVLI", "COBJ", "MGEF", "RACE", "ARMA", "ARMO", "KYWD", "NPC_", "OTFT", "CMPO", "OMOD", "FURN", "DOOR", "MSTT" };
 
     public int Version { get; set; }
     public long EsmSize { get; set; }

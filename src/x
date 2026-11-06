@@ -1,0 +1,63 @@
+category
+  ok   nothing picked: the panel shows the category
+  ok   category look stored
+one item
+  ok   item picked: the panel shows it
+  ok   panel box checks it (all parts)
+  ok   own look starts as the category's
+  ok   own look edited, category untouched
+  ok   same as the category: own look removed
+parts
+  ok   opened: 4 part rows
+  ok   part picked: the panel shows it
+  ok   part left out: item partly checked
+  ok   part's own look stored
+  ok   badge shows the own look: 3/4 parts ◆1 ›
+  ok   every part out: item unchecked, part choice cleared
+  ok   one part in on an unchecked item: item checked with just that part
+  ok   the picked row stays picked through a refresh
+  ok   part boxes match
+  ok   part back to the item's look
+quick looks
+  ok   Outline + beam stored
+  ok   box shows it: Outline + beam
+  ok   a changed detail shows Custom: Custom (see More settings)
+  ok   Tall beacon stored
+  ok   the colour stays when a quick look is picked
+  ok   More settings folds / unfolds (159 -> 606)
+several items, copy / paste
+  ok   two items picked
+  ok   edit goes to both
+  ok   paste gives the copied look
+  ok   panel box on a pasted item
+tour
+  ok   every tour picture is built in
+presets
+  ok   8 presets offered (8)
+  ok   bobbleheads all checked
+  ok   bobbleheads: glow, beam, 3D bobblehead
+  ok   enemies: outline, no beams
+  ok   everyday clothes only checked as twins (2)
+  ok   legendary: outline, beam + crown
+  ok   slasher: heads purple + pumpkin, the mask green + clown
+  ok   XP buffs: ingredients checked with the ramen (34)
+mod name
+  ok   new mod: empty, on the list
+  ok   a new mod: not installed yet
+  ok   mod box lists it, picked
+  ok   switched back: its checks again (170)
+  ok   back to the installed mod: shown as installed
+  ok   renamed: list and setup file
+  ok   copy of an empty mod is empty
+  ok   removed: off the list, setup kept
+  ok   name cleaned for the ini (no commas)
+your picks: unchecking keeps the row
+  ok   unchecked in Your picks: still listed, picked, unchecked
+  ok   checked again: one row
+  ok   after another category: gone from Your picks
+search and views
+  ok   search: 16 rows, category column shown
+  ok   in a category: category column hidden
+  ok   nothing picked again: back to the category
+  ok   build estimate: 1518 models
+ALL PASSED

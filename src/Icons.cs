@@ -126,19 +126,60 @@ public static class Icons
         return m;
     }
 
-    /// <summary>Uncompressed BGRA DDS (classic header) with a full mip chain.</summary>
+    public static string LabelTexture(string key) => $@"textures\itemfinder\label_{key}.dds";
+    public static string LabelMaterialTexture(string key) => $"itemfinder/label_{key}.dds";
+
+    /// <summary>The text a label shows: an entry name without its "Bobblehead: " style prefix.</summary>
+    public static string LabelText(string name)
+    {
+        int c = name.IndexOf(": ", StringComparison.Ordinal);
+        return (c > 0 && c < name.Length - 2 ? name[(c + 2)..] : name).Trim();
+    }
+
+    /// <summary>White text with a soft halo on transparent, 128 px tall, width a power of two (256..1024) that fits it;
+    /// long names are squeezed to fit 1024. Returns the picture and its width / height ratio.</summary>
+    public static Bitmap DrawLabel(string text)
+    {
+        const int H = 128;
+        using var path = new GraphicsPath();
+        using (var font = new Font("Segoe UI", 80, FontStyle.Bold, GraphicsUnit.Pixel))
+            path.AddString(text, font.FontFamily, (int)font.Style, font.Size, new PointF(0, 0), StringFormat.GenericTypographic);
+        var b = path.GetBounds();
+        float need = b.Width + 28;
+        int width = need <= 256 ? 256 : need <= 512 ? 512 : 1024;
+        float sx = Math.Min(1, (width - 28) / Math.Max(1, b.Width));
+        float sy = Math.Min(1, (H - 28) / Math.Max(1, b.Height));
+        using (var m = new Matrix())
+        {
+            m.Translate(width / 2f, H / 2f);
+            m.Scale(sx, sy);
+            m.Translate(-(b.X + b.Width / 2), -(b.Y + b.Height / 2));
+            path.Transform(m);
+        }
+        var bmp = new Bitmap(width, H, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(bmp);
+        g.Clear(Color.Transparent);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        for (int w = 14; w >= 2; w -= 4)
+            using (var halo = new Pen(Color.FromArgb(40, Color.White), w) { LineJoin = LineJoin.Round })
+                g.DrawPath(halo, path);
+        g.FillPath(Brushes.White, path);
+        return bmp;
+    }
+
+    /// <summary>Uncompressed BGRA DDS (classic header) with a full mip chain (any power-of-two size).</summary>
     public static byte[] Dds(Bitmap top)
     {
         var levels = new List<Bitmap> { top };
-        while (levels[^1].Width > 1)
+        while (levels[^1].Width > 1 || levels[^1].Height > 1)
         {
-            int n = levels[^1].Width / 2;
-            var next = new Bitmap(n, n, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            int nw = Math.Max(1, levels[^1].Width / 2), nh = Math.Max(1, levels[^1].Height / 2);
+            var next = new Bitmap(nw, nh, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             using (var g = Graphics.FromImage(next))
             {
                 g.InterpolationMode = InterpolationMode.HighQualityBilinear;
                 g.CompositingMode = CompositingMode.SourceCopy;
-                g.DrawImage(levels[^1], 0, 0, n, n);
+                g.DrawImage(levels[^1], 0, 0, nw, nh);
             }
             levels.Add(next);
         }
@@ -146,7 +187,7 @@ public static class Icons
         var w = new BinaryWriter(ms);
         int size = top.Width;
         w.Write(0x20534444u); // "DDS "
-        w.Write(124); w.Write(0x1 | 0x2 | 0x4 | 0x8 | 0x1000 | 0x20000); w.Write(size); w.Write(size); w.Write(size * 4); w.Write(0); w.Write(levels.Count);
+        w.Write(124); w.Write(0x1 | 0x2 | 0x4 | 0x8 | 0x1000 | 0x20000); w.Write(top.Height); w.Write(size); w.Write(size * 4); w.Write(0); w.Write(levels.Count);
         for (int i = 0; i < 11; i++) w.Write(0);
         w.Write(32); w.Write(0x41); w.Write(0); w.Write(32);
         w.Write(0x00FF0000); w.Write(0x0000FF00); w.Write(0x000000FF); unchecked { w.Write((int)0xFF000000); }

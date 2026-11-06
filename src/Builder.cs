@@ -24,6 +24,7 @@ public static class Builder
         var cutouts = new Dictionary<string, Cut>(); // game material -> how its glow must be made
         var masks = new Dictionary<string, bool[,]>(); // 3D icon shapes
         var brightened = new Dictionary<string, byte[]>(); // game material -> its brighter copy
+        var labels = new Dictionary<string, float>(); // label texture -> its width / height
         int failed = 0;
 
         // when the same model is ticked twice, an entry with its own colours wins, then junk under its main component and
@@ -63,8 +64,12 @@ public static class Builder
                     string? icon3dMat = mask != null ? Icon3DMaterial(s, template, materials) : null;
                     var model3d = main ? Models3D.Get(s.Icon) : null;
                     string? modelMat = model3d != null ? ModelMaterial(s, model3d, template, materials, files) : null;
+                    string? labelMat = null;
+                    float labelRatio = 0;
+                    if (main && s.Label && !e.NoIcon) (labelMat, labelRatio) = LabelMaterial(s, s.LabelText.Trim().Length > 0 ? s.LabelText.Trim() : Icons.LabelText(e.Name), template, materials, files, labels);
                     return new PatchOptions(glowFor, main ? beamMat : null, beamLength, s.BeamWidth, e.Harvestable, iconMat, s.IconSize, mask, icon3dMat,
-                                            s.BeamArrow, model3d != null ? Models3D.MeshOf(model3d) : null, modelMat);
+                                            s.BeamArrow, model3d != null ? Models3D.MeshOf(model3d) : null, modelMat,
+                                            labelMat, s.LabelSize * labelRatio, s.LabelSize, s.HideAfter);
                 }
                 // invisible enemies: their shimmer's gradient in the glow colour (a game texture: into the texture archive)
                 if (e.Gradients != null && st.Glow)
@@ -143,7 +148,27 @@ public static class Builder
         return new BuildResult(outFile, files.Count(f => f.Path.EndsWith(".nif")), failed, conflicts, replaced.Count > 0 ? texFile : null, brightened.Count);
     }
 
-    static bool ChangesModel(Style s) => s.Glow || s.Beam || Icons.Get(s.Icon) != null || Models3D.Get(s.Icon) != null;
+    /// <summary>Name label: its text picture (once per text) and a material per text and colour, like the icon's.</summary>
+    static (string Material, float Ratio) LabelMaterial(Style st, string text, byte[] template, Dictionary<string, byte[]> mats,
+                                                         List<(string Path, byte[] Data)> files, Dictionary<string, float> ratios)
+    {
+        string slug = new string(text.ToLowerInvariant().Select(ch => ch is >= 'a' and <= 'z' or >= '0' and <= '9' ? ch : '_').ToArray());
+        if (slug.Length > 24) slug = slug[..24];
+        string key = $"{slug}_{Ba2Hash.Crc(text):x8}";
+        var tex = Icons.LabelTexture(key);
+        if (!ratios.TryGetValue(tex, out float ratio))
+            using (var bmp = Icons.DrawLabel(text))
+            {
+                files.Add((tex, Icons.Dds(bmp)));
+                ratios[tex] = ratio = bmp.Width / (float)bmp.Height;
+            }
+        var c = Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor);
+        var path = $@"materials\itemfinder\label_{key}_{Key(Materials.Hex(c))}{(st.ThroughWalls ? "_x" : "")}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon(template, c, st.ThroughWalls, Icons.LabelMaterialTexture(key));
+        return (path, ratio);
+    }
+
+    static bool ChangesModel(Style s) => s.Glow || s.Beam || s.Label || Icons.Get(s.Icon) != null || Models3D.Get(s.Icon) != null;
     static bool Shows(Style s) => ChangesModel(s) || s.Brighten;
 
     /// <summary>Brighter copies of the game materials a model uses, under the game's own paths. Always from the game's

@@ -1,5 +1,5 @@
-ESP Maker 1.4.1 - make your own ESP mod for Fallout 76
-====================================================
+ESP Maker 2.1 - make your own ESP mod for Fallout 76
+==================================================
 
 ESP Maker lets you pick what you want to spot in Fallout 76 - bobbleheads, magazines, plans,
 XP food, pre-war food, notes, plants, loot, loot bags, CAMP storage boxes, clothes, event objects, players' vending machines,
@@ -31,15 +31,22 @@ The app finds the game by itself. If it can't, it asks for the folder:
 
 
 HOW TO USE
-1. Pick a category on the left, or search. Check what you want to find.
-2. Choose the look on the right (Quick look, colour, icon). Click an item for its own look.
-   The 3D preview shows the real model the way the mod will show it.
-   Untick "Show the look" under it to compare with the plain game model (preview only).
+1. Pick a section in the bar on the far left, then a category - or search (Ctrl+K jumps to any
+   category or item). Select what you want to find.
+2. Click the category to choose its look in the pop-up (ready-made look, colour, icon). Click an
+   item for its own look. The pop-up stays open and follows the row you pick; drag it anywhere.
+   The Name card puts a floating name above the item; Hide after makes the highlight shrink
+   away after a while.
+   The 3D preview at its bottom shows the real model the way the mod will show it.
+   "Original" shows the plain game model, "Apply look" goes back (preview only).
+   "Bigger view" opens a large 3D window: walk around, add a person, a house or walls, change
+   the light, check colour-blind views, compare other selected items side by side.
 3. Close the game, click "Build & save", type a name for your mod, click Build, start the game.
    Uncheck "Install in the game" to only make the .ba2.
 Changed something? Click "Build & save" again and pick the same name to replace the mod.
+Ctrl+Z / Ctrl+Y undo and redo. View -> Dark mode, Compact rows.
 
-More -> "Add presets...": Enemies, Legendary enemies, Bobbleheads, Magazines, Plans, the Slasher
+Edit -> "Add presets...": Enemies, Legendary enemies, Bobbleheads, Magazines, Plans, the Slasher
 event, XP buffs, Player vendors and Bright plants in one click.
 Several mods: each name you build under is its own .ba2 - e.g. one for enemies, one for
 collectibles - and they work side by side. The bottom of the window lists your mods in the game.
@@ -52,11 +59,11 @@ Turn the original mod off in your mod manager once yours is built.
 UPDATE TO A NEW VERSION
 Close the app, replace "ESP Maker.exe" with the new one and start it - your setups live in
 %AppData%\ESP Maker and stay. To get the fixes into a mod, import it ("Import .ba2...") and click
-"Build & save" under the same name. See CHANGELOG.txt when updating from 1.1.
+"Build & save" under the same name. See CHANGELOG.txt for what changed.
 
 
 UNINSTALL
-More -> "Uninstall from the game..." lets you pick which mods to remove, with their ini entries.
+File -> "Uninstall from the game..." lets you pick which mods to remove, with their ini entries.
 Then delete the app folder, and %AppData%\ESP Maker if you don't want to keep your setups.
 
 

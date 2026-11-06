@@ -9,13 +9,21 @@ public sealed class Settings
     /// <summary>Main window place and size (normal state), whether it was maximised, and the category column width.</summary>
     public int[]? Window { get; set; }
     public bool Maximized { get; set; }
-    public int LeftWidth { get; set; } = 300;
+    public int LeftWidth { get; set; } = 390;
     /// <summary>Width of the look panel on the right.</summary>
     public int LookWidth { get; set; } = 430;
     /// <summary>2 = the three-pane window (list + look panel): older window sizes were for the narrower layout.</summary>
     public int Layout { get; set; }
     /// <summary>The tour was shown once (a new user's first start).</summary>
     public bool TourSeen { get; set; }
+    /// <summary>Old option (the ALL section is always shown now); kept so older settings files still read.</summary>
+    public bool ShowAll { get; set; }
+    /// <summary>Where the look pop-up was dragged to (x, y on the screen); null = next to the clicked look.</summary>
+    public int[]? PopupAt { get; set; }
+    /// <summary>Dark colours for the main window.</summary>
+    public bool Dark { get; set; }
+    /// <summary>More > Compact rows: lower rows in the category list and the item list.</summary>
+    public bool Compact { get; set; }
 
     static string FilePath => AppPaths.File("settings.json");
 
@@ -41,10 +49,11 @@ static class Program
             Environment.Exit(2);
             return;
         }
-        if (args.Length == 3 && args[0] == "--picker")
+        if (args.Length is 3 or 4 && args[0] == "--picker")
         {
             ApplicationConfiguration.Initialize();
             IconPicker.CaptureTo = args[1];
+            Ui.Dark = args.Length == 4 && args[3] == "dark";
             IconPicker.Pick(null!, args[2] == "models" ? "model:pumpkin" : "star", args[2] == "3d", Color.FromArgb(255, 216, 74), args[2] == "only3d");
             return;
         }
@@ -68,10 +77,11 @@ static class Program
         if (args.Length == 2 && args[0] == "--partnames") { Environment.Exit(SelfTest.PartNamesDump(args[1])); return; }
         if (args.Length == 3 && args[0] == "--tex") { Environment.Exit(SelfTest.Tex(args[1], args[2])); return; }
         if (args.Length is 3 or 4 && args[0] == "--lookshot") { Environment.Exit(SelfTest.LookShot(args[1], args[2], args.Length == 4 ? args[3] : null)); return; }
-        if (args.Length == 2 && args[0] == "--tour-pages")
+        if (args.Length is 2 or 3 && args[0] == "--tour-pages")
         {
             // dev: the tour window, one picture per step (for the mod page)
             ApplicationConfiguration.Initialize();
+            Ui.Dark = args.Length == 3 && args[2] == "dark";
             using var tour = new Tutorial(new Font("Segoe UI", 9f)) { StartPosition = FormStartPosition.CenterScreen };
             tour.Shown += (_, _) => { tour.SavePages(args[1]); Environment.Exit(0); };
             Application.Run(tour);
@@ -104,9 +114,20 @@ static class Program
             // dev: picture of the main window once the game data is loaded; exits without saving the window place
             ApplicationConfiguration.Initialize();
             Application.ThreadException += (_, e) => File.AppendAllText(AppPaths.File("error.log"), $"{e.Exception}{Environment.NewLine}");
+            MainForm.NoTour = true;
             var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = new Size(1280, 960) };
             var t = new System.Windows.Forms.Timer { Interval = 12000 };
-            t.Tick += (_, _) => { using var bmp = new Bitmap(form.Width, form.Height); form.DrawToBitmap(bmp, new Rectangle(Point.Empty, form.Size)); bmp.Save(args[1]); Environment.Exit(0); };
+            t.Tick += (_, _) =>
+            {
+                using var bmp = new Bitmap(form.Width, form.Height); form.DrawToBitmap(bmp, new Rectangle(Point.Empty, form.Size)); bmp.Save(args[1]);
+                // an open pop-up (the look pop-up): its own picture, "<name>-popup.png"
+                foreach (var f in Application.OpenForms.Cast<Form>().Where(f => f != form && f.Visible).Take(1))
+                {
+                    using var pb = new Bitmap(f.Width, f.Height); f.DrawToBitmap(pb, new Rectangle(Point.Empty, f.Size));
+                    pb.Save(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[1]))!, Path.GetFileNameWithoutExtension(args[1]) + "-popup.png"));
+                }
+                Environment.Exit(0);
+            };
             if (args.Length >= 3) // a category to show (and an entry to open), shortly before the picture
             {
                 var pick = new System.Windows.Forms.Timer { Interval = 9000 };

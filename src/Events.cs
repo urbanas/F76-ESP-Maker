@@ -192,8 +192,16 @@ public static class EventCatalog
         var cats = Catalog.Build(idx, exists).Concat(Build(idx, exists)).Concat(Enemies.Build(idx, exists, gameFiles)).ToList();
         AddEnemyCopies(cats);
         PartNames.NameAll(idx, cats);
+        cats.AddRange(Catalog.Rest(idx, exists, cats));
         return cats;
     }
+
+    /// <summary>The events section's sub-heading for an event.</summary>
+    static string EventGroup(string name) =>
+        name.Contains("(raid)") || name.Contains("expeditions") ? "Raids & expeditions"
+        : name is "The Slasher (Halloween)" or "Mischief Night" or "Fasnacht" or "Meat Week" or "Mothman Equinox"
+            or "Invaders from Beyond" or "Lucky Strike" ? "Seasonal"
+        : "Public events";
 
     public static List<Category> Build(GameIndex idx, Func<string, bool> exists)
     {
@@ -205,7 +213,7 @@ public static class EventCatalog
         {
             var c = new Category
             {
-                Name = name, Description = description, Section = "EVENTS",
+                Name = name, Description = description, Section = "EVENTS", Group = EventGroup(name),
                 DefaultStyle = new Style { GlowColor = color, BeamColor = color, BeamLength = 1400 },
             };
             var taken = new HashSet<string>();

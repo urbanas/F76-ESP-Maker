@@ -2,14 +2,17 @@
 
 Make your own ESP mod for **Fallout 76** without editing any files.
 
-<img src="src/tour1.png" alt="ESP Maker window" width="800">
+<img src="docs/screenshot.png" alt="ESP Maker window" width="800">
 
 Choose what you want to spot: bobbleheads, magazines, plans, XP food, pre-war food, notes, plants, loot, loot bags, CAMP storage boxes, clothes, event objects, player vending machines, workbenches, legendary enemies or any kind of creature. Then choose how it looks:
 
 - an outline glow, which also shows through walls
 - a beam into the sky
 - a flat icon or a small 3D model above it
+- a floating name label
 - or just brighter colours
+
+You can also make the highlight shrink away after a set time.
 
 ESP Maker builds the mod (`.ba2`) and installs it for you. It only changes how things look on your own PC. The result is a normal `.ba2` mod listed in your custom ini, like any other Fallout 76 mod.
 
@@ -22,11 +25,11 @@ Get the ready-to-run app from the [Releases](../../releases) page or from Nexus 
 ## How to use
 
 1. Unzip anywhere and start `ESP Maker.exe`. If Windows shows "Windows protected your PC", click **More info → Run anyway** (the app isn't signed with a paid certificate).
-2. Pick a category on the left or search, then tick what you want to find.
-3. Choose the look on the right. The 3D preview shows the real game model the way the mod will show it.
+2. Pick a section in the bar on the far left, then a category, or search (Ctrl+K jumps anywhere). Select what you want to find.
+3. Click the category (or an item) to choose its look in the pop-up. The 3D preview shows the real game model the way the mod will show it; **Bigger view** lets you walk around it.
 4. Close the game, click **Build & save**, name your mod, click **Build**, then start the game.
 
-**More → Add presets...** adds common setups in one click: enemies, legendary enemies, bobbleheads, magazines, plans, XP buffs, player vendors and more. **Import .ba2...** opens an existing mod (yours or someone else's) so you can change it or merge it with another.
+**Edit → Add presets...** adds common setups in one click: enemies, legendary enemies, bobbleheads, magazines, plans, XP buffs, player vendors and more. **Import .ba2...** opens an existing mod (yours or someone else's) so you can change it or merge it with another.
 
 The full guide, with limits and tips, is in [release-files/README.txt](release-files/README.txt). The version history is in [release-files/CHANGELOG.txt](release-files/CHANGELOG.txt).
 

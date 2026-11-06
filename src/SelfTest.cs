@@ -18,6 +18,8 @@ public static class SelfTest
 
     /// <summary>--preview: pictures of entries (ids separated by |) as the Item look preview draws them, with the
     /// look from a setup file (or the category's), from three sides.</summary>
+    static Dictionary<string, PreviewScene>? propModels;
+
     public static int Preview(string ids, string outDir, string? projectFile)
     {
         var sb = new StringBuilder();
@@ -35,12 +37,13 @@ public static class SelfTest
                 var model = e.BeamModels?.FirstOrDefault() ?? e.Models[0];
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 var scene = e.Assembled ? ModelPreview.LoadAll(game, project.ModelsOf(e), st, e.NoIcon, e.Harvestable, true, project.KeepOtherMods)
-                    : ModelPreview.Load(game, model, st, e.NoIcon, e.Harvestable, true, project.KeepOtherMods);
+                    : ModelPreview.Load(game, model, st, e.NoIcon, e.Harvestable, true, project.KeepOtherMods, e.Name);
                 sb.AppendLine($"{id}: {model} parts={scene.Parts.Count} ({string.Join(", ", scene.Parts.GroupBy(p => p.Kind).Select(g => $"{g.Key} {g.Count()}"))}) " +
                               $"textured={scene.Parts.Count(p => p.Tex != null)} box={scene.Min}..{scene.Max} load={sw.ElapsedMilliseconds}ms {scene.Note}");
                 foreach (var p in scene.Parts.Where(p => p.Kind != PartKind.Glow))
                     sb.AppendLine($"   {p.Kind} {p.Name}: x {p.P.Where((_, i) => i % 3 == 0).DefaultIfEmpty().Min():0}..{p.P.Where((_, i) => i % 3 == 0).DefaultIfEmpty().Max():0}" +
-                                  $" y {p.P.Where((_, i) => i % 3 == 1).DefaultIfEmpty().Min():0}..{p.P.Where((_, i) => i % 3 == 1).DefaultIfEmpty().Max():0}");
+                                  $" y {p.P.Where((_, i) => i % 3 == 1).DefaultIfEmpty().Min():0}..{p.P.Where((_, i) => i % 3 == 1).DefaultIfEmpty().Max():0}" +
+                                  $" z {p.P.Where((_, i) => i % 3 == 2).DefaultIfEmpty().Min():0}..{p.P.Where((_, i) => i % 3 == 2).DefaultIfEmpty().Max():0}");
                 var safe = string.Concat(id.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));
                 int k = 0;
                 foreach (var (yaw, whole) in new[] { (-0.9f, false), (1.6f, false), (-0.9f, true) })
@@ -51,6 +54,38 @@ public static class SelfTest
                     using var bmp = PreviewRenderer.Render(scene, st, 480, 480, yaw, 0.35f, ((min.X + max.X) / 2, (min.Y + max.Y) / 2, (min.Z + max.Z) / 2), r / MathF.Sin(18 * MathF.PI / 180));
                     sb.AppendLine($"   view {k}: {sw.ElapsedMilliseconds}ms");
                     bmp.Save(Path.Combine(outDir, $"{safe}_{k++}.png"));
+                }
+                { // the size guide: grid + 1.8 m person, framed like the preview's
+                    var (min, max) = (scene.Min, scene.Max);
+                    float cx = (min.X + max.X) / 2, cy = (min.Y + max.Y) / 2, size = Math.Max(max.X - min.X, Math.Max(max.Y - min.Y, max.Z - min.Z));
+                    float d = 0.5f * MathF.Sqrt((max.X - min.X) * (max.X - min.X) + (max.Y - min.Y) * (max.Y - min.Y)) + 35;
+                    // the Add menu's game models, placed as the big view places them
+                    var pm = propModels ??= ModelView.LoadPropModels(game);
+                    var person = pm.GetValueOrDefault(ModelView.PropPerson) is { } pp ? ModelView.Stand(pp, cx + 0.78f * d, cy + 0.62f * d, min.Z, MathF.PI).ToArray()
+                               : new[] { SizeGuide.PersonAt(cx + 0.78f * d, cy + 0.62f * d, min.Z) };
+                    var g = new SizeGuide(min.Z, cx, cy, size < 42 ? 7 : 70, Math.Max(d + 60, size * 1.5f), true, person);
+                    float z1 = Math.Max(max.Z, min.Z + 126), r = 0.5f * MathF.Sqrt(4 * (d + 25) * (d + 25) + (z1 - min.Z) * (z1 - min.Z));
+                    using var bmp = PreviewRenderer.Render(scene, st, 480, 480, -0.9f, 0.35f, (cx + 0.39f * d, cy + 0.31f * d, (min.Z + z1) / 2), r / MathF.Sin(18 * MathF.PI / 180), g);
+                    bmp.Save(Path.Combine(outDir, $"{safe}_guide.png"));
+                    // a house beside it and walls around it (the person outside), seen from 30 m at eye height and from above
+                    var walls = ModelView.WallsAround(pm, min, max);
+                    float wd = walls == null ? d : Math.Max(d, (Math.Max(walls.Value.HalfX, walls.Value.HalfY) + 45) / 0.78f);
+                    var house = pm.GetValueOrDefault(ModelView.PropHouse);
+                    float hd = wd + (house == null ? 322 : MathF.Sqrt(MathF.Pow(Math.Max(-house.Min.X, house.Max.X), 2) + MathF.Pow(Math.Max(-house.Min.Y, house.Max.Y), 2))) + 10;
+                    var all = new List<PreviewPart>();
+                    if (house != null) all.AddRange(ModelView.Stand(house, cx - 0.78f * hd, cy - 0.62f * hd, min.Z)); else all.Add(SizeGuide.HouseAt(cx - 0.78f * hd, cy - 0.62f * hd, min.Z));
+                    if (walls != null) all.AddRange(walls.Value.Parts); else all.Add(SizeGuide.ShedAround(min, max));
+                    if (pm.GetValueOrDefault(ModelView.PropPerson) is { } pp2) all.AddRange(ModelView.Stand(pp2, cx + 0.78f * wd, cy + 0.62f * wd, min.Z, MathF.PI));
+                    var props = new SizeGuide(min.Z, cx, cy, 70, 2800, true, all.ToArray());
+                    var day = new RenderExtras { Sky = Sky.Day };
+                    var eye = (cx + 2100 * MathF.Cos(-0.9f), cy + 2100 * MathF.Sin(-0.9f), min.Z + 112);
+                    using var far = PreviewRenderer.Render(scene, st, 640, 400, eye, (cx - eye.Item1, cy - eye.Item2, 0), 50, 2, props, day);
+                    far.Save(Path.Combine(outDir, $"{safe}_far.png"));
+                    var mid = (cx - 0.39f * hd, cy - 0.31f * hd, min.Z + 150);
+                    using var near = PreviewRenderer.Render(scene, st, 640, 400, -1.2f, 0.45f, mid, hd * 1.6f + 400, props, day);
+                    near.Save(Path.Combine(outDir, $"{safe}_props.png"));
+                    using var close = PreviewRenderer.Render(scene, st, 640, 400, -0.5f, 0.3f, (cx + 0.39f * wd, cy + 0.31f * wd, min.Z + 120), wd * 2.2f + 300, props, day);
+                    close.Save(Path.Combine(outDir, $"{safe}_walls.png"));
                 }
             }
         }
@@ -110,6 +145,17 @@ public static class SelfTest
             sb.AppendLine($"{p.Kind,-7} {p.Name,-28} verts {p.P.Length / 3,5}  x {x0,8:F1}..{x1,8:F1}  z {z0,8:F1}..{z1,8:F1}");
         }
         File.WriteAllText(file, sb.ToString());
+        // and a plain picture of it, from the front-left and from behind (file.png, file-back.png)
+        var plain = new Style { Glow = false, Beam = false, Brighten = false, Icon = "" };
+        var bare = ModelPreview.Load(game, model, plain, true, false, false, false);
+        var (mn, mx) = (bare.Min, bare.Max);
+        float r = Math.Max(1f, 0.5f * MathF.Sqrt((mx.X - mn.X) * (mx.X - mn.X) + (mx.Y - mn.Y) * (mx.Y - mn.Y) + (mx.Z - mn.Z) * (mx.Z - mn.Z)));
+        foreach (var (yaw, name) in new[] { (-2.0f, ".png"), (1.1f, "-back.png") })
+        {
+            using var bmp = PreviewRenderer.Render(bare, plain, 640, 480, yaw, 0.3f, ((mn.X + mx.X) / 2, (mn.Y + mx.Y) / 2, (mn.Z + mx.Z) / 2), r / MathF.Sin(20 * MathF.PI / 180),
+                                                   x: new RenderExtras { Sky = Sky.Day });
+            bmp.Save(Path.ChangeExtension(file, null) + name);
+        }
         return 0;
     }
 
@@ -321,6 +367,7 @@ public static class SelfTest
         var sb = new StringBuilder();
         var errors = new Dictionary<string, List<string>>();
         var notes = new Dictionary<string, List<string>>();
+        var mods = new Dictionary<string, List<string>>(); // caused by other installed mods (e.g. a mod that empties doors): not counted
         var blank = new List<string>();
         var slow = new List<(long Ms, string Name)>();
         int done = 0;
@@ -340,7 +387,7 @@ public static class SelfTest
                         var sw = System.Diagnostics.Stopwatch.StartNew();
                         try
                         {
-                            var scene = ModelPreview.Load(game, model, st, e.NoIcon, e.Harvestable, true, project.KeepOtherMods);
+                            var scene = ModelPreview.Load(game, model, st, e.NoIcon, e.Harvestable, true, project.KeepOtherMods, e.Name);
                             var (min, max) = (scene.Min, scene.Max);
                             float r = Math.Max(1f, 0.5f * MathF.Sqrt((max.X - min.X) * (max.X - min.X) + (max.Y - min.Y) * (max.Y - min.Y) + (max.Z - min.Z) * (max.Z - min.Z)));
                             using var bmp = PreviewRenderer.Render(scene, st, 96, 96, -0.9f, 0.35f, ((min.X + max.X) / 2, (min.Y + max.Y) / 2, (min.Z + max.Z) / 2), r / MathF.Sin(18 * MathF.PI / 180));
@@ -348,8 +395,10 @@ public static class SelfTest
                             bool empty = true;
                             for (int y = 0; y < 96 && empty; y++) for (int x = 0; x < 96 && empty; x++) empty = bmp.GetPixel(x, y) == corner;
                             if (empty) blank.Add($"{e.Name}: {model}");
-                            if (scene.Note != "") Add(notes, System.Text.RegularExpressions.Regex.Replace(scene.Note, @"[^ ]+\.ba2", "<mod>.ba2"), $"{e.Name}: {model}");
+                            if (scene.Note.Contains(".ba2")) Add(mods, "NOTE " + scene.Note, $"{e.Name}: {model}");
+                            else if (scene.Note != "") Add(notes, System.Text.RegularExpressions.Regex.Replace(scene.Note, @"[^ ]+\.ba2", "<mod>.ba2"), $"{e.Name}: {model}");
                         }
+                        catch (Exception ex) when (ex.Message.Contains(".ba2")) { Add(mods, "ERROR " + ex.Message, $"{e.Name}: {model}"); }
                         catch (Exception ex) { Add(errors, ex.GetType().Name + ": " + ex.Message, $"{e.Name}: {model}"); }
                         slow.Add((sw.ElapsedMilliseconds, model));
                         done++;
@@ -357,10 +406,11 @@ public static class SelfTest
                 }
         }
         catch (Exception ex) { sb.AppendLine("ERROR " + ex); }
-        sb.AppendLine($"{done} models, {errors.Values.Sum(l => l.Count)} failed to show, {notes.Values.Sum(l => l.Count)} with a note, {blank.Count} empty pictures");
+        sb.AppendLine($"{done} models, {errors.Values.Sum(l => l.Count)} failed to show, {notes.Values.Sum(l => l.Count)} with a note, {blank.Count} empty pictures, {mods.Values.Sum(l => l.Count)} from other mods (not counted)");
         foreach (var (k, l) in errors.OrderByDescending(kv => kv.Value.Count)) { sb.AppendLine($"  ERROR {l.Count} x {k}"); foreach (var w in l.Take(40)) sb.AppendLine("     " + w); }
         foreach (var (k, l) in notes.OrderByDescending(kv => kv.Value.Count)) { sb.AppendLine($"  NOTE {l.Count} x {k}"); foreach (var w in l.Take(40)) sb.AppendLine("     " + w); }
         foreach (var w in blank.Take(40)) sb.AppendLine("  EMPTY " + w);
+        foreach (var (k, l) in mods) { sb.AppendLine($"  MOD {l.Count} x {k}"); foreach (var w in l.Take(40)) sb.AppendLine("     " + w); }
         foreach (var (ms, m) in slow.OrderByDescending(x => x.Ms).Take(5)) sb.AppendLine($"  slow {ms} ms {m}");
         File.WriteAllText(Path.Combine(Dir, "previewall.log"), sb.ToString());
         return 0;

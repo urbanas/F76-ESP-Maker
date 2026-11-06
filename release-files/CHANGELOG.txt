@@ -1,6 +1,70 @@
 ESP Maker - changes
 ===================
 
+2.1
+New
+- Name label: a floating name above the item - the item's own name or a text you type, in three
+  sizes. The 3D preview shows it.
+- Hide after: the glow, marker, icon and name shrink away after a time you choose (30 s, 1 min,
+  2 min or your own). The clock starts when the game loads the item, so it starts again when you
+  come back to the area. Not on enemies. Idea from the BobbleBanner mod (no files from it used).
+- CAMP items category under Items: 1,569 things players build in their CAMPs.
+- Icons next to the categories in the list.
+- Search lists the matching categories first; click one (or press Enter) to open it.
+- A new 3D icon: Lava block.
+3D preview
+- The person, house and walls in the bigger view are the game's own models now (a dressed
+  mannequin, a Covenant house, CAMP barn walls with a door and windows).
+- A person stands beside the item for size. Disturbed graves and other landscape models sit on
+  the ground.
+- Skull, crown, ghost, leaf, slime and bobblehead 3D icons redrawn.
+Changed
+- Search: all the words you type must be in one name, and search also finds things in
+  Everything else (e.g. CAMP Pumpkin Pie Stand).
+- Everything else is always shown; the View -> Show everything else switch is gone.
+Fixed
+- Less flicker when you click a category.
+
+2.0
+New look for the whole app
+- A bar on the far left switches between your picks and the sections (items, junk, events,
+  enemies...); next to it are that section's categories. Long lists have sub-headings (events by kind,
+  junk by material) that fold.
+- Looks open in a pop-up: click an item for its own look, click a category for the category's look.
+  The pop-up stays open and follows the row you pick, and you can drag it anywhere (it remembers
+  where).
+- A simpler look editor: ready-made look pictures, a row of colours, and Glow / Marker / Icon /
+  Shine cards. An item follows its category's look until you change something.
+- Dark mode (View -> Dark mode), also for the dialogs and the 3D view.
+- A menu bar (File / Edit / View / Options / Help) instead of the "More" button.
+- Undo and redo (Ctrl+Z / Ctrl+Y).
+- Filters above the list: All / Selected / Own look / Has parts.
+- Pick several rows and a bar under the list edits, resets, selects or deselects them all at once.
+- Click a column header to sort.
+- Ctrl+K jumps to any category or item, and runs actions (Build & save, presets, dark mode...).
+- The Look column shows a small picture of each look. "+N shared" marks items that light up
+  together with others.
+- View -> Compact rows for smaller screens.
+3D preview
+- "Apply look | Original" switches between your look and the plain game model.
+- "Bigger view" opens a large window you can keep open next to the app. It follows the item you
+  pick and shows the look settings beside it. In it:
+  - drag to turn, WASD / arrow keys to walk, Q / E for height, stand back 10 / 30 / 100 m;
+  - Add: a person and floor grid for size, a house, or walls with a doorway to test "Visible
+    through walls"; junk and grass around the item; other selected items side by side (up to 12)
+    to compare;
+  - light: studio, day, dusk, night or fog;
+  - colour-blind views (red-green and blue-yellow) to check your colours stand out;
+  - spin slowly around the item; fit a tall beam; save the picture as a PNG.
+- Plants and landscape models (deathclaw nests) stand on the ground in the preview instead of
+  showing their buried half. Shine shows in the preview.
+More things to find
+- Doors, Apparel on the ground and Moveable objects categories under Everything else
+  (View -> Show everything else).
+Fixed
+- A low glow strength now really is faint: a 5 % outline was almost as bright as 30 %.
+  Rebuild your mod to get it.
+
 1.4.1
 Fixed
 - First aid kits, wall safes, ammo boxes and other animated containers showed no outline glow in

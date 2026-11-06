@@ -37,9 +37,18 @@ public sealed class Style
     /// <summary>Icon above the item / at the top of the beam (<see cref="Icons"/> id), "" = none.</summary>
     public string Icon { get; set; } = "";
     /// <summary>Icon half size in game units.</summary>
-    public float IconSize { get; set; } = 40;
+    public float IconSize { get; set; } = 24.5f; // 70 cm wide
     /// <summary>A solid 3D shape instead of the flat camera-facing icon (creatures always get 3D).</summary>
     public bool Icon3D { get; set; }
+    /// <summary>The item's name floats above it (above the icon), turned to the camera. Not on animated models.</summary>
+    public bool Label { get; set; }
+    /// <summary>Label text height in game units (half the card height).</summary>
+    public float LabelSize { get; set; } = 10.5f; // 30 cm tall
+    /// <summary>The label's own text; "" = the item's name.</summary>
+    public string LabelText { get; set; } = "";
+    /// <summary>Everything added (glow, marker, icon, label) shrinks away this many seconds after the model loads; 0 = never.
+    /// Starts again whenever the game loads the model (coming back to the area).</summary>
+    public int HideAfter { get; set; }
     /// <summary>The item's own colours shine: its game material gets its colour texture as a glow map. Works on the
     /// material, so everything using that material brightens; nothing is added to the model, nothing shows through walls.</summary>
     public bool Brighten { get; set; }
@@ -85,6 +94,8 @@ public sealed class Entry
     /// <summary>Spots in the world where something with these models is placed or can spawn; -1 = not counted
     /// (enemies). 0 = only ever in inventories - never visible in the world (a dropped item becomes a loot bag).</summary>
     public int Spots = -1;
+    /// <summary>Editor ids of the records using the models (Everything else only: searchable there).</summary>
+    public List<string>? EditorIds;
 
     public override string ToString() => Name;
 }
@@ -97,6 +108,8 @@ public sealed class Category
     public List<Entry> Entries = new();
     /// <summary>Heading the category is listed under.</summary>
     public string Section = "ITEMS";
+    /// <summary>Sub-heading inside the section ("" = none), e.g. "Seasonal" in EVENTS; listed in <see cref="Catalog.GroupOrder"/>.</summary>
+    public string Group = "";
     /// <summary>Its entries are groups of other entries (XP recipes). Its look goes to the entries a recipe ticks, as their
     /// own look (Project.RecipeLooks).</summary>
     public bool Groups;
@@ -517,7 +530,7 @@ public static class Catalog
                 .Where(x => x?.Type == "CMPO").Select(x => x!.Name.Trim()).Where(n => n.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             Category JunkCat(string comp) => junk.TryGetValue(comp, out var jc) ? jc : junk[comp] = new Category
             {
-                Name = "Junk: " + comp, Section = "JUNK", DefaultStyle = Look(color),
+                Name = "Junk: " + comp, Section = "JUNK", Group = JunkKind(comp), DefaultStyle = Look(color),
                 Description = $"Junk that scraps into {comp.ToLowerInvariant()} (hover an entry to see everything it scraps into). " +
                               "Junk with several components is listed under each of them. Give each component its own colour to tell look-alike junk apart.",
             };
@@ -582,6 +595,7 @@ public static class Catalog
         cats.Add(LootBags(world, byModel));
         cats.Add(StorageBoxes(world, byModel));
         cats.Add(Apparel(idx, Exists, worldSpots));
+        cats.Add(CampItems(idx, Exists, cats));
         // recipes: their ingredients are the entries listing those models (Cranberry in Plants, Sugar in Aid & food...)
         var others = cats.Where(c => !c.Groups).SelectMany(c => c.Entries).ToList();
         foreach (var (recipe, ingredients) in recipeModels)
@@ -849,6 +863,117 @@ public static class Catalog
             {
                 Id = "apparel:" + model, Category = ApparelName, Name = Label(recs, worldSpots), Models = new() { model },
                 ItemNames = names, Spots = spots, Detail = names.Count > 1 ? $"+{names.Count - 1} more share this model" : "",
+            });
+        }
+        c.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        return c;
+    }
+
+    /// <summary>Section of the advanced "Everything else" categories (always shown; was an option until 2.0).</summary>
+    public const string AllSection = "ALL";
+
+    /// <summary>The sub-headings inside a section, in the order the tree shows them.</summary>
+    public static readonly string[] GroupOrder =
+        { "Seasonal", "Public events", "Raids & expeditions", "Metals", "Chemicals", "Parts & tech", "Materials", "Other" };
+
+    /// <summary>A scrap component's kind (the junk section's sub-heading).</summary>
+    static string JunkKind(string comp) => comp.ToLowerInvariant() switch
+    {
+        "aluminum" or "black titanium" or "copper" or "gold" or "lead" or "silver" or "steel" or "ultracite" => "Metals",
+        "acid" or "adhesive" or "antiseptic" or "asbestos" or "coal" or "fertilizer" or "nuclear material" or "oil" or "lubricant" => "Chemicals",
+        "circuitry" or "crystal" or "fiber optics" or "gear" or "screw" or "spring" or "ballistic fiber" => "Parts & tech",
+        "bone" or "ceramic" or "cloth" or "concrete" or "cork" or "fiberglass" or "glass" or "leather" or "plastic" or "rubber" or "wood" => "Materials",
+        _ => "Other",
+    };
+    /// <summary>Names of its categories ("Other: Doors"); older setups said "All: ".</summary>
+    public const string OtherPrefix = "Other: ", OldOtherPrefix = "All: ";
+    /// <summary>Loose things only count where they are placed; activators, containers and furniture stay (events spawn them).</summary>
+    static bool PlacedOnly(string[] types) => !types.Any(t => t is "ACTI" or "CONT" or "FURN");
+    static readonly Regex NothingDrawn = new(@"^markers\\|loadmarker|dummy|invisible|activatorvolume|^armor\\raider01\\static\.nif$|_startlights\.nif$|^clothes\\hats\\gomininghelmet\.nif$|^effects\\splinesparks", RegexOptions.IgnoreCase);
+
+    /// <summary>Every named game object whose model no other category uses, one entry per model, sorted only by record
+    /// type - nothing hand-picked. Items that never lie in the world are left out (they can't show their model); activators,
+    /// containers and furniture stay, events and quests may spawn them.</summary>
+    public static List<Category> Rest(GameIndex idx, Func<string, bool> exists, List<Category> cats)
+    {
+        var covered = cats.SelectMany(c => c.Entries).SelectMany(e => e.Models).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var spots = idx.WorldSpots();
+        var result = new List<Category>();
+        foreach (var (name, types) in new[]
+        {
+            ("Activators", new[] { "ACTI" }), ("Containers", new[] { "CONT" }), ("Furniture", new[] { "FURN" }),
+            ("Misc items", new[] { "MISC" }), ("Food & aid", new[] { "ALCH", "INGR" }), ("Notes & books", new[] { "BOOK", "NOTE" }),
+            ("Plants", new[] { "FLOR" }), ("Weapons", new[] { "WEAP" }), ("Ammo", new[] { "AMMO" }), ("Keys", new[] { "KEYM" }),
+            ("Doors", new[] { "DOOR" }), ("Apparel on the ground", new[] { "ARMO" }), ("Moveable objects", new[] { "MSTT" }),
+        })
+        {
+            var c = new Category
+            {
+                Name = OtherPrefix + name, Section = AllSection, DefaultStyle = Look("#7FE3FF"),
+                Description = $"{name} the other categories don't have, named after the game's records - not sorted or checked by hand. " +
+                              "Search also finds editor ids here." + (PlacedOnly(types) ? " Only ones placed in the world (or by a spawn list) are listed." : ""),
+            };
+            bool placedOnly = PlacedOnly(types);
+            // apparel: its ground models (male / female); the rest: the record's model
+            foreach (var g in idx.Records.Where(r => types.Contains(r.Type) && r.Name.Trim().Length > 0)
+                                         .SelectMany(r => (r.Type == "ARMO" ? r.Models ?? new() : new List<string> { r.Model }).Where(m => m.Length > 0).Select(m => (r, m)))
+                                         .GroupBy(x => NormalizeModel(x.m), x => x.r, StringComparer.OrdinalIgnoreCase))
+            {
+                // creature attacks; editor markers and dummies have nothing to draw
+                if (covered.Contains(g.Key) || g.Key.StartsWith(@"actors\") || NothingDrawn.IsMatch(g.Key) || !exists(g.Key)) continue;
+                covered.Add(g.Key); // used by several record types: listed under the first one only
+                var recs = g.Distinct().ToList();
+                int n = recs.Sum(r => spots.GetValueOrDefault(r.FormId));
+                if (n == 0 && placedOnly) continue;
+                var names = recs.Select(r => r.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+                var ids = recs.Select(r => r.EditorId).Where(x => x.Length > 0).Distinct().OrderBy(x => x).ToList();
+                c.Entries.Add(new Entry
+                {
+                    Id = "all:" + g.Key, Category = c.Name, Name = Label(recs, spots), Models = new() { g.Key },
+                    ItemNames = names, EditorIds = ids, Spots = n == 0 ? -1 : n, Harvestable = types.Contains("FLOR"),
+                    Detail = string.Join(" · ", new[] { ids.FirstOrDefault() ?? "", names.Count > 1 ? $"+{names.Count - 1} more share this model" : "",
+                                                        n == 0 ? "not placed directly - only where something spawns it" : "" }.Where(x => x.Length > 0)),
+                });
+            }
+            c.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            if (c.Entries.Count > 0) result.Add(c);
+        }
+        return result;
+    }
+
+    public const string CampItemsName = "CAMP items";
+    static readonly Regex CampId = new(@"CAMP|Workshop|^ATX_|^SCORE_", RegexOptions.IgnoreCase);
+
+    /// <summary>Things built in a CAMP (collectors, extractors, generators, purifiers, turrets, signs, displays...): the
+    /// activators / containers / furniture whose editor id says CAMP, workshop, Atomic Shop or Scoreboard - one entry per
+    /// model, none another category already has. Every player's copy lights up, and world spots using the same model.</summary>
+    static Category CampItems(GameIndex idx, Func<string, bool> exists, List<Category> cats)
+    {
+        var c = new Category
+        {
+            Name = CampItemsName, DefaultStyle = Look("#FFB45C"),
+            Description = "Things built in CAMPs - collectors (Pumpkin Pie Stand, Toxic Gooler Cooler...), extractors, generators, purifiers, " +
+                          "turrets, signs and displays, named after the game's records. Every player's copy lights up, not only yours. " +
+                          "Plain decorations (chairs, beds, statues) aren't in the game index, so they're not here.",
+        };
+        var covered = cats.SelectMany(x => x.Entries).SelectMany(e => e.Models).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var spots = idx.WorldSpots();
+        bool Placeable(EsmRecord r) => r.Type is "ACTI" or "CONT" or "FURN" && r.Name.Trim().Length > 0 && r.Model.Length > 0;
+        var camp = idx.Records.Where(r => Placeable(r) && CampId.IsMatch(r.EditorId)).Select(r => NormalizeModel(r.Model)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // names: every named record on that model (the same stand under two names)
+        foreach (var g in idx.Records.Where(Placeable).GroupBy(r => NormalizeModel(r.Model), StringComparer.OrdinalIgnoreCase))
+        {
+            if (!camp.Contains(g.Key) || covered.Contains(g.Key) || g.Key.StartsWith(@"actors\") || NothingDrawn.IsMatch(g.Key) || !exists(g.Key)) continue;
+            var all = g.ToList();
+            var recs = all.Where(r => CampId.IsMatch(r.EditorId)).ToList();
+            int n = all.Sum(r => spots.GetValueOrDefault(r.FormId));
+            var names = all.Select(r => r.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+            var ids = all.Select(r => r.EditorId).Where(x => x.Length > 0).Distinct().OrderBy(x => x).ToList();
+            c.Entries.Add(new Entry
+            {
+                Id = "camp:" + g.Key, Category = c.Name, Name = Label(recs), Models = new() { g.Key },
+                ItemNames = names, EditorIds = ids, Spots = n == 0 ? -1 : n,
+                Detail = string.Join(" · ", new[] { recs[0].EditorId, names.Count > 1 ? $"+{names.Count - 1} more share this model" : "" }.Where(x => x.Length > 0)),
             });
         }
         c.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));

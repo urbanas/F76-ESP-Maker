@@ -186,7 +186,8 @@ public sealed record GlowPart(string Material, bool Cutout, string InlineTexture
 /// <param name="Model">A 3D model icon (Models3D) with its textured material, instead of an icon.</param>
 public sealed record PatchOptions(Func<GlowPart, GlowMat?>? GlowFor, string? BeamMaterial, float BeamLength, float BeamWidth, bool Harvestable,
                                   string? IconMaterial = null, float IconSize = 40, bool[,]? Icon3D = null, string? Icon3DMaterial = null,
-                                  bool BeamArrow = false, Mesh? Model = null, string? ModelMaterial = null);
+                                  bool BeamArrow = false, Mesh? Model = null, string? ModelMaterial = null,
+                                  string? LabelMaterial = null, float LabelHalfWidth = 0, float LabelHalfHeight = 0, float HideAfter = 0);
 
 public sealed record PatchResult(byte[] Data, int GlowShapes, bool Beam, string Note);
 
@@ -349,6 +350,16 @@ public static class NifPatch
         // ordinary models (tested on the cookie jar with BSX Animated|NeedsTransformUpdates); animated (skinned)
         // models drop the node, so creatures get none.
         bool icon = false;
+        // a camera-facing node sets its own world transform and ignores a shrinking parent (in game, 2026-11-06: the name
+        // card stayed after the timer) - with a timer, its card goes into a node of its own that the timer shrinks too
+        var inner = new List<(int Node, string Name)>();
+        int Inner(int kid, string name)
+        {
+            if (o.HideAfter <= 0) return kid;
+            int n = f.Add("NiNode", PlainNode(f.AddString(name), new float[] { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0 }, new[] { kid }));
+            inner.Add((n, name));
+            return n;
+        }
         bool skinned = shapes.Any(s => BitConverter.ToInt32(f.Blocks[s].Data, NifFile.ShapeRefs(f.Blocks[s].Data)) >= 0);
         if (o.IconMaterial != null && !skinned)
         {
@@ -359,17 +370,28 @@ public static class NifPatch
             int shader = f.Add("BSEffectShaderProperty", EffectShader(mat));
             int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
             int quad = f.Add("BSTriShape", IconShape(f.AddString("ItemFinderIcon:0"), shader, alpha, S));
-            int bill = f.Add("NiBillboardNode", BillboardNode(f.AddString("ItemFinderIcon"), (bx, by, z), quad));
+            int bill = f.Add("NiBillboardNode", BillboardNode(f.AddString("ItemFinderIcon"), (bx, by, z), Inner(quad, "ESPMakerTimedIcon")));
             if (!glowAdded.TryGetValue(beamParent, out var list)) glowAdded[beamParent] = list = new();
             list.Add(bill);
-            for (int k = 0; k < f.Blocks.Count; k++)
-                if (f.TypeOf(k) == "BSXFlags")
-                {
-                    var b = (byte[])f.Blocks[k].Data.Clone();
-                    Put(b, 4, BitConverter.ToInt32(b, 4) | 0x101); // Animated | NeedsTransformUpdates: billboards turn on statics
-                    f.Blocks[k] = ("BSXFlags", b);
-                }
+            OrBsx(f, 0x101); // Animated | NeedsTransformUpdates: billboards turn on statics
             icon = true;
+        }
+        // name label: a camera-facing card with the item's name, above the icon (or where the icon would go). Like the
+        // flat icon, only on models the game doesn't animate
+        bool label = false;
+        if (o.LabelMaterial != null && !skinned)
+        {
+            var (bx, by, bz) = BeamBase(f, shapes, parent, origin, beamParent);
+            float z = bz + (o.BeamMaterial != null ? o.BeamLength : 20) + (icon ? 2 * o.IconSize + 4 : 0) + o.LabelHalfHeight;
+            int mat = f.AddString(o.LabelMaterial);
+            int shader = f.Add("BSEffectShaderProperty", EffectShader(mat));
+            int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
+            int quad = f.Add("BSTriShape", IconShape(f.AddString("ESPMakerLabel:0"), shader, alpha, o.LabelHalfWidth, o.LabelHalfHeight));
+            int bill = f.Add("NiBillboardNode", BillboardNode(f.AddString("ESPMakerLabel"), (bx, by, z), Inner(quad, "ESPMakerTimedLabel")));
+            if (!glowAdded.TryGetValue(beamParent, out var list)) glowAdded[beamParent] = list = new();
+            list.Add(bill);
+            OrBsx(f, 0x101);
+            label = true;
         }
         // 3D icon: a solid shape needs no camera-facing node, so it also works on animated (skinned) models like the
         // Spooky pumpkin did; it turns with the creature or item
@@ -414,7 +436,35 @@ public static class NifPatch
                 if (SkinMarker(f, k, body)) made++;
             if (made > 0) notes.Add("markers bound to the bones");
         }
+        // hide after N seconds: everything added goes into its own node(s), and an animation that starts when the model
+        // loads (the game's autoplay behaviour, as the BobbleBanner mod does it) shrinks them to nothing
+        bool timed = false;
+        if (o.HideAfter > 0 && glowAdded.Count > 0)
+        {
+            var rb = f.Blocks[0].Data;
+            int rootCtl = BitConverter.ToInt32(rb, 8 + 4 * BitConverter.ToInt32(rb, 4));
+            if (skinned) notes.Add("no timer (animated model)");
+            else if (rootCtl >= 0 || f.Blocks.Any(b => b.Type == "BSBehaviorGraphExtraData")) notes.Add("no timer (model has its own animation)");
+            else
+            {
+                var wrapped = new Dictionary<int, List<int>>();
+                var targets = new List<(int Node, string Name)>();
+                foreach (var (node, kids) in glowAdded)
+                {
+                    string nm = "ESPMakerTimed" + targets.Count;
+                    int w = f.Add("NiNode", PlainNode(f.AddString(nm), new float[] { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0 }, kids));
+                    targets.Add((w, nm));
+                    wrapped[node] = new List<int> { w };
+                }
+                glowAdded = wrapped;
+                targets.AddRange(inner);
+                AddHideTimer(f, targets, o.HideAfter);
+                timed = true;
+            }
+        }
         foreach (var (node, kids) in glowAdded) f.AddChildren(node, kids);
+        if (label) notes.Add("label");
+        if (timed) notes.Add($"hides after {o.HideAfter:0} s");
 
 
         if (o.Harvestable && switchNode < 0) notes.Add("no harvest states found - beam stays after harvesting");
@@ -728,14 +778,148 @@ public static class NifPatch
     }
 
     /// <summary>A square of half size <paramref name="s"/> in the node's XY plane, both sides (as tested).</summary>
-    static byte[] IconShape(int name, int shader, int alpha, float s)
+    static byte[] IconShape(int name, int shader, int alpha, float s) => IconShape(name, shader, alpha, s, s);
+
+    /// <summary>A rectangle (half width sx, half height sy) in the node's XY plane, both sides.</summary>
+    static byte[] IconShape(int name, int shader, int alpha, float sx, float sy)
     {
         var verts = new List<Vert>();
-        var corners = new[] { (-s, -s, 0f), (s, -s, 0f), (s, s, 0f), (-s, s, 0f) };
+        var corners = new[] { (-sx, -sy, 0f), (sx, -sy, 0f), (sx, sy, 0f), (-sx, sy, 0f) };
         var uvs = new[] { (0f, 1f), (1f, 1f), (1f, 0f), (0f, 0f) };
         for (int c = 0; c < 4; c++) verts.Add(new Vert(corners[c], uvs[c], (0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), new byte[] { 255, 255, 255, 255 }));
         var tris = new List<(int, int, int)> { (0, 1, 2), (0, 2, 3), (0, 2, 1), (0, 3, 2) };
-        return Pack(name, shader, alpha, verts, tris, -s, s, s);
+        return Pack(name, shader, alpha, verts, tris, -sy, sy, Math.Max(sx, sy));
+    }
+
+    static void OrBsx(NifFile f, int bits)
+    {
+        for (int k = 0; k < f.Blocks.Count; k++)
+            if (f.TypeOf(k) == "BSXFlags")
+            {
+                var b = (byte[])f.Blocks[k].Data.Clone();
+                Put(b, 4, BitConverter.ToInt32(b, 4) | bits);
+                f.Blocks[k] = ("BSXFlags", b);
+            }
+    }
+
+    /// <summary>The BobbleBanner mod's timer (Nexus 4494, decoded 2026-11-06): the root gets a behaviour graph extra data
+    /// pointing at the game's Autoplay.hkx, which plays the sequence "AutoPlay" of the root's controller manager as soon
+    /// as the model loads. The sequence scales each target node 1 -> 0 over the last 4 seconds and holds (clamp).</summary>
+    static void AddHideTimer(NifFile f, List<(int Node, string Name)> targets, float t)
+    {
+        // As in BobbleBanner (works in game), the root stays bare: the original parts and their collision go into a child
+        // node. Done here before the markers are attached, so the root's children are the originals.
+        var root = (byte[])f.Blocks[0].Data.Clone();
+        int colAt = NifFile.AvObjectEnd(root) - 4, col = BitConverter.ToInt32(root, colAt);
+        if (col >= 0 && col < f.Blocks.Count)
+        {
+            var kids = f.Children(0);
+            int flags = BitConverter.ToInt32(root, 8 + 4 * BitConverter.ToInt32(root, 4) + 4);
+            var nb = PlainNode(f.AddString("ESPMakerItem"), new float[] { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0 }, kids);
+            Put(nb, 12, flags);
+            Put(nb, NifFile.AvObjectEnd(nb) - 4, col);
+            int item = f.Add("NiNode", nb);
+            // the collision's owner pointer stays on the root, as in BobbleBanner's (working) models
+            Put(root, colAt, -1);
+            int c = NifFile.AvObjectEnd(root), n = BitConverter.ToInt32(root, c);
+            var rebuilt = new List<byte>(root[..c]);
+            rebuilt.AddRange(BitConverter.GetBytes(1));
+            rebuilt.AddRange(BitConverter.GetBytes(item));
+            rebuilt.AddRange(root[(c + 4 + 4 * n)..]);
+            f.Blocks[0] = (f.Blocks[0].Type, rebuilt.ToArray());
+        }
+        float fade = Math.Min(4, t);
+        BinaryWriter W(out MemoryStream ms) { ms = new MemoryStream(); return new BinaryWriter(ms); }
+        // scale keys (quadratic, flat tangents, as in the mod)
+        var w = W(out var ms);
+        w.Write(0u); // no rotation keys
+        w.Write(0u); // no translation keys
+        const float gone = 0.001f; // not 0: a zero scale can't be inverted (suspected in a stash-view crash, 2026-11-06)
+        var keys = fade < t ? new[] { (0f, 1f), (t - fade, 1f), (t, gone) } : new[] { (0f, 1f), (t, gone) };
+        w.Write((uint)keys.Length); w.Write(2u);
+        foreach (var (time, v) in keys) { w.Write(time); w.Write(v); w.Write(0f); w.Write(0f); }
+        var dataBytes = ms.ToArray();
+        // Block order matters: the stash view crashed when the data came before the blocks using it (manager last).
+        // BobbleBanner's order, each block before the ones it points at (in-game round 6, 2026-11-06):
+        // BGED, manager, controller, sequence, interpolators, data, text keys, palette.
+        int bged = f.Blocks.Count, manager = bged + 1, mtc = bged + 2, seq = bged + 3;
+        var interps = Enumerable.Range(seq + 1, targets.Count).ToList();
+        int data = seq + 1 + targets.Count, textKeys = data + 1, palette = data + 2;
+        var interpBytes = new List<byte[]>();
+        foreach (var _ in targets)
+        {
+            w = W(out ms);
+            w.Write(0f); w.Write(0f); w.Write(0f); w.Write(1f); w.Write(0f); w.Write(0f); w.Write(0f); w.Write(1f); w.Write(data);
+            interpBytes.Add(ms.ToArray());
+        }
+        w = W(out ms);
+        w.Write(-1); w.Write(2u); w.Write(0f); w.Write(f.AddString("start")); w.Write(t + 1); w.Write(f.AddString("end"));
+        var textKeyBytes = ms.ToArray();
+        w = W(out ms);
+        w.Write(f.AddString("AutoPlay")); w.Write((uint)targets.Count); w.Write(1u);
+        int ctlType = f.AddString("NiTransformController");
+        for (int i = 0; i < targets.Count; i++)
+        {
+            w.Write(interps[i]); w.Write(-1); w.Write((byte)0);
+            w.Write(f.AddString(targets[i].Name)); w.Write(-1); w.Write(ctlType); w.Write(-1); w.Write(-1);
+        }
+        w.Write(1f); w.Write(textKeys); w.Write(2u); w.Write(1f); w.Write(0f); w.Write(t + 1); w.Write(manager);
+        w.Write(BitConverter.ToInt32(f.Blocks[0].Data, 0)); w.Write((ushort)0);
+        var seqBytes = ms.ToArray();
+        w = W(out ms);
+        w.Write(-1); w.Write((ushort)0x6C); w.Write(1f); w.Write(0f); w.Write(float.MaxValue); w.Write(-float.MaxValue); w.Write(0);
+        w.Write((ushort)targets.Count); foreach (var tg in targets) w.Write(tg.Node);
+        var mtcBytes = ms.ToArray();
+        w = W(out ms);
+        w.Write(mtc); w.Write((ushort)0x4C); w.Write(1f); w.Write(0f); w.Write(float.MaxValue); w.Write(-float.MaxValue); w.Write(0);
+        w.Write((byte)0); w.Write(1u); w.Write(seq); w.Write(palette);
+        var managerBytes = ms.ToArray();
+        w = W(out ms);
+        w.Write(0); w.Write((uint)targets.Count);
+        foreach (var tg in targets) { w.Write(tg.Name.Length); w.Write(Encoding.ASCII.GetBytes(tg.Name)); w.Write(tg.Node); }
+        var paletteBytes = ms.ToArray();
+        w = W(out ms);
+        w.Write(f.AddString("BGED")); w.Write(f.AddString(@"GenericBehaviors\Autoplay\Autoplay.hkx")); w.Write((byte)0);
+        if (f.Blocks.Count != bged) throw new InvalidOperationException("hide timer: block indices shifted");
+        f.Add("BSBehaviorGraphExtraData", ms.ToArray());
+        f.Add("NiControllerManager", managerBytes);
+        f.Add("NiMultiTargetTransformController", mtcBytes);
+        f.Add("NiControllerSequence", seqBytes);
+        foreach (var ib in interpBytes) f.Add("NiTransformInterpolator", ib);
+        f.Add("NiTransformData", dataBytes);
+        f.Add("NiTextKeyExtraData", textKeyBytes);
+        f.Add("NiDefaultAVObjectPalette", paletteBytes);
+        if (!f.Blocks.Any(b => b.Type == "BSXFlags"))
+        {
+            w = W(out ms); w.Write(f.AddString("BSX")); w.Write(0);
+            AddRootExtra(f, f.Add("BSXFlags", ms.ToArray()));
+        }
+        AddRootExtra(f, bged);
+        OrBsx(f, 0x1); // Animated
+        // Animated + Articulated (bobbleheads: 0xC2) crashed the game the moment the item was shown in the stash
+        // (2026-11-06). BobbleBanner turns the same bobbleheads into 0x0B: Dynamic and Articulated off, Complex on.
+        for (int k = 0; k < f.Blocks.Count; k++)
+            if (f.TypeOf(k) == "BSXFlags" && (BitConverter.ToInt32(f.Blocks[k].Data, 4) & 0x80) != 0)
+            {
+                var b = (byte[])f.Blocks[k].Data.Clone();
+                Put(b, 4, BitConverter.ToInt32(b, 4) & ~0xC0 | 0x8);
+                f.Blocks[k] = ("BSXFlags", b);
+            }
+        var rb =(byte[])f.Blocks[0].Data.Clone();
+        Put(rb, 8 + 4 * BitConverter.ToInt32(rb, 4), manager);
+        f.Blocks[0] = (f.Blocks[0].Type, rb);
+    }
+
+    static void AddRootExtra(NifFile f, int extra)
+    {
+        var (t, b) = f.Blocks[0];
+        int n = BitConverter.ToInt32(b, 4), end = 8 + 4 * n;
+        var nb = new List<byte>(b[..4]);
+        nb.AddRange(BitConverter.GetBytes(n + 1));
+        nb.AddRange(b[8..end]);
+        nb.AddRange(BitConverter.GetBytes(extra));
+        nb.AddRange(b[end..]);
+        f.Blocks[0] = (t, nb.ToArray());
     }
 
     /// <summary>The icon pushed out into a slab (like a cookie cutter): front and back faces from the filled cells of

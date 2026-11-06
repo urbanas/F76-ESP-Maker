@@ -23,6 +23,10 @@ public static class Materials
     /// <summary>The outline's opacity on faces that point at you.</summary>
     public const float OutlineFace = 0.18f;
 
+    /// <summary>Edge opacity of a normal-blend outline: 0.51 at the default 30 % (as before), full from 59 %,
+    /// and fading to almost nothing at 5 % (the old 0.3 floor kept 5 % bright in game).</summary>
+    public static float OutlineAlpha(float s) => Math.Min(1f, 1.7f * s);
+
     static void Outline(byte[] m)
     {
         int d = BitConverter.ToInt32(m, TextureLength) - TemplateTexture.Length - 1;
@@ -90,7 +94,7 @@ public static class Materials
         {
             // an outline only colours the edges, so it can be more opaque there
             // filled: a see-through overlay (opacity 0.28, colour strength 0.52) at the default 30 %
-            var b = Make(template, "", c, outline ? 1.0f : 0.52f, falloff: false, throughWalls, alpha: outline ? 0.3f + 0.7f * s : Math.Min(1f, 0.28f * s / 0.3f));
+            var b = Make(template, "", c, outline ? 1.0f : 0.52f, falloff: false, throughWalls, alpha: outline ? OutlineAlpha(s) : Math.Min(1f, 0.28f * s / 0.3f));
             BitConverter.TryWriteBytes(b.AsSpan(BlendSrc), 6);
             BitConverter.TryWriteBytes(b.AsSpan(BlendDst), 7);
             if (outline)

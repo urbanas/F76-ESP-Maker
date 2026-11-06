@@ -90,28 +90,36 @@ public static class IconPicker
             else foreach (var ic in Icons.All) grid.Controls.Add(Choice(ic.Id, ic.Name, threeD ? Tile3D(ic, colour, 52) : Tile(ic, colour, 52)));
             return grid;
         }
-        var tabs = new TabControl { Dock = DockStyle.Fill, AutoSize = true };
-        TabPage Page(string title, bool threeD, string hint, bool models = false)
+        // the pages: joined buttons on top switch them (a TabControl's tabs can't take the dark theme)
+        dlg.BackColor = Ui.Panel;
+        dlg.ForeColor = Ui.Fg;
+        dlg.HandleCreated += (_, _) => Ui.TitleBar(dlg);
+        var pages = new List<Control>();
+        Control Page(string hint, bool models = false)
         {
-            var page = new TabPage(title) { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(4) };
-            var box = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
-            box.Controls.Add(new Label { Text = hint, AutoSize = true, MaximumSize = new Size(8 * 92, 0), Padding = new Padding(4, 2, 0, 4) });
-            box.Controls.Add(Grid(threeD, models));
-            page.Controls.Add(box);
-            return page;
+            var box = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Location = new Point(0, 34) };
+            box.Controls.Add(new Label { Text = hint, AutoSize = true, MaximumSize = new Size(8 * 92, 0), ForeColor = Ui.Muted, Padding = new Padding(4, 2, 0, 4) });
+            var grid = Grid(false, models);
+            grid.BackColor = Ui.Window;
+            box.Controls.Add(grid);
+            pages.Add(box);
+            return box;
         }
         // (the extruded "3D shapes" are gone - the 3D models replaced them; old setups keep theirs, see MainForm.MigrateSetup)
-        if (!only3D) tabs.TabPages.Add(Page("Flat icons", false, "A flat picture that always turns to face you - easy to read from any side."));
-        tabs.TabPages.Add(Page("3D models", false, (only3D ? "Creatures and worn outfits can only show 3D models: the game drops flat camera-facing icons from animated bodies. " : "") +
-                                                    "A small textured model, like the Spooky Scorched pumpkin - turns with the item or creature. " +
-                                                    "Models in their own colours ignore the look's colour; the white ones take it.", models: true));
-        if (current.StartsWith(Models3D.Prefix)) tabs.SelectedIndex = tabs.TabPages.Count - 1;
-        // the tab control does not grow to its pages by itself
-        int w = 0, h = 0;
-        foreach (TabPage p in tabs.TabPages) { var sz = p.Controls[0].GetPreferredSize(Size.Empty); w = Math.Max(w, sz.Width); h = Math.Max(h, sz.Height); }
-        tabs.Dock = DockStyle.None;
-        tabs.Size = new Size(w + 24, h + 44);
-        dlg.Controls.Add(tabs);
+        if (!only3D) Page("A flat picture that always turns to face you - easy to read from any side.");
+        Page((only3D ? "Creatures and worn outfits can only show 3D models: the game drops flat camera-facing icons from animated bodies. " : "") +
+             "A small textured model, like the Spooky Scorched pumpkin - turns with the item or creature. " +
+             "Models in their own colours ignore the look's colour; the white ones take it.", models: true);
+        var holder = new Panel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
+        var tabs = new Seg(only3D ? new[] { "3D models" } : new[] { "Flat icons", "3D models" }) { Location = new Point(4, 2) };
+        void Show(int i) { tabs.Selected = i; for (int k = 0; k < pages.Count; k++) pages[k].Visible = k == i; }
+        tabs.Picked += Show;
+        holder.Controls.Add(tabs);
+        foreach (var p in pages) holder.Controls.Add(p);
+        Show(current.StartsWith(Models3D.Prefix) ? pages.Count - 1 : 0);
+        // as big as the biggest page: the window keeps its size when switching
+        holder.MinimumSize = new Size(pages.Max(p => p.GetPreferredSize(Size.Empty).Width), pages.Max(p => p.GetPreferredSize(Size.Empty).Height) + 34);
+        dlg.Controls.Add(holder);
         if (CaptureTo != null) // dev: picture of the dialog
             dlg.Shown += (_, _) => { using var bmp = new Bitmap(dlg.Width, dlg.Height); dlg.DrawToBitmap(bmp, new Rectangle(Point.Empty, dlg.Size)); bmp.Save(CaptureTo); dlg.Close(); };
         dlg.ShowDialog(owner);

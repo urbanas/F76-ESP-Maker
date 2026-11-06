@@ -1,7 +1,7 @@
 namespace ItemFinder;
 
 /// <summary>The tour: a few screenshots of the app with the part that matters framed, and what to do there. Shown
-/// once on the first start, and from More - Show the tour. The pictures are made from the real window by the dev
+/// once on the first start, and from Help - Show the tour. The pictures are made from the real window by the dev
 /// command --tutorial-shots and built into the exe (src\Tutorial\step*.png).</summary>
 sealed class Tutorial : Form
 {
@@ -11,23 +11,23 @@ sealed class Tutorial : Form
     public static readonly Step[] Steps =
     {
         new("step1.png", "Pick a category",
-            "Items, events and enemies are sorted into categories on the left. Click one to see what's in it.\n" +
-            "The search box above the list searches everything at once."),
+            "The bar on the far left switches between your picks, items, junk, events and enemies; next to it are that\n" +
+            "section's categories. The search box searches everything at once, Ctrl+K jumps to any category or item."),
         new("step2.png", "Select what you want to find",
             "Select the things you want to highlight in the game - just those, nothing else changes.\n" +
             "Things made of several parts (robots, costumes...) open with ► so you can pick parts."),
         new("step3.png", "Choose the look",
-            "With nothing clicked in the list, the panel on the right sets the look for the whole category: a Quick look,\n" +
-            "the colour, and an icon or 3D model above each thing. \"More settings\" has the details."),
+            "Click the category to set the look for all of it: a ready-made look, the colour, and an icon or\n" +
+            "3D model above each thing. The Glow, Marker, Icon and Shine cards fine-tune it."),
         new("step4.png", "Give one thing its own look",
-            "Click an item, then \"Own look\" to make it different from its category.\n" +
-            "Parts of a thing (here the Guardian's base) can have their own look too."),
+            "Click an item in the list. It uses its category's look until you change something - then it has its own.\n" +
+            "Parts of a thing (the Guardian's base, a robot's weapons) can have their own look too."),
         new("step5.png", "Preview it in 3D",
-            "The preview shows the real model from the game the way the mod will show it.\n" +
-            "Drag to turn it, use the mouse wheel to zoom."),
+            "The bottom of the look window shows the real model from the game the way the mod will show it.\n" +
+            "Drag to turn it, mouse wheel to zoom. \"Bigger view\" lets you walk around it, add a person or walls, and compare items."),
         new("step6.png", "Build & save",
             "Close the game, click \"Build & save\", name your mod, then start the game. \"Import .ba2\" opens a mod to change it -\n" +
-            "yours or someone else's. \"More\" has ready-made presets, Save / Open project and Uninstall."),
+            "yours or someone else's. The menu bar on top has ready-made presets (Edit), Save / Open project and Uninstall (File)."),
     };
 
     readonly PictureBox picture = new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(240, 240, 240) };
@@ -46,6 +46,7 @@ sealed class Tutorial : Form
         ShowIcon = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
+        Ui.Dialog(this);
         ClientSize = new Size(1040, 760);
         MinimumSize = new Size(700, 520);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 52, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(12, 8, 12, 8) };

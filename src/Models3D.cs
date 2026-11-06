@@ -41,7 +41,7 @@ public static class Models3D
         new("model:exclamation", "Exclamation", true, Exclamation, White),
         new("model:question", "Question", true, Question, White),
         new("model:cross", "Cross", true, Cross, White),
-        new("model:leaf", "Leaf", true, Leaf, White),
+        new("model:leaf", "Leaf", true, Leaf, LeafTexture),
         // Fallout
         new("model:nuka", "Nuka bottle", false, NukaBottle, NukaTexture),
         new("model:mininuke", "Mini nuke", false, MiniNuke, White),
@@ -59,6 +59,7 @@ public static class Models3D
         new("model:kitsune", "Kitsune mask", false, Kitsune, KitsuneTexture),
         new("model:slime", "Slime", true, Slime, SlimeTexture),
         new("model:ramen", "Ramen", false, Ramen, RamenTexture),
+        new("model:lava", "Lava block", false, LavaBlock, LavaTexture, Shade: false),
     };
 
     public static Model3D? Get(string id) => id.StartsWith(Prefix) ? All.FirstOrDefault(m => m.Id == id) : null;
@@ -409,30 +410,124 @@ public static class Models3D
         return m;
     }
 
+    // skull: one closed surface (dome + face/jaw loft) with real eye sockets and nose hole pressed in; the picture is
+    // projected on the front only (SkullU / SkullV), the back is plain bone
+    const float SkullEyeX = 0.31f, SkullEyeZ = 0.98f, SkullNoseZ = 0.72f;
+    static readonly Color Bone = Color.FromArgb(236, 226, 200);
+    static float SkullU(float x) => 0.5f + 0.47f * x / 0.82f;
+    static float SkullV(float z) => 0.5f - 0.47f * (z - 1.05f);
+
     static Mesh Skull()
     {
         var m = new Mesh();
-        var white = Paint(Color.White);
-        (float, float) Front(Vector3 p, float a, float b) => (0.5f + 0.47f * p.X / 0.82f, 0.5f - 0.47f * (p.Z - 1.0f) / 1.0f);
-        Grid(m, 18, 40, Ellipsoid(new(0, 0, 1.18f), 0.8f, 0.74f, 0.74f), Front, white);   // cranium
-        Grid(m, 12, 32, Ellipsoid(new(0, -0.06f, 0.5f), 0.52f, 0.5f, 0.34f), Front, white); // jaw
+        // below the dome: (height, half width, front depth, back depth), top down - the back tucks in, the jaw sits in front
+        var keys = new (float Z, float W, float F, float B)[]
+        {
+            (1.25f, 0.82f, 0.8f, 0.88f), (1.05f, 0.81f, 0.79f, 0.82f), (0.88f, 0.76f, 0.77f, 0.64f), (0.7f, 0.6f, 0.74f, 0.44f),
+            (0.52f, 0.5f, 0.69f, 0.34f), (0.34f, 0.45f, 0.62f, 0.28f), (0.18f, 0.37f, 0.54f, 0.22f), (0.1f, 0.24f, 0.4f, 0.14f), (0.08f, 0, 0, 0),
+        };
+        static float Cr(float a, float b, float c, float d, float t) =>
+            0.5f * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t);
+        (float Z, float W, float F, float B) Section(float fi)
+        {
+            const float Dome = 0.35f;
+            if (fi <= Dome)
+            {
+                float th = fi / Dome * MathF.PI / 2, s = MathF.Sin(th);
+                return (1.25f + 0.78f * MathF.Cos(th), 0.82f * s, 0.8f * s, 0.88f * s);
+            }
+            float g = (fi - Dome) / (1 - Dome) * (keys.Length - 1);
+            int i = Math.Min((int)g, keys.Length - 2);
+            float t = g - i;
+            var (a, b, c, d) = (keys[Math.Max(i - 1, 0)], keys[i], keys[i + 1], keys[Math.Min(i + 2, keys.Length - 1)]);
+            return (Cr(a.Z, b.Z, c.Z, d.Z, t), Math.Max(0, Cr(a.W, b.W, c.W, d.W, t)), Math.Max(0, Cr(a.F, b.F, c.F, d.F, t)), Math.Max(0, Cr(a.B, b.B, c.B, d.B, t)));
+        }
+        static float Dent(float x, float z, float cx, float cz, float rx, float rz)
+        {
+            float d = (x - cx) * (x - cx) / (rx * rx) + (z - cz) * (z - cz) / (rz * rz);
+            return d >= 1 ? 0 : (1 - d) * (1 - d);
+        }
+        int first = m.V.Count;
+        Grid(m, 44, 56, (fi, fj) =>
+        {
+            var (z, w, f, b) = Section(fi);
+            float ph = 2 * MathF.PI * fj, s = MathF.Sin(ph);
+            float x = w * MathF.Cos(ph), y = s < 0 ? f * s : b * s;
+            if (y < 0)
+            {
+                float front = Math.Clamp(-y / Math.Max(f, 1e-3f), 0, 1);
+                front *= front;
+                y += front * (0.24f * (Dent(x, z, -SkullEyeX, SkullEyeZ, 0.2f, 0.17f) + Dent(x, z, SkullEyeX, SkullEyeZ, 0.2f, 0.17f))
+                              + 0.13f * Dent(x, z, 0, SkullNoseZ, 0.085f, 0.1f)
+                              - 0.04f * (Dent(x, z, -SkullEyeX, 1.2f, 0.26f, 0.07f) + Dent(x, z, SkullEyeX, 1.2f, 0.26f, 0.07f)) // brow ridge
+                              + 0.025f * Dent(x, z, 0, 0.565f, 0.3f, 0.02f));                                                   // the bite
+            }
+            return (new Vector3(x, y, z), Vector3.UnitZ);
+        }, (p, a, b) => p.Y > 0.02f ? (p.X < 0 ? 0.02f : 0.98f, PlainV) : (Math.Clamp(SkullU(p.X), 0.01f, 0.99f), Math.Clamp(SkullV(p.Z), 0.01f, 0.93f)),
+           Paint(Color.White));
+        SmoothNormals(m, first);
         return m;
     }
 
-    static Bitmap SkullTexture() => Canvas(256, Color.FromArgb(236, 228, 206), (g, n) =>
+    static Bitmap SkullTexture() => Canvas(256, Bone, (g, n) =>
     {
-        float S(float f) => f * n;
-        using (var shade = new PathGradientBrush(new[] { new PointF(0, 0), new PointF(n, 0), new PointF(n, n), new PointF(0, n) })
-               { CenterColor = Color.FromArgb(248, 244, 232), SurroundColors = new[] { Color.FromArgb(200, 190, 166) } })
-            g.FillRectangle(shade, 0, 0, n, n);
-        using var dark = new SolidBrush(Color.FromArgb(30, 22, 20));
-        g.FillEllipse(dark, S(0.22f), S(0.33f), S(0.22f), S(0.19f));                     // eyes
-        g.FillEllipse(dark, S(0.56f), S(0.33f), S(0.22f), S(0.19f));
-        g.FillPolygon(dark, new[] { new PointF(S(0.5f), S(0.55f)), new PointF(S(0.45f), S(0.66f)), new PointF(S(0.55f), S(0.66f)) }); // nose
-        using var pen = new Pen(Color.FromArgb(60, 50, 40), S(0.012f));
-        g.DrawLine(pen, S(0.33f), S(0.78f), S(0.67f), S(0.78f));                           // teeth
-        for (int k = 0; k <= 6; k++) g.DrawLine(pen, S(0.33f + k * 0.0567f), S(0.73f), S(0.33f + k * 0.0567f), S(0.84f));
+        float X(float x) => n * SkullU(x);
+        float Z(float z) => n * SkullV(z);
+        var dark = Color.FromArgb(26, 18, 16);
+        foreach (int s in new[] { -1, 1 })
+        {
+            // the eye sockets: dark inside, fading to bone at the rim of the dent
+            using var path = new GraphicsPath();
+            float rx = X(0.22f) - X(0), rz = Z(SkullEyeZ - 0.19f) - Z(SkullEyeZ);
+            path.AddEllipse(X(s * SkullEyeX) - rx, Z(SkullEyeZ) - rz, 2 * rx, 2 * rz);
+            using var socket = new PathGradientBrush(path) { CenterColor = dark, SurroundColors = new[] { Color.FromArgb(150, 132, 104) }, FocusScales = new PointF(0.62f, 0.6f) };
+            g.FillPath(socket, path);
+        }
+        using (var path = new GraphicsPath())
+        {
+            // the nose hole: an upside-down heart
+            float cx = X(0), w = X(0.075f) - X(0);
+            path.AddBezier(cx, Z(0.66f), cx - w * 1.6f, Z(0.7f), cx - w * 0.6f, Z(0.84f), cx, Z(0.8f));
+            path.AddBezier(cx, Z(0.8f), cx + w * 0.6f, Z(0.84f), cx + w * 1.6f, Z(0.7f), cx, Z(0.66f));
+            using var nose = new PathGradientBrush(path) { CenterColor = dark, SurroundColors = new[] { Color.FromArgb(90, 74, 60) } };
+            g.FillPath(nose, path);
+        }
+        // teeth: two rows with dark gaps, the bite between them
+        using (var gap = new SolidBrush(Color.FromArgb(70, 56, 44)))
+            g.FillRectangle(gap, X(-0.27f), Z(0.655f), X(0.27f) - X(-0.27f), Z(0.47f) - Z(0.655f));
+        using var tooth = new SolidBrush(Color.FromArgb(250, 244, 226));
+        for (int k = 0; k < 8; k++)
+        {
+            float x0 = -0.26f + k * 0.065f;
+            using var up = Rounded(X(x0 + 0.006f), Z(0.65f), X(x0 + 0.059f) - X(x0 + 0.006f), Z(0.572f) - Z(0.65f), n * 0.012f);
+            g.FillPath(tooth, up);
+            using var low = Rounded(X(x0 + 0.01f), Z(0.558f), X(x0 + 0.055f) - X(x0 + 0.01f), Z(0.48f) - Z(0.558f), n * 0.012f);
+            g.FillPath(tooth, low);
+        }
+        // a crack from the brow up, and soft shadow under the cheekbones
+        using (var crack = new Pen(Color.FromArgb(120, 104, 84), n * 0.008f) { LineJoin = LineJoin.Round })
+            g.DrawLines(crack, new[] { new PointF(X(0.4f), Z(1.22f)), new PointF(X(0.44f), Z(1.36f)), new PointF(X(0.39f), Z(1.48f)), new PointF(X(0.45f), Z(1.62f)) });
+        foreach (int s in new[] { -1, 1 })
+            using (var path = new GraphicsPath())
+            {
+                path.AddEllipse(X(s * 0.5f) - n * 0.08f, Z(0.74f) - n * 0.05f, n * 0.16f, n * 0.1f);
+                using var cheek = new PathGradientBrush(path) { CenterColor = Color.FromArgb(196, 182, 152), SurroundColors = new[] { Bone } };
+                g.FillPath(cheek, path);
+            }
+        PlainBand(g, n, Bone);
     });
+
+    static GraphicsPath Rounded(float x, float y, float w, float h, float r)
+    {
+        var p = new GraphicsPath();
+        r = Math.Min(r, Math.Min(w, h) / 2);
+        p.AddArc(x, y, 2 * r, 2 * r, 180, 90);
+        p.AddArc(x + w - 2 * r, y, 2 * r, 2 * r, 270, 90);
+        p.AddArc(x + w - 2 * r, y + h - 2 * r, 2 * r, 2 * r, 0, 90);
+        p.AddArc(x, y + h - 2 * r, 2 * r, 2 * r, 90, 90);
+        p.CloseFigure();
+        return p;
+    }
 
     static Mesh Bobblehead()
     {
@@ -443,6 +538,15 @@ public static class Models3D
         Grid(m, 18, 40, Ellipsoid(new(0, 0, 1.35f), 0.64f, 0.6f, 0.62f), Face, white);                  // the big head
         Grid(m, 12, 24, Ellipsoid(new(0, 0, 0.62f), 0.3f, 0.24f, 0.38f), Swatch, Paint(Color.FromArgb(46, 104, 214))); // jumpsuit
         Grid(m, 8, 16, Ellipsoid(new(0, 0, 0.55f), 0.31f, 0.25f, 0.05f), Swatch, Paint(Color.FromArgb(240, 200, 60)));  // belt
+        Color suit = Color.FromArgb(46, 104, 214), skin = Color.FromArgb(246, 206, 164);
+        // arms from the shoulders: left hanging, right giving the thumbs up
+        Tube(m, new[] { new Vector3(-0.22f, 0, 0.86f), new Vector3(-0.36f, 0, 0.66f), new Vector3(-0.38f, 0, 0.46f) }, 0.075f, suit);
+        Grid(m, 8, 16, Ellipsoid(new(-0.38f, 0, 0.4f), 0.09f, 0.09f, 0.09f), Swatch, Paint(skin));
+        Tube(m, new[] { new Vector3(0.22f, 0, 0.86f), new Vector3(0.4f, 0, 0.72f), new Vector3(0.44f, -0.06f, 0.92f) }, 0.075f, suit);
+        Grid(m, 8, 16, Ellipsoid(new(0.44f, -0.08f, 0.99f), 0.1f, 0.09f, 0.09f), Swatch, Paint(skin));
+        Tube(m, new[] { new Vector3(0.44f, -0.08f, 1.03f), new Vector3(0.44f, -0.08f, 1.12f) }, 0.035f, skin);           // the thumb
+        foreach (int sx in new[] { -1, 1 })                                                                               // boots
+            Grid(m, 8, 16, Ellipsoid(new(sx * 0.12f, -0.04f, 0.2f), 0.1f, 0.14f, 0.08f), Swatch, Paint(Color.FromArgb(60, 50, 44)));
         Grid(m, 1, 32, Revolve(f => (0.5f, 0.14f * (1 - f), 1, 0)), Swatch, Paint(Color.FromArgb(232, 184, 48)));      // stand
         Grid(m, 1, 32, Revolve(f => (0.5f * f, 0.14f, 0, 1)), Swatch, Paint(Color.FromArgb(232, 184, 48)));
         return m;
@@ -513,34 +617,60 @@ public static class Models3D
     static Mesh Crown()
     {
         var m = new Mesh();
-        Color gold = Color.FromArgb(255, 196, 58), red = Color.FromArgb(225, 30, 48);
-        Grid(m, 1, 48, Revolve(f => (0.82f, 0.7f - 0.48f * f, 1, 0)), Solid, Paint(gold), both: true);     // band
-        for (int k = 0; k < 5; k++)
+        // one gold wall whose top edge rises into five points (front one facing the viewer), with thickness, a rolled
+        // rim at the bottom, a red velvet cap filling it, pearls sitting on the tips and stones set into the band
+        Color gold = Color.FromArgb(255, 194, 52), deepGold = Color.FromArgb(222, 150, 30), velvet = Color.FromArgb(150, 18, 40);
+        Color ruby = Color.FromArgb(226, 28, 50), sapphire = Color.FromArgb(40, 90, 230), pearl = Color.FromArgb(246, 242, 228);
+        const int Points = 5;
+        const float Base = 0.08f, Low = 0.62f, Tall = 0.72f, T = 0.07f, Front = -MathF.PI / 2;
+        static float Top(float ph) => Low + Tall * MathF.Pow((1 + MathF.Cos(Points * (ph - Front))) / 2, 3);
+        static float Rad(float z) => 0.74f + 0.1f * z / (Low + Tall);
+        Vector3 At(float ph, float r, float z) => new(r * MathF.Cos(ph), r * MathF.Sin(ph), z);
+        const int Cols = 200;
+        int first = m.V.Count;
+        Grid(m, 10, Cols, (fi, fj) => { float ph = 2 * MathF.PI * fj, z = Top(ph) + (Base - Top(ph)) * fi; return (At(ph, Rad(z), z), Vector3.UnitZ); },
+             Solid, Paint(gold));                                                                      // outside, top down
+        Grid(m, 1, Cols, (fi, fj) => { float ph = 2 * MathF.PI * fj, z = Top(ph); return (At(ph, Rad(z) - T * (1 - fi), z), Vector3.UnitZ); },
+             Solid, Paint(gold));                                                                      // top edge, inside out
+        Grid(m, 10, Cols, (fi, fj) => { float ph = 2 * MathF.PI * fj, z = Base + (Top(ph) - Base) * fi; return (At(ph, Rad(z) - T, z), Vector3.UnitZ); },
+             Solid, Paint(deepGold));                                                                  // inside, bottom up
+        SmoothNormals(m, first);
+        Torus(m, new(0, 0, Base + 0.02f), Quaternion.Identity, Rad(Base) - T / 2, 0.075f, gold, 10, 64);  // rolled rim
+        Torus(m, new(0, 0, Low - 0.06f), Quaternion.Identity, Rad(Low - 0.06f) - T / 2 + 0.01f, 0.035f, gold, 8, 64);
+        Grid(m, 12, 40, Ellipsoid(new(0, 0, Base + 0.1f), Rad(Base) - T * 0.6f, Rad(Base) - T * 0.6f, 0.95f, 0, MathF.PI / 2), Solid, Paint(velvet));
+        Grid(m, 8, 16, Ellipsoid(new(0, 0, Base + 1.1f), 0.11f, 0.11f, 0.11f), Solid, Paint(gold));       // the orb on the cap
+        for (int k = 0; k < Points; k++)
         {
-            float a = -MathF.PI / 2 + k * 2 * MathF.PI / 5;
-            var at = new Vector3(0.82f * MathF.Cos(a), 0.82f * MathF.Sin(a), 0.7f);
-            Grid(m, 8, 16, (fi, fj) =>
-            {
-                float ph = 2 * MathF.PI * fj, r = 0.26f * fi;
-                var p = at + new Vector3(r * MathF.Cos(ph), r * MathF.Sin(ph), 0.72f * (1 - fi));
-                return (p, new Vector3(MathF.Cos(ph), MathF.Sin(ph), 0.36f));
-            }, Solid, Paint(gold));
-            Grid(m, 8, 16, Ellipsoid(at + new Vector3(0, 0, 0.78f), 0.1f, 0.1f, 0.1f), Solid, Paint(gold));
-        }
-        foreach (float a in new[] { -90f, -45f, -135f, 45f, 135f, 90f })
-        {
-            float r = a * MathF.PI / 180;
-            Grid(m, 8, 16, Ellipsoid(new(0.86f * MathF.Cos(r), 0.86f * MathF.Sin(r), 0.46f), 0.1f, 0.06f, 0.1f), Solid, Paint(red));
+            float ph = Front + k * 2 * MathF.PI / Points, mid = ph + MathF.PI / Points;
+            Grid(m, 8, 16, Ellipsoid(At(ph, Rad(Low + Tall) - T / 2, Low + Tall + 0.06f), 0.1f, 0.1f, 0.1f), Solid, Paint(pearl));
+            Stone(m, At(ph, Rad(0.34f), 0.34f), ph, 0.1f, 0.13f, ruby);
+            Stone(m, At(mid, Rad(0.34f), 0.34f), mid, 0.07f, 0.07f, sapphire);
+            Grid(m, 6, 12, Ellipsoid(At(mid, Rad(Low) - T / 2, Low + 0.04f), 0.06f, 0.06f, 0.06f), Solid, Paint(pearl)); // small pearls between
         }
         return m;
+    }
+
+    /// <summary>A cabochon set into a wall: a flattened ball half sunk in, facing out at angle <paramref name="ph"/>.</summary>
+    static void Stone(Mesh m, Vector3 at, float ph, float w, float h, Color col)
+    {
+        var q = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, ph - MathF.PI / 2);
+        var shape = Ellipsoid(Vector3.Zero, w, 0.06f, h);
+        Grid(m, 8, 16, (fi, fj) => { var (p, n) = shape(fi, fj); return (at + Vector3.Transform(p, q), Vector3.Transform(n, q)); }, Solid, Paint(col));
     }
 
     static Mesh Ghost()
     {
         var m = new Mesh();
         var white = Paint(Color.White);
-        (float, float) Front(Vector3 p, float a, float b) => (0.5f + 0.45f * p.X / 0.8f, 0.5f - 0.45f * (p.Z - 1.1f) / 0.9f);
+        var Front = FrontPicture(0, 1.1f, 0.8f, 0.9f);                                      // face on the front only
         Grid(m, 12, 40, Ellipsoid(new(0, 0, 1.3f), 0.72f, 0.62f, 0.72f, 0, MathF.PI / 2), Front, white);
+        foreach (int sx in new[] { -1, 1 })                                                 // little arms, sunk into the sheet
+        {
+            var q = Quaternion.CreateFromAxisAngle(Vector3.UnitY, sx * 0.9f);
+            var arm = Ellipsoid(Vector3.Zero, 0.12f, 0.1f, 0.26f);
+            var at = new Vector3(sx * 0.78f, -0.05f, 0.95f);
+            Grid(m, 8, 16, (fi, fj) => { var (p, n) = arm(fi, fj); return (at + Vector3.Transform(p, q), Vector3.Transform(n, q)); }, (p, a, b) => (0.5f, PlainV), white);
+        }
         Grid(m, 10, 40, (fi, fj) =>
         {
             float ph = 2 * MathF.PI * fj, r = 0.72f + 0.1f * fi;
@@ -556,6 +686,9 @@ public static class Models3D
         g.FillEllipse(ink, n * 0.33f, n * 0.24f, n * 0.11f, n * 0.17f);
         g.FillEllipse(ink, n * 0.56f, n * 0.24f, n * 0.11f, n * 0.17f);
         g.FillEllipse(ink, n * 0.44f, n * 0.47f, n * 0.12f, n * 0.15f);
+        using var cheek = new SolidBrush(Color.FromArgb(255, 196, 214));
+        g.FillEllipse(cheek, n * 0.25f, n * 0.43f, n * 0.1f, n * 0.05f);
+        g.FillEllipse(cheek, n * 0.65f, n * 0.43f, n * 0.1f, n * 0.05f);
     });
 
     static Mesh Mushroom()
@@ -684,10 +817,25 @@ public static class Models3D
         var outline = new List<Vector2>();
         for (int i = 0; i <= 24; i++) { float s = i / 24f; outline.Add(new(0.72f * MathF.Pow(Math.Max(0, MathF.Sin(MathF.PI * s)), 0.8f), 0.15f + 1.85f * s)); }
         for (int i = 23; i >= 1; i--) { float s = i / 24f; outline.Add(new(-0.72f * MathF.Pow(Math.Max(0, MathF.Sin(MathF.PI * s)), 0.8f), 0.15f + 1.85f * s)); }
-        Inflate(m, outline, 0.16f, Color.White);
-        Grid(m, 1, 12, Revolve(f => (0.06f, 0.18f * (1 - f), 1, 0)), Solid, Paint(Color.White)); // stem
+        // the veins drawn on both faces (LeafTexture: u across, v along the leaf)
+        Inflate(m, outline, 0.16f, Color.White, uv: (p, back) => (0.5f + 0.45f * p.X / 0.72f * (back ? -1 : 1), 0.05f + 0.86f * (2.0f - p.Y) / 1.85f));
+        Tube(m, new[] { new Vector3(0, 0, 0.02f), new Vector3(0, 0, 0.28f) }, 0.055f, Color.White); // stem, reaching into the leaf
         return m;
     }
+
+    static Bitmap LeafTexture() => Canvas(256, Color.White, (g, n) =>
+    {
+        using var vein = new Pen(Color.FromArgb(178, 178, 178), n * 0.018f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        g.DrawLine(vein, n * 0.5f, n * 0.08f, n * 0.5f, n * 0.92f);
+        vein.Width = n * 0.011f;
+        for (int k = 0; k < 6; k++)
+        {
+            float y = n * (0.24f + k * 0.11f), reach = n * 0.3f * MathF.Sin(MathF.PI * (0.2f + k * 0.12f));
+            foreach (int s in new[] { -1, 1 })
+                g.DrawBezier(vein, n * 0.5f, y, n * 0.5f + s * reach * 0.4f, y - n * 0.04f, n * 0.5f + s * reach * 0.8f, y - n * 0.09f, n * 0.5f + s * reach, y - n * 0.14f);
+        }
+        PlainBand(g, n, Color.White);
+    });
 
     // ---------------------------------------------------------------- more building blocks
 
@@ -1193,21 +1341,22 @@ public static class Models3D
         var m = new Mesh();
         Lathe(m, new (float, float, Color)[]
         {
-            (0, 1.8f, Color.White), (0.1f, 1.62f, Color.White), (0.3f, 1.3f, Color.White), (0.62f, 0.9f, Color.White),
-            (0.84f, 0.55f, Color.White), (0.86f, 0.3f, Color.White), (0.72f, 0.08f, Color.White), (0.4f, 0, Color.White), (0, 0, Color.White),
-        }, 48, (p, c, fj) => FrontPicture(0, 0.7f, 0.86f, 0.9f)(p, 0, fj));
+            // a plump drop: soft rounded tip, round belly, settled flat at the bottom
+            (0, 1.78f, Color.White), (0.045f, 1.76f, Color.White), (0.09f, 1.68f, Color.White), (0.16f, 1.52f, Color.White),
+            (0.3f, 1.3f, Color.White), (0.5f, 1.08f, Color.White), (0.7f, 0.84f, Color.White), (0.86f, 0.58f, Color.White),
+            (0.93f, 0.36f, Color.White), (0.92f, 0.18f, Color.White), (0.84f, 0.06f, Color.White), (0.66f, 0.01f, Color.White), (0, 0, Color.White),
+        }, 56, (p, c, fj) => FrontPicture(0, 0.7f, 0.93f, 0.9f)(p, 0, fj));
         return m;
     }
 
     static Bitmap SlimeTexture() => Canvas(256, Color.White, (g, n) =>
     {
-        AnimeEye(g, n * 0.4f, n * 0.5f, n * 0.08f, n * 0.11f);
-        AnimeEye(g, n * 0.6f, n * 0.5f, n * 0.08f, n * 0.11f);
-        using var pen = new Pen(Color.FromArgb(40, 34, 40), n * 0.014f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        g.DrawArc(pen, n * 0.46f, n * 0.55f, n * 0.08f, n * 0.06f, 10, 160);
-        // a highlight on the jelly
-        using var shine = new SolidBrush(Color.FromArgb(255, 255, 255));
-        g.FillEllipse(shine, n * 0.3f, n * 0.3f, n * 0.06f, n * 0.09f);
+        AnimeEye(g, n * 0.39f, n * 0.55f, n * 0.1f, n * 0.14f);
+        AnimeEye(g, n * 0.61f, n * 0.55f, n * 0.1f, n * 0.14f);
+        Blush(g, n * 0.3f, n * 0.64f, n * 0.08f, Color.FromArgb(200, 200, 200));
+        Blush(g, n * 0.7f, n * 0.64f, n * 0.08f, Color.FromArgb(200, 200, 200));
+        using var pen = new Pen(Color.FromArgb(40, 34, 40), n * 0.016f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        g.DrawArc(pen, n * 0.45f, n * 0.6f, n * 0.1f, n * 0.07f, 10, 160);
     });
 
     static Mesh Ramen()
@@ -1228,6 +1377,60 @@ public static class Models3D
         Tube(m, new[] { new Vector3(-1.15f, -0.3f, 1.02f), new Vector3(1.15f, 0.45f, 1.3f) }, 0.035f, wood);
         Tube(m, new[] { new Vector3(-1.15f, -0.12f, 1.02f), new Vector3(1.15f, 0.62f, 1.3f) }, 0.035f, wood);
         return m;
+    }
+
+    /// <summary>A glowing molten cube (own pixel-art texture on every face). Unshaded so it glows; each face keeps a
+    /// fixed brightness instead (top brightest) so the edges still read.</summary>
+    static Mesh LavaBlock()
+    {
+        var m = new Mesh();
+        const float H = 0.8f;
+        void Face(Vector3 c, Vector3 right, Vector3 up, int bright)
+        {
+            var n = Vector3.Normalize(Vector3.Cross(right, up));
+            var col = Color.FromArgb(bright, bright, bright);
+            int b0 = m.V.Count;
+            m.V.Add(new MVert(c - right - up, n, 0, 1, col));
+            m.V.Add(new MVert(c + right - up, n, 1, 1, col));
+            m.V.Add(new MVert(c + right + up, n, 1, 0, col));
+            m.V.Add(new MVert(c - right + up, n, 0, 0, col));
+            m.T.Add((b0, b0 + 1, b0 + 2)); m.T.Add((b0, b0 + 2, b0 + 3));
+        }
+        Vector3 X = new(H, 0, 0), Y = new(0, H, 0), Z = new(0, 0, H), C = new(0, 0, H);
+        Face(C - Y, X, Z, 232);   // front (-y)
+        Face(C + Y, -X, Z, 205);  // back
+        Face(C + X, Y, Z, 215);   // right
+        Face(C - X, -Y, Z, 215);  // left
+        Face(C + Z, X, Y, 255);   // top
+        Face(C - Z, X, -Y, 170);  // bottom
+        return m;
+    }
+
+    static Bitmap LavaTexture()
+    {
+        // 16 x 16 cells from a smooth swirl field (two waves + value noise), mapped to a molten palette, blown up sharp
+        const int N = 16, S = 16;
+        var rnd = new Random(76);
+        var noise = new float[N + 1, N + 1];
+        for (int y = 0; y <= N; y++) for (int x = 0; x <= N; x++) noise[x, y] = (float)rnd.NextDouble();
+        Color[] pal =
+        {
+            Color.FromArgb(150, 30, 8), Color.FromArgb(200, 52, 10), Color.FromArgb(236, 96, 16),
+            Color.FromArgb(250, 148, 30), Color.FromArgb(255, 200, 60), Color.FromArgb(255, 238, 140),
+        };
+        var b = new Bitmap(N * S, N * S, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(b);
+        for (int y = 0; y < N; y++)
+            for (int x = 0; x < N; x++)
+            {
+                float v = 0.5f + 0.25f * MathF.Sin(x * 0.7f + MathF.Sin(y * 0.5f) * 2.2f) + 0.2f * MathF.Sin((x - y) * 0.45f + 1.3f)
+                          + 0.35f * (noise[x, y] - 0.5f);
+                int k = Math.Clamp((int)(v * pal.Length), 0, pal.Length - 1);
+                if (noise[(x * 7 + 3) % N, (y * 5 + 1) % N] > 0.93f) k = 0;          // a few dark crust specks
+                using var br = new SolidBrush(pal[k]);
+                g.FillRectangle(br, x * S, y * S, S, S);
+            }
+        return b;
     }
 
     static Bitmap RamenTexture() => Canvas(256, Color.FromArgb(222, 150, 70), (g, n) =>
