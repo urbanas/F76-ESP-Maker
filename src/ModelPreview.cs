@@ -46,6 +46,9 @@ sealed class PreviewScene
 /// (glow copies, beam tube, icons), with placeholder materials that the renderer colours from the look.</summary>
 static class ModelPreview
 {
+    /// <summary>A creature's dismemberment cap shape: HeadCap, BodyCap, radRat_headCap, LegCap01... (+ the preview's glow copy).</summary>
+    static readonly System.Text.RegularExpressions.Regex DismemberCap =
+        new(@"(head|body|neck|torso|arm|leg|limb|tail|wing|eye|tentacle|jaw)_?\w{0,3}cap\d*(:\d+)?(_IFGlow)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     const string GlowTag = "itemfinder-preview-glow", BeamTag = "itemfinder-preview-beam", IconTag = "itemfinder-preview-icon", Icon3DTag = "itemfinder-preview-icon3d",
                  ModelTag = "itemfinder-preview-model", LabelTag = "itemfinder-preview-label";
     /// <summary>The label picture of the scene being loaded (previews load on several threads).</summary>
@@ -349,6 +352,9 @@ static class ModelPreview
         var material = f.Strings.ElementAtOrDefault(BitConverter.ToInt32(f.Blocks[shader].Data, 0)) ?? "";
         var part = new PreviewPart { Name = f.Strings.ElementAtOrDefault(BitConverter.ToInt32(b, 0)) ?? "" };
         if (NifPatch.IsRefraction(part.Name, material)) return null;
+        // creatures' dismemberment caps (the gore disc at a cut neck or limb): the game only shows them once that part is
+        // shot off - drawn on the whole body they looked like missing skin (Behemoth, Radrat, Attack Dog - user, 2026-11-11)
+        if (DismemberCap.IsMatch(part.Name)) return null;
         bool blend = false;
         if (f.TypeOf(alpha) == "NiAlphaProperty")
         {
@@ -1369,7 +1375,10 @@ sealed class ModelView : UserControl
     string message = "";
     Bitmap? frame;
     const float StartZoom = 0.8f;
-    float yaw = -0.9f, pitch = 0.35f, zoom = StartZoom;    Point? drag;
+    /// <summary>Straight in front of the item: game models face -y (the gravestone loot bag's "J. DOE"), and the Wall
+    /// behind stands on the +y side (it stood on -y, between the old -0.9 start and the item - user, 2026-11-11).</summary>
+    const float StartYaw = -MathF.PI / 2;
+    float yaw = StartYaw, pitch = 0.35f, zoom = StartZoom;    Point? drag;
     /// <summary>The drag is with the right button: look around from where you stand.</summary>
     bool lookDrag;
     int version;
@@ -1407,7 +1416,7 @@ sealed class ModelView : UserControl
     /// <summary>Back to turning around the item, as first shown.</summary>
     void ResetView()
     {
-        (free, yaw, pitch, zoom) = (false, -0.9f, 0.35f, StartZoom);
+        (free, yaw, pitch, zoom) = (false, StartYaw, 0.35f, StartZoom);
         held.Clear();
         MakeGuide();
         Redraw();
@@ -1906,7 +1915,7 @@ sealed class ModelView : UserControl
         (game, entry, style, shown, scene, keepOtherMods, ticked, partLooks) = (o.game, o.entry, o.style.Clone(), o.shown, o.scene, o.keepOtherMods, o.ticked, o.partLooks);
         (fixedTarget, message, frameAll) = (o.lastTarget, o.message, o.frameAll);
         BeamCheck();
-        if (!same) (free, yaw, pitch, zoom) = (false, o.free ? -0.9f : o.yaw, o.free ? 0.35f : o.pitch, StartZoom);
+        if (!same) (free, yaw, pitch, zoom) = (false, o.free ? StartYaw : o.yaw, o.free ? 0.35f : o.pitch, StartZoom);
         if (FindForm() is { } f && o.entry != null) f.Text = "3D view - " + o.entry.Name;
         MakeGuide();
         Animate();
@@ -2216,7 +2225,7 @@ sealed class ModelView : UserControl
         return (parts, hx, hy);
     }
 
-    /// <summary>Barn wall panels behind the item, seen from the starting camera (the far, -y side); a small item gets a
+    /// <summary>Barn wall panels behind the item, seen from the starting camera (the far, +y side, turned to face the item); a small item gets a
     /// small wall (1.6 x its height, at least 30 cm - a 3 m barn wall behind a bobblehead filled the whole picture), big
     /// items the real size. Null without the wall model.</summary>
     internal static List<PreviewPart>? WallBehind(Dictionary<string, PreviewScene>? models, (float X, float Y, float Z) min, (float X, float Y, float Z) max)
@@ -2227,13 +2236,13 @@ sealed class ModelView : UserControl
         float size = Math.Max(max.X - min.X, Math.Max(max.Y - min.Y, max.Z - min.Z));
         float k = Math.Min(1f, Math.Max(21f, (max.Z - min.Z) * 1.6f) / h), sw = w * k, sh = h * k, gap = Math.Max(10, size * 0.4f);
         int nx = Math.Max(1, (int)MathF.Ceiling((max.X - min.X + 2 * gap) / sw)), nz = Math.Max(1, (int)MathF.Ceiling((max.Z - min.Z + gap) / sh));
-        float cx = (min.X + max.X) / 2, hx = nx * sw / 2, y = min.Y - gap;
+        float cx = (min.X + max.X) / 2, hx = nx * sw / 2, y = max.Y + gap;
         var parts = new List<PreviewPart>();
         for (int row = 0; row < nz; row++)
             for (int i = 0; i < nx; i++)
             {
                 float px = cx - hx + sw * (i + 0.5f), pz = min.Z + row * sh;
-                foreach (var p in Stand(wall, px, y, pz, 0))
+                foreach (var p in Stand(wall, px, y, pz, MathF.PI))
                 {
                     if (k < 1) // shrunk around the panel's foot
                     {

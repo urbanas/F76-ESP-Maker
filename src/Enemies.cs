@@ -30,8 +30,9 @@ public static class Enemies
     /// <summary>Races that aren't enemies (pets, humans, test and cut content).</summary>
     static readonly Regex SkipRace = new(@"^(CAMPPets_|CUT_|DEL_|zz|Dev|DLC05ArmorRack|PowerArmor|Human|Main_Human|Ghoul|GHL_|Lost(Healer)?Race|Fisherman|P62_|ATX_COMP_|Dummy|RedRocketRobot|DogCollectron|MechTest|SQ_|DogmeatRace|CatRace|CatPetRace|GhoulChild|SCORE_|DLC01WorkshopWallLight|TurretWorkshop)", RegexOptions.IgnoreCase);
 
-    /// <summary>Files that aren't the creature's body: effects, skeletons, projectiles, severed-limb pieces...</summary>
-    static readonly Regex NotBody = new(@"(dummyfxskin|skeleton|\\_rig\\|fx|explosion|projectile|hazard|muzzle|morphs\\|replace|dest\.nif|dest\d|lite\.nif|light|overheat|particles|attack|despawn|intro|landingeffects|standin|dummyweapon|chargeao|chargestealth|dest(chest|[lr]arm|head)|legdest|headdest|mps|encryptedfire)", RegexOptions.IgnoreCase);
+    /// <summary>Files that aren't the creature's body: effects, skeletons, projectiles, severed-limb pieces... and the
+    /// Wendigo scout outfit (an unused skin: wendigos wear no clothes in game - user, 2026-11-11).</summary>
+    static readonly Regex NotBody = new(@"(wendigoscoutoutfit|dummyfxskin|skeleton|\\_rig\\|fx|explosion|projectile|hazard|muzzle|morphs\\|replace|dest\.nif|dest\d|lite\.nif|light|overheat|particles|attack|despawn|intro|landingeffects|standin|dummyweapon|chargeao|chargestealth|dest(chest|[lr]arm|head)|legdest|headdest|mps|encryptedfire)", RegexOptions.IgnoreCase);
 
     /// <summary>Small attached parts: they glow, but don't get a beam (one beam per creature).</summary>
     /// <summary>Skin add-ons drawn on top of the body (alien glass helmet, bloodbug hair, mole rat sores...).</summary>
@@ -291,7 +292,10 @@ public static class Enemies
                 if (x.Type == "ARMO") worn.Add(id);
                 else if (x.Type is "LVLI" or "OTFT") foreach (var p in x.Parts ?? new()) Expand(p, depth + 1);
             }
-            foreach (var npc in npcsByRace.Where(n => races.Contains(n.Key)).SelectMany(n => n.Value)) Expand(npc.Product, 0);
+            // not one-off location quest characters (LC097_R_Vargas: a suited executive filed under the Mirelurk Spawn race
+            // gave mirelurk spawn a suit and a trilby - user, 2026-11-11)
+            foreach (var npc in npcsByRace.Where(n => races.Contains(n.Key)).SelectMany(n => n.Value).Where(n => !Regex.IsMatch(n.EditorId, @"^LC\d+_")))
+                Expand(npc.Product, 0);
             var clothes = new List<string>();
             foreach (var armo in worn.Select(w => idx.ById[w]))
             {
