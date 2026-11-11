@@ -1,4 +1,4 @@
-ESP Maker 2.2.3 - make your own ESP mod for Fallout 76
+ESP Maker 2.2.2 - make your own ESP mod for Fallout 76
 ==================================================
 
 ESP Maker lets you pick what you want to spot in Fallout 76 - bobbleheads, magazines, plans,

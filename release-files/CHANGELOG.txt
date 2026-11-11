@@ -1,22 +1,19 @@
 ESP Maker - changes
 ===================
 
-2.2.3
+2.2.2
 Changed
 - The 3D view opens straight in front of the item. Wall behind now stands behind it
   (it stood between you and the item).
 Fixed
+- Loot bags: skins that share a model showed only one name, so the other looked missing.
+  The entry now lists them all: Guts / Mutated Guts, Gravestone / Drifter,
+  Wrapped Present / Holiday "Present", Enclave Case / Fishing Cooler.
 - Creatures in the 3D view showed their dismemberment gore caps (the red ring on the
   Behemoth's neck, patches on the Radrat and Attack Dog). The game only shows those
   when a part is shot off.
 - Wendigo listed an unused scout outfit as a part.
 - Mirelurk Spawn had an "everyday clothes" entry: a suit and hat from one quest character.
-
-2.2.2
-Fixed
-- Loot bags: skins that share a model showed only one name, so the other looked missing.
-  The entry now lists them all: Guts / Mutated Guts, Gravestone / Drifter,
-  Wrapped Present / Holiday "Present", Enclave Case / Fishing Cooler.
 
 2.2.1
 Fixed
