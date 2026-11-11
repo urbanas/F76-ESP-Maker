@@ -117,6 +117,81 @@ public static class SelfTest
         return 0;
     }
 
+    /// <summary>Dev: game models holding a block type (e.g. a controller) - how often each value of the block's last
+    /// uint (a controller's "controlled variable") is used, with example files.</summary>
+    public static int FindBlock(string type, string file)
+    {
+        var (game, _, _) = Load(s => { });
+        var sb = new StringBuilder();
+        var vars = new Dictionary<uint, List<string>>();
+        var matKinds = new Dictionary<string, int>();
+        var matEx = new List<string>();
+        var marker = Encoding.ASCII.GetBytes(type);
+        var scan = Environment.GetEnvironmentVariable("ESPM_SCAN"); // one archive (e.g. our own build) instead of the game's
+        foreach (var a in scan is { Length: > 0 } ? new[] { scan } : Directory.GetFiles(game.DataFolder, "SeventySix - *Meshes*.ba2"))
+        {
+            var arch = Ba2Archive.Open(a);
+            foreach (var e in arch.Entries.Where(e => e.Name.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)))
+            {
+                byte[] d;
+                try { d = arch.ReadFile(e); } catch { continue; }
+                if (d.AsSpan(0, Math.Min(d.Length, 4096)).IndexOf(marker) < 0) continue;
+                try
+                {
+                    var nif = NifFile.Parse(d);
+                    foreach (var b in nif.Blocks.Where(b => b.Type == type))
+                    {
+                        uint v = BitConverter.ToUInt32(b.Data, b.Data.Length - 4);
+                        // the target shader's name: a material file (.bgem / .bgsm) or not
+                        int tg = BitConverter.ToInt32(b.Data, 22);
+                        if (tg >= 0 && tg < nif.Blocks.Count && nif.Blocks[tg].Data.Length >= 4)
+                        {
+                            int si = BitConverter.ToInt32(nif.Blocks[tg].Data, 0);
+                            var nm = si >= 0 && si < nif.Strings.Count ? nif.Strings[si] : "";
+                            string kind = nm.EndsWith(".bgem", StringComparison.OrdinalIgnoreCase) || nm.EndsWith(".bgsm", StringComparison.OrdinalIgnoreCase) ? "material" : "inline";
+                            matKinds[kind] = matKinds.GetValueOrDefault(kind) + 1;
+                            if (kind == "material" && matEx.Count < 8)
+                            {
+                                int ip2 = BitConverter.ToInt32(b.Data, 26);
+                                string ipd = ip2 >= 0 && ip2 < nif.Blocks.Count ? $"{nif.Blocks[ip2].Type} {Convert.ToHexString(nif.Blocks[ip2].Data.AsSpan(0, Math.Min(40, nif.Blocks[ip2].Data.Length)))}" : "none";
+                                string dd = "";
+                                if (ip2 >= 0 && ip2 < nif.Blocks.Count && nif.Blocks[ip2].Type == "NiPoint3Interpolator")
+                                {
+                                    int d2 = BitConverter.ToInt32(nif.Blocks[ip2].Data, 12);
+                                    if (d2 >= 0 && d2 < nif.Blocks.Count) dd = $" data {nif.Blocks[d2].Type} {Convert.ToHexString(nif.Blocks[d2].Data.AsSpan(0, Math.Min(64, nif.Blocks[d2].Data.Length)))}";
+                                }
+                                matEx.Add($"{e.Name} ({nm}) ctl {Convert.ToHexString(b.Data)} interp {ipd}{dd} shader {Convert.ToHexString(nif.Blocks[tg].Data)}");
+                            }
+                        }
+                        if (!vars.ContainsKey(v)) // the first one: its bytes and the blocks it points at
+                        {
+                            sb.AppendLine($"{e.Name}: {type} {Convert.ToHexString(b.Data)}");
+                            int ip = BitConverter.ToInt32(b.Data, 26);
+                            if (ip >= 0 && ip < nif.Blocks.Count)
+                            {
+                                sb.AppendLine($"  -> {nif.Blocks[ip].Type} {Convert.ToHexString(nif.Blocks[ip].Data)}");
+                                int dp = BitConverter.ToInt32(nif.Blocks[ip].Data, nif.Blocks[ip].Data.Length - 4);
+                                if (dp >= 0 && dp < nif.Blocks.Count) sb.AppendLine($"  -> {nif.Blocks[dp].Type} {Convert.ToHexString(nif.Blocks[dp].Data.AsSpan(0, Math.Min(80, nif.Blocks[dp].Data.Length)))}");
+                            }
+                            int tgt = BitConverter.ToInt32(b.Data, 22);
+                            if (tgt >= 0 && tgt < nif.Blocks.Count) sb.AppendLine($"  target {nif.Blocks[tgt].Type} {Convert.ToHexString(nif.Blocks[tgt].Data.AsSpan(0, Math.Min(120, nif.Blocks[tgt].Data.Length)))}");
+                        }
+                        var list = vars.TryGetValue(v, out var l) ? l : vars[v] = new();
+                        if (list.Count < 6) list.Add(e.Name);
+                        else list.Add("");
+                    }
+                }
+                catch (Exception ex) { sb.AppendLine($"{e.Name}: {ex.Message}"); }
+            }
+        }
+        sb.AppendLine("target shaders: " + string.Join(", ", matKinds.Select(kv => $"{kv.Key} {kv.Value}")));
+        foreach (var m in matEx) sb.AppendLine("  material: " + m);
+        foreach (var (v, l) in vars.OrderBy(kv => kv.Key))
+            sb.AppendLine($"variable {v}: {l.Count} blocks, e.g. {string.Join(", ", l.Where(n => n.Length > 0))}");
+        File.WriteAllText(file, sb.ToString());
+        return 0;
+    }
+
     /// <summary>Dev: every multi-part entry's part names (parts list labels).</summary>
     public static int PartNamesDump(string file)
     {
@@ -344,6 +419,24 @@ public static class SelfTest
                             var b = nif.Blocks[i].Data;
                             int rr = NifFile.ShapeRefs(b);
                             for (int j = 0; j < 3; j++) { int v = BitConverter.ToInt32(b, rr + 4 * j); if (v < -1 || v >= n) problem = $"shape {i} ref {j} = {v} out of range"; }
+                        }
+                        // motion controllers: next / target / interpolator in range, interpolator -> its data, each block before what it points at
+                        string ty = nif.TypeOf(i);
+                        // only ours: the game's own controllers follow other rules (target earlier or later, no data)
+                        bool ours = ty is "BSEffectShaderPropertyFloatController" or "BSEffectShaderPropertyColorController" or "NiTransformController" && problem == null
+                                    && nif.Blocks[i].Data.Length >= 26 && BitConverter.ToInt32(nif.Blocks[i].Data, 22) is int tg && tg >= 0 && tg < n
+                                    && (nif.TypeOf(tg) == "BSEffectShaderProperty" && nif.Strings.ElementAtOrDefault(BitConverter.ToInt32(nif.Blocks[tg].Data, 0))?.StartsWith(@"materials\itemfinder\", StringComparison.OrdinalIgnoreCase) == true
+                                        || nif.Strings.ElementAtOrDefault(BitConverter.ToInt32(nif.Blocks[tg].Data, 0))?.StartsWith("ESPMakerMove") == true);
+                        if (ours)
+                        {
+                            var b = nif.Blocks[i].Data;
+                            int next = BitConverter.ToInt32(b, 0), target = BitConverter.ToInt32(b, 22), interp = BitConverter.ToInt32(b, 26);
+                            string want = ty == "NiTransformController" ? "NiTransformInterpolator" : ty.Contains("Color") ? "NiPoint3Interpolator" : "NiFloatInterpolator";
+                            string data = want switch { "NiTransformInterpolator" => "NiTransformData", "NiPoint3Interpolator" => "NiPosData", _ => "NiFloatData" };
+                            if (next != -1 && (next <= i || next >= n)) problem = $"controller {i} next {next}";
+                            else if (target < 0 || target >= i) problem = $"controller {i} target {target}";
+                            else if (b.Length < 30 || nif.TypeOf(interp) != want || interp <= i) problem = $"controller {i} interpolator {interp} ({nif.TypeOf(interp)})";
+                            else if (nif.TypeOf(BitConverter.ToInt32(nif.Blocks[interp].Data, nif.Blocks[interp].Data.Length - 4)) != data) problem = $"interpolator {interp} has no {data}";
                         }
                     }
                     int beams = nif.Strings.Count(s => s == "ItemFinderBeam");

@@ -10,10 +10,15 @@ sealed class LookPanel : UserControl
     readonly CheckBox tick = new() { Dock = DockStyle.Top, Height = 28, Text = "Lights up in the game", AutoCheck = false };
     /// <summary>Whose look it uses: "Uses the Bosses look..." or "Own look · use the Bosses look again".</summary>
     readonly FlowLayoutPanel switchRow = new() { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Padding = new Padding(0, 2, 0, 6) };
-    readonly Label followText = new() { AutoSize = true, MaximumSize = new Size(370, 0), UseMnemonic = false, ForeColor = Color.DimGray, Margin = new Padding(0, 5, 4, 0) };
+    readonly Label followText = new() { AutoSize = true, MaximumSize = new Size(900, 0), UseMnemonic = false, ForeColor = Color.DimGray, Margin = new Padding(0, 5, 4, 0) };
     readonly LinkLabel backLink = new() { AutoSize = true, UseMnemonic = false, Margin = new Padding(0, 5, 0, 0) };
     /// <summary>Plain text at the top: dragging it moves the pop-up.</summary>
-    public Control[] DragHandles => new Control[] { title, sub };
+    public Control[] DragHandles => new Control[] { title, sub, titleRow };
+    /// <summary>The title with "Reset" at its right (room left for the pop-up's close button).</summary>
+    readonly Panel titleRow = new() { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0, 0, 40, 0) };
+    readonly Button reset = new() { Text = "↺ Reset", AutoSize = true, Dock = DockStyle.Right };
+    /// <summary>"Reset" was clicked: back to the default look (an item: its category's; a category: the starting one).</summary>
+    public event Action? ResetClicked;
     readonly Panel sameHint =new() { Dock = DockStyle.Top, Height = 0, Visible = false }; // (gone: the look is always editable)
     /// <summary>It follows the look above it (category / item): the first change makes it its own.</summary>
     bool follows;
@@ -46,7 +51,15 @@ sealed class LookPanel : UserControl
         pickRow.Controls.Add(pick);
         pickRow.Controls.Add(new Label { Text = "Preview on:", Dock = DockStyle.Left, Width = 80, TextAlign = ContentAlignment.MiddleLeft });
         Arrange();
-        View.Settings = scroll; // the bigger view shows the settings beside the picture
+        View.Settings = scroll;
+        // the preview is the full 3D view (no separate big window); "Hide settings" gives it the whole pop-up
+        View.MakeFull();
+        View.AddToolAction(() => settingsHidden ? "Show settings" : "Hide settings", () =>
+        {
+            settingsHidden = !settingsHidden;
+            scroll.Visible = !settingsHidden;
+            FitPreview();
+        }, "Give the whole pop-up to the 3D view (and back)");
         Controls.Add(body);
         Controls.Add(empty);
         Padding = new Padding(8, 4, 4, 4);
@@ -69,6 +82,8 @@ sealed class LookPanel : UserControl
             LookEdited?.Invoke();
         };
         backLink.LinkClicked += (_, _) => OwnSwitched?.Invoke(false);
+        reset.Click += (_, _) => ResetClicked?.Invoke();
+        new ToolTip { AutoPopDelay = 20000 }.SetToolTip(reset, "Back to the default look: an item goes back to its category's look, a category to ESP Maker's starting look. Ctrl+Z undoes it.");
         tick.Click += (_, _) => TickSwitched?.Invoke(tick.CheckState != CheckState.Checked);
         pick.SelectedIndexChanged += (_, _) => { if (!loading && pick.SelectedItem is Entry e) PreviewPicked?.Invoke(e); };
     }
@@ -82,11 +97,11 @@ sealed class LookPanel : UserControl
         protected override Point ScrollToControl(Control activeControl) => DisplayRectangle.Location;
     }
 
-    bool hasTick, hasSwitch, hasPick;
+    bool hasTick, hasSwitch, hasPick, settingsHidden;
 
     /// <summary>The height that shows everything without scrolling (the pop-up grows to it when the screen has room).</summary>
     public int WantedHeight =>
-        title.Height + sub.Height + (hasTick ? tick.Height : 0)
+        titleRow.Height + sub.Height + (hasTick ? tick.Height : 0)
         + (hasSwitch ? switchRow.GetPreferredSize(new Size(Math.Max(100, scroll.ClientSize.Width), 0)).Height : 0)
         + Editor.Height + (hasPick ? pickRow.Height : 0) + PreviewHeight + Padding.Vertical;
 
@@ -97,8 +112,8 @@ sealed class LookPanel : UserControl
     /// <summary>The preview takes what the settings leave over (between its least and full height).</summary>
     void FitPreview()
     {
-        int settings = WantedHeight - PreviewHeight - Padding.Vertical - (hasPick ? pickRow.Height : 0);
-        int h = Math.Clamp(body.Height - (hasPick ? pickRow.Height : 0) - settings, PreviewMin, PreviewHeight);
+        int settings = settingsHidden ? 0 : WantedHeight - PreviewHeight - Padding.Vertical - (hasPick ? pickRow.Height : 0);
+        int h = Math.Max(PreviewMin, body.Height - (hasPick ? pickRow.Height : 0) - settings); // all the room left (the pop-up is sized by hand)
         if (View.Height != h) View.Height = h;
     }
 
@@ -108,7 +123,10 @@ sealed class LookPanel : UserControl
     void Arrange()
     {
         // docked in this order: the last added sits on top (or outermost)
-        var stack = new Control[] { Editor, sameHint, switchRow, tick, sub, title };
+        title.Dock = DockStyle.Fill;
+        titleRow.Controls.Add(title);
+        titleRow.Controls.Add(reset);
+        var stack = new Control[] { Editor, sameHint, switchRow, tick, sub, titleRow };
         foreach (var c in stack) scroll.Controls.Add(c);
         // the preview stays at the bottom; only the settings above it scroll
         View.Dock = DockStyle.Bottom;
@@ -135,7 +153,7 @@ sealed class LookPanel : UserControl
         loading = true;
         title.Text = heading;
         sub.Text = text;
-        tick.Visible = ticked != null;
+        tick.Visible = false; // gone (user, 2026-11-09): changing the look selects it - MainForm.LookEdited
         if (ticked is CheckState t) tick.CheckState = t;
         switchRow.Visible = sameAs != null;
         // sameAs comes as "Same as Bosses" / "Same as their categories"
@@ -155,7 +173,7 @@ sealed class LookPanel : UserControl
         empty.Visible = false;
         body.Visible = true;
         if (pick.Items.Count > 0) pick.SelectedIndex = 0; // shows the first in the preview
-        hasTick = ticked != null; hasSwitch = sameAs != null; hasPick = pick.Items.Count > 0;
+        hasTick = false; hasSwitch = sameAs != null; hasPick = pick.Items.Count > 0;
         WantedHeightChanged?.Invoke();
         FitPreview();
     }

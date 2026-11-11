@@ -11,7 +11,7 @@
     <Product>ESP Maker</Product>
     <RootNamespace>ItemFinder</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <Version>2.1</Version>
+    <Version>2.2.2</Version>
   </PropertyGroup>
 
   <!-- dev / test command-line modes (uitest, stress...) are left out of the release build: publish with -p:DevTools=false -->

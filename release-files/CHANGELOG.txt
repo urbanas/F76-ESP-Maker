@@ -1,6 +1,57 @@
 ESP Maker - changes
 ===================
 
+2.2.2
+Fixed
+- Loot bags: skins that share a model showed only one name, so the other looked missing.
+  The entry now lists them all: Guts / Mutated Guts, Gravestone / Drifter,
+  Wrapped Present / Holiday "Present", Enclave Case / Fishing Cooler.
+
+2.2.1
+Fixed
+- Loot bags didn't show their look: when two selected things share a model, the dedicated
+  category now wins over the catch-all lists (Junk, Aid & food, CAMP items, Plants (all),
+  All outfits, Everything else). The paper bag is also Clean Surgical Tools, the plan blueprint
+  is also Fanatics Battle Plans, and so on. Click Build & save again to get it.
+Changed
+- Rainbow colours are set up the way the game's own animated models do it.
+
+2.2
+New look pop-up
+- Bigger and resizable (drag its edges). Three presets on top: Glow only, Glow + beam,
+  Glow + beam + name - they keep your colour.
+- Three parts, one choice each: 1 The item (Outline / Fill / Bright / Off, colour, strength,
+  Invisible), 2 Beam / Arrow / Off, 3 Icon / Text / Off. Your saved looks are converted.
+- Effects per part: X-ray (seen through walls), Pulse, Rainbow, Spin, Bob, Light runs up (beam)
+  and its own Hide after timer.
+- Reset button: an item goes back to its category's look, a category to its starting look.
+- The ready-made look pictures and the quick bar are gone.
+New
+- Invisible: the item disappears and only what you add (beam, icon, name) shows. It is still
+  there to pick up. Not on enemies.
+- Categories "All outfits (ground & display model)" and "All outfits (worn - wearers glow)".
+- Foliage (hide it): grass, bushes and trees made invisible - easier to spot things on the ground.
+- Edit -> Colour by priority: white rare, gold worth a detour, green useful, red junk.
+- Name: "Start with the category" (e.g. "Plans · Tato Planter").
+3D preview
+- The pop-up's preview is the full 3D view: walk around (WASD), View options for camera, scene,
+  light and colours, save a picture.
+- Scene: Person, House (now around the item, the item on its floor), Wall behind, Shed - one at
+  a time. Junk and compared items go with any of them.
+- Adding or removing things no longer moves the camera.
+- Faster drawing while you turn it.
+- The preview plays the effects: Pulse, Rainbow, Spin, Bob, Light runs up, Hide after.
+Changed
+- Name sizes are bigger: S / M / L = 1 / 1.5 / 2.5 m. Saved 30 cm names become 1 m.
+- A strong outline (60-100 %) also tints the item's face.
+- Light mode has stronger colours: picked buttons are solid orange, lines and grey text darker.
+Fixed
+- The setup saved inside a built mod also held the looks of items you didn't build (colours,
+  beam settings...). It now holds only what the mod is built from. Thanks for the report!
+- Dark mode: the Cancel button's text was cut in Build & save and other small dialogs.
+- The filter buttons above the list sat lower than the buttons beside them.
+- The last colour dot was cut on the right when picked.
+
 2.1
 New
 - Name label: a floating name above the item - the item's own name or a text you type, in three

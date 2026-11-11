@@ -190,6 +190,20 @@ public static class EventCatalog
     public static List<Category> BuildAll(GameIndex idx, Func<string, bool> exists, IReadOnlyCollection<string> gameFiles)
     {
         var cats = Catalog.Build(idx, exists).Concat(Build(idx, exists)).Concat(Enemies.Build(idx, exists, gameFiles)).ToList();
+        cats.Insert(cats.FindLastIndex(c => c.Section == "ITEMS") + 1, Catalog.Foliage(idx, gameFiles));
+        // seasonal costumes (Spooky Scorched...) are their own event entries, not "everyday clothes": sharing models made
+        // the two tick each other, so a ticked "Scorched: everyday clothes" re-ticked Spooky Scorched on every start
+        var costumes = cats.Where(c => c.Section == "EVENTS").SelectMany(c => c.Entries).Where(e => EnemyPicks.Contains(e.Name))
+                           .SelectMany(e => e.Models).ToHashSet();
+        foreach (var c in cats.Where(c => c.Section == "ENEMIES"))
+        {
+            foreach (var e in c.Entries.Where(e => e.Id.StartsWith("enemy:") && e.Id.EndsWith(" clothes")))
+            {
+                e.Models.RemoveAll(costumes.Contains);
+                e.Detail = $"{e.Models.Count} models - human clothes made to fit them: players wearing these glow too";
+            }
+            c.Entries.RemoveAll(e => e.Id.StartsWith("enemy:") && e.Id.EndsWith(" clothes") && e.Models.Count == 0);
+        }
         AddEnemyCopies(cats);
         PartNames.NameAll(idx, cats);
         cats.AddRange(Catalog.Rest(idx, exists, cats));

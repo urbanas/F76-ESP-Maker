@@ -33,7 +33,22 @@ public sealed class Style
     public float BeamWidth { get; set; } = 3.5f; // radius in game units: 10 cm wide
     /// <summary>Beam brightness, 100 % = the tested Spooky beam.</summary>
     public int BeamStrength { get; set; } = 30;
-    public bool ThroughWalls { get; set; } = true;
+    /// <summary>Legacy (one switch for all): reading it sets every section; never written (each section has its own).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ThroughWalls
+    {
+        get => false;
+        set { GlowFx.Walls = BeamFx.Walls = IconFx.Walls = LabelFx.Walls = value; }
+    }
+    /// <summary>Effects per section of the look: the glow, the beam / arrow, the icon (flat, 3D or model), the name.</summary>
+    public PartFx GlowFx { get; set; } = new();
+    public PartFx BeamFx { get; set; } = new();
+    public PartFx IconFx { get; set; } = new();
+    public PartFx LabelFx { get; set; } = new();
+    /// <summary>Every section, in that order.</summary>
+    [JsonIgnore] public PartFx[] AllFx => new[] { GlowFx, BeamFx, IconFx, LabelFx };
+    /// <summary>All sections through walls (or none).</summary>
+    [JsonIgnore] public bool AllWalls { get => AllFx.All(x => x.Walls); set { foreach (var x in AllFx) x.Walls = value; } }
     /// <summary>Icon above the item / at the top of the beam (<see cref="Icons"/> id), "" = none.</summary>
     public string Icon { get; set; } = "";
     /// <summary>Icon half size in game units.</summary>
@@ -43,19 +58,70 @@ public sealed class Style
     /// <summary>The item's name floats above it (above the icon), turned to the camera. Not on animated models.</summary>
     public bool Label { get; set; }
     /// <summary>Label text height in game units (half the card height).</summary>
-    public float LabelSize { get; set; } = 10.5f; // 30 cm tall
+    /// <remarks>The old default 10.5 (30 cm, too small to read from afar - user, 2026-11-09) is read as the new one.</remarks>
+    public float LabelSize { get => labelSize; set => labelSize = value == 10.5f ? 35f : value; }
+    float labelSize = 35f; // 100 cm tall
     /// <summary>The label's own text; "" = the item's name.</summary>
     public string LabelText { get; set; } = "";
-    /// <summary>Everything added (glow, marker, icon, label) shrinks away this many seconds after the model loads; 0 = never.
-    /// Starts again whenever the game loads the model (coming back to the area).</summary>
-    public int HideAfter { get; set; }
     /// <summary>The item's own colours shine: its game material gets its colour texture as a glow map. Works on the
     /// material, so everything using that material brightens; nothing is added to the model, nothing shows through walls.</summary>
     public bool Brighten { get; set; }
     /// <summary>Brighten strength, 100 % = the texture's own colours at full light, day or night.</summary>
     public int BrightenStrength { get; set; } = 100;
+    /// <summary>The item's own parts are hidden in the game (the hidden flag); what the look adds (glow, marker, icon,
+    /// name) still shows. Still there to pick up and bump into. Not on creatures.</summary>
+    public bool Invisible { get; set; }
+    // legacy (2.1 and the first motion build): one setting for the whole look, spread over the sections on reading,
+    // never written (the getters give the default)
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int HideAfter { get => 0; set { foreach (var x in AllFx) x.HideAfter = value; } }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int BlinkOff { get => 0; set { foreach (var x in AllFx) x.BlinkOff = value; } }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool Pulse { get => false; set => GlowFx.Pulse = value; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool ColorCycle { get => false; set => GlowFx.Rainbow = BeamFx.Rainbow = IconFx.Rainbow = value; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool Spin { get => false; set => IconFx.Spin = value; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool Bob { get => false; set => BeamFx.Bob = IconFx.Bob = value; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool BeamFlow { get => false; set => BeamFx.Flow = value; }
+    /// <summary>The name label starts with the category ("Plans · Tato Planter").</summary>
+    public bool LabelCategory { get; set; }
+    [JsonIgnore] public bool Moves => AllFx.Any(x => x.Moves);
+    [JsonIgnore] public bool Timed => AllFx.Any(x => x.HideAfter > 0);
 
-    public Style Clone() => (Style)MemberwiseClone();
+    /// <summary>The look pop-up's rules (setup v8): Bright (shine) is a glow shape - with a glow the glow stays; an icon
+    /// or a name above the item - with both the icon stays.</summary>
+    public void OneAtATime()
+    {
+        if (Glow && Brighten) Brighten = false;
+        if (Icon.Length > 0 && Label) Label = false;
+        foreach (var fx in AllFx) fx.BlinkOff = 0; // blink is gone (setup v9; pulse covers it)
+    }
+
+    public Style Clone()
+    {
+        var c = (Style)MemberwiseClone();
+        c.GlowFx = GlowFx.Clone(); c.BeamFx = BeamFx.Clone(); c.IconFx = IconFx.Clone(); c.LabelFx = LabelFx.Clone();
+        return c;
+    }
+}
+
+/// <summary>One section's extras: through walls, motion, hide timer.</summary>
+public sealed class PartFx
+{
+    public bool Walls { get; set; } = true;
+    /// <summary>Brighter / dimmer every 2 s.</summary>
+    public bool Pulse { get; set; }
+    /// <summary>Steps through the rainbow (its own colour is replaced).</summary>
+    public bool Rainbow { get; set; }
+    /// <summary>Turns round (3D icon / model).</summary>
+    public bool Spin { get; set; }
+    /// <summary>Floats up and down (arrow, icon, name).</summary>
+    public bool Bob { get; set; }
+    /// <summary>Bands of light run up (the beam).</summary>
+    public bool Flow { get; set; }
+    /// <summary>Shrinks away this many seconds after the model loads; 0 = never.</summary>
+    public int HideAfter { get; set; }
+    /// <summary>With HideAfter: back after this many seconds, and again (blink); 0 = stays hidden.</summary>
+    public int BlinkOff { get; set; }
+    [JsonIgnore] public bool Moves => Pulse || Rainbow || Spin || Bob || Flow;
+    public PartFx Clone() => (PartFx)MemberwiseClone();
 }
 
 /// <summary>One thing the user can tick. Everything sharing one of its models lights up with it.</summary>
@@ -79,6 +145,16 @@ public sealed class Entry
     public HashSet<string>? BeamModels;
     /// <summary>Creatures: the game drops the camera-facing node from animated (skinned) models, so no icon.</summary>
     public bool NoIcon;
+    /// <summary>Worn clothes (All outfits, worn): animated like creatures (no icon), but can be made invisible.</summary>
+    public bool Worn;
+    /// <summary>The Invisible look applies: not on creatures, but on worn clothes.</summary>
+    public bool CanHide => !NoIcon || Worn;
+    /// <summary>Worn clothes: the bare model shown in a part's place when the look hides it (an outfit model is also the
+    /// body under it - hiding it hid the whole character). Body parts → the bare body, gloves → bare hands; "" = the part
+    /// stays visible (it takes the hair or head slot: hiding it would leave no hair / head). Not listed = just hidden.</summary>
+    public Dictionary<string, string>? Bare;
+    /// <summary>The model built in place of <paramref name="model"/> for this look, or null = the model itself.</summary>
+    public string? HideAs(string model, Style look) => look.Invisible && Bare != null && Bare.TryGetValue(model, out var b) ? b : null;
     /// <summary>Not ticked together with other entries that share a model (a recipe shares its carrots with others).</summary>
     public bool NoLink;
     /// <summary>Linked part by part, not as a whole: entries with this flag share single parts (EN06 and the robots built
@@ -136,7 +212,7 @@ public sealed class Project
     /// Missing in older files (0).</summary>
     public int Version { get; set; }
     /// <summary>The newest setup format (MainForm.MigrateSetup brings older ones up to it).</summary>
-    public const int CurrentVersion = 7; // 6: ESP Maker's own enemy colours; 7: junk split by component
+    public const int CurrentVersion = 9; // 6: ESP Maker's own enemy colours; 7: junk split by component; 8, 9: Style.OneAtATime
     /// <summary>A new, empty setup - already in the newest format (a plain new Project() reads as a very old one).</summary>
     public static Project Fresh() => new() { Version = CurrentVersion };
     /// <summary>Entries whose own look came from ticking an XP recipe (and follows the XP recipes look); unticking them
@@ -595,6 +671,8 @@ public static class Catalog
         cats.Add(LootBags(world, byModel));
         cats.Add(StorageBoxes(world, byModel));
         cats.Add(Apparel(idx, Exists, worldSpots));
+        cats.Add(AllOutfits(idx, Exists, worn: false));
+        cats.Add(AllOutfits(idx, Exists, worn: true));
         cats.Add(CampItems(idx, Exists, cats));
         // recipes: their ingredients are the entries listing those models (Cranberry in Plants, Sugar in Aid & food...)
         var others = cats.Where(c => !c.Groups).SelectMany(c => c.Entries).ToList();
@@ -765,7 +843,8 @@ public static class Catalog
     }
 
     public const string PreWarFood = "Pre-war food", Notes = "Notes & holotapes", LootBagsName = "Loot bags",
-                        StorageBoxesName = "CAMP storage boxes", ApparelName = "Clothes lying around";
+                        StorageBoxesName = "CAMP storage boxes", ApparelName = "Clothes lying around",
+                        OutfitsGroundName = "All outfits (ground & display model)", OutfitsWornName = "All outfits (worn - wearers glow)";
 
     /// <summary>Pre-war food (Fallout wiki list, 2026-11).</summary>
     static readonly string[] PreWarFoods =
@@ -800,7 +879,10 @@ public static class Catalog
                                            && !Regex.IsMatch(r.EditorId, "^(CUT_|BURN_)|_Test$", RegexOptions.IgnoreCase))
                                .GroupBy(r => NormalizeModel(r.Model)).Where(g => byModel.ContainsKey(g.Key)))
         {
-            var name = names.GetValueOrDefault(g.Key) ?? g.OrderBy(r => Junk.IsMatch(r.EditorId) ? 1 : 0).ThenBy(r => r.Name.Length).First().Name.Trim();
+            // skins that share a model (Guts + Mutated Guts, Gravestone + Drifter...) are one entry: name them all, or
+            // the longer names look missing (user report, 2026-11-11)
+            var name = names.GetValueOrDefault(g.Key) ?? string.Join(" / ", g.OrderBy(r => Junk.IsMatch(r.EditorId) ? 1 : 0).ThenBy(r => r.Name.Length)
+                                                                              .Select(r => r.Name.Trim()).Where(n => n != "").Distinct(StringComparer.OrdinalIgnoreCase));
             var e = MakeEntry(c, "lootbag:" + g.Key, name, new[] { g.Key }, byModel, names.ContainsKey(g.Key) ? "" : "loot bag skin");
             e.Spots = -1;
             c.Entries.Add(e);
@@ -863,6 +945,65 @@ public static class Catalog
             {
                 Id = "apparel:" + model, Category = ApparelName, Name = Label(recs, worldSpots), Models = new() { model },
                 ItemNames = names, Spots = spots, Detail = names.Count > 1 ? $"+{names.Count - 1} more share this model" : "",
+            });
+        }
+        c.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        return c;
+    }
+
+    /// <summary>Every named outfit in the game, found in the world or not (Atomic Shop, rewards...), one row per name.
+    /// worn = false: its ground model (lying around, on display). worn = true: its worn models (armor addons) - everyone
+    /// wearing it glows, the player too. Clothes only (paths with "clothes\"); bodies and hands shared by many outfits
+    /// are left out. Not linked to other rows sharing a model, so ticking one never ticks a creature or another list.</summary>
+    /// <summary>Worn models taken: clothes and armour pieces (not power armour, not the bare bodies themselves).</summary>
+    static bool WornModel(string m) => (m.Contains(@"clothes\") || m.Contains(@"armor\")) && !m.Contains("powerarmor") && !m.StartsWith(@"actors\");
+
+    static Category AllOutfits(GameIndex idx, Func<string, bool> exists, bool worn)
+    {
+        var name = worn ? OutfitsWornName : OutfitsGroundName;
+        var c = new Category
+        {
+            Name = name,
+            Description = worn
+                ? "Every outfit, hat and armour piece in the game (not power armour), as worn: anyone wearing it glows - other players, NPCs and you too. " +
+                  "Glow and marker only (no icon or name on worn clothes). Invisible: outfits show the bare body, gloves bare hands; " +
+                  "hats and helmets that cover the hair or head stay visible (the game draws no hair or head under them)."
+                : "Every outfit and hat in the game, found in the world or not (Atomic Shop, rewards, events): its ground model - " +
+                  "lying around, dropped, or on a display. Nobody wearing it glows (unless that outfit's ground model is also its worn one).",
+            DefaultStyle = Look(Everyday),
+        };
+        var armo = idx.Records.Where(r => r.Type == "ARMO" && r.Name.Trim() is { Length: > 0 } n && n != "Default" && !Junk.IsMatch(r.EditorId)).ToList();
+        List<string> ModelsOf(EsmRecord r) => (worn
+            ? (r.Parts ?? new()).Select(p => idx.ById.GetValueOrDefault(p)).Where(a => a?.Type == "ARMA" && a.Models != null).SelectMany(a => a!.Models!)
+            : r.Models ?? new()).Select(NormalizeModel).Where(m => (worn ? WornModel(m) : m.Contains(@"clothes\")) && exists(m)).Distinct().ToList();
+        var byRec = armo.ToDictionary(r => r, ModelsOf);
+        // ground: a model many outfits use is a base piece - lighting it would light nearly everything
+        var shared = worn ? new HashSet<string>() : byRec.Values.SelectMany(m => m).GroupBy(m => m).Where(g => g.Count() > 25).Select(g => g.Key).ToHashSet();
+        // worn: what each part becomes when hidden, by the body slots it takes (the game draws no hair / head / body /
+        // hands under a part that takes that slot): hair or head → stays visible (hair and faces are per character,
+        // nothing can stand in), body → the bare body, hands → bare hands, the rest (armour pieces, hats on top) → hidden
+        var bare = new Dictionary<string, string>();
+        if (worn)
+            foreach (var a in armo.SelectMany(r => r.Parts ?? new()).Distinct().Select(p => idx.ById.GetValueOrDefault(p)))
+            {
+                if (a?.Type != "ARMA" || a.Models == null) continue;
+                string? kind = (a.Slots & 0x7) != 0 ? "" : (a.Slots & 0x8) != 0 ? "body" : (a.Slots & 0x30) != 0 ? "hands" : null;
+                if (kind == null) continue;
+                for (int i = 0; i < a.Models.Count; i++)
+                    bare.TryAdd(NormalizeModel(a.Models[i]), kind.Length == 0 ? "" :
+                        NormalizeModel($@"actors\character\characterassets\{(i == a.FemaleAt ? "female" : "male")}{kind}.nif"));
+            }
+        foreach (var g in armo.GroupBy(r => r.Name.Trim(), StringComparer.OrdinalIgnoreCase))
+        {
+            var models = g.SelectMany(r => byRec[r]).Where(m => !shared.Contains(m)).Distinct().ToList();
+            if (models.Count == 0 || models.Contains(@"clothes\hats\gomininghelmet.nif")) continue;
+            c.Entries.Add(new Entry
+            {
+                Id = (worn ? "outfitworn:" : "outfit:") + g.Key.ToLowerInvariant(), Category = name, Name = g.Key, Models = models,
+                ItemNames = new() { g.Key }, NoLink = true, NoIcon = worn, Worn = worn,
+                BeamModels = worn ? new() { models[0] } : null,
+                Bare = worn ? models.Where(bare.ContainsKey).ToDictionary(m => m, m => bare[m]) : null,
+                Detail = models.Count > 1 ? $"{models.Count} parts" : "",
             });
         }
         c.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
@@ -942,6 +1083,44 @@ public static class Catalog
     }
 
     public const string CampItemsName = "CAMP items";
+
+    /// <summary>Plants and trees in the way (the Mire's thick growth): ready to be made invisible so loot on the ground
+    /// shows. Model files by folder (landscape\grass, plants, swamp, trees) - no records needed; harvestable plants (FLOR)
+    /// and their states are left out.</summary>
+    public static Category Foliage(GameIndex idx, IReadOnlyCollection<string> gameFiles)
+    {
+        var look = Look("#80C060");
+        look.Glow = false; look.Invisible = true;
+        var c = new Category
+        {
+            Name = "Foliage (hide it)", DefaultStyle = look,
+            Description = "Grass, bushes, vines and trees, already set to Invisible: check what gets in your way (the Mire) and loot on the " +
+                          "ground shows. Invisible trees and bushes are still there - you bump into them. Harvestable plants are not in here.",
+        };
+        var flora = idx.Records.Where(r => r.Type == "FLOR" && r.Model.Length > 0).Select(r => NormalizeModel(r.Model)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var skip = new Regex(@"flora|hulk|marker|fx|lod|planter|picked|switchnode|harvest|ingredient|placeholder|decal|_go\b", RegexOptions.IgnoreCase);
+        var models = gameFiles.Where(p => p.StartsWith(@"meshes\landscape\") && p.EndsWith(".nif")).Select(p => p[7..])
+                              .Where(m => !flora.Contains(m) && !skip.IsMatch(m)).ToList();
+        string File(string m) => m[(m.LastIndexOf('\\') + 1)..];
+        var groups = new (string Id, string Name, Func<string, bool> Has, string Detail)[]
+        {
+            ("grass", "Grass & ground cover", m => m.StartsWith(@"landscape\grass\") || m.StartsWith(@"landscape\grassmounds\"), "low, but it hides things lying in it"),
+            ("bushes", "Bushes, shrubs & hedges", m => m.StartsWith(@"landscape\plants\") && Regex.IsMatch(File(m), "shrub|hedge|bramble|bush|creosote|forsythia|dogwood|holly|boxwood|privet|bleachbark"), ""),
+            ("vines", "Vines & creepers", m => m.StartsWith(@"landscape\plants\") && Regex.IsMatch(File(m), "vine|creeper"), "also the Mire's parasite vines on houses"),
+            ("swampplants", "Ferns, moss, fungus & swamp plants", m => m.StartsWith(@"landscape\plants\") && Regex.IsMatch(File(m), "fern|moss|cattail|seaweed|kelp|fung|mushroom|swamp|marsh|stalk")
+                                                                     || m.StartsWith(@"landscape\swamp\") && !File(m).StartsWith("swamptree"), ""),
+            ("swamptrees", "Swamp trees (the Mire)", m => m.StartsWith(@"landscape\swamp\swamptree"), "the giant Mire trees too - you still bump into them"),
+            ("trees", "Trees (everywhere)", m => m.StartsWith(@"landscape\trees\"), "every forest goes see-through - you still bump into the trunks"),
+        };
+        foreach (var (id, name, has, detail) in groups)
+        {
+            var ms = models.Where(has).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(m => m).ToList();
+            if (ms.Count == 0) continue;
+            c.Entries.Add(new Entry { Id = "foliage:" + id, Category = c.Name, Name = name, Models = ms, NoLink = true,
+                                      Detail = (detail.Length > 0 ? detail + " · " : "") + $"{ms.Count} models" });
+        }
+        return c;
+    }
     static readonly Regex CampId = new(@"CAMP|Workshop|^ATX_|^SCORE_", RegexOptions.IgnoreCase);
 
     /// <summary>Things built in a CAMP (collectors, extractors, generators, purifiers, turrets, signs, displays...): the

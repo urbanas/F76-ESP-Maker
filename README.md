@@ -4,15 +4,16 @@ Make your own ESP mod for **Fallout 76** without editing any files.
 
 <img src="docs/screenshot.png" alt="ESP Maker window" width="800">
 
-Choose what you want to spot: bobbleheads, magazines, plans, XP food, pre-war food, notes, plants, loot, loot bags, CAMP storage boxes, clothes, event objects, player vending machines, workbenches, legendary enemies or any kind of creature. Then choose how it looks:
+Choose what you want to spot: bobbleheads, magazines, plans, XP food, pre-war food, notes, plants, loot, loot bags, CAMP storage boxes, clothes, every outfit and armor piece (on the ground or worn), event objects, player vending machines, workbenches, legendary enemies or any kind of creature. Then choose how it looks:
 
-- an outline glow, which also shows through walls
-- a beam into the sky
+- an outline or full glow, which also shows through walls
+- a beam into the sky (or an arrow)
 - a flat icon or a small 3D model above it
 - a floating name label
-- or just brighter colours
+- just brighter colours
+- or Invisible: the item disappears and only the beam, icon or name you add shows (it also hides foliage and worn outfits)
 
-You can also make the highlight shrink away after a set time.
+Each part can have effects: rainbow colours, pulse, spin, bob, light running up the beam, and a timer that hides it after a set time.
 
 ESP Maker builds the mod (`.ba2`) and installs it for you. It only changes how things look on your own PC. The result is a normal `.ba2` mod listed in your custom ini, like any other Fallout 76 mod.
 

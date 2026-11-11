@@ -27,6 +27,11 @@ public sealed class EsmRecord
     public uint Link { get; set; }
     /// <summary>ARMA: third-person models (male, female); ARMO: ground models (male, female). Relative to meshes\.</summary>
     public List<string>? Models { get; set; }
+    /// <summary>ARMA: the body slots it takes (BOD2 biped flags: bit 0 = slot 30 hair top, 1 = 31 hair long, 2 = 32 head,
+    /// 3 = 33 body, 4/5 = 34/35 hands).</summary>
+    public uint Slots { get; set; }
+    /// <summary>ARMA: index of the female model in <see cref="Models"/>, -1 = none.</summary>
+    public int FemaleAt { get; set; } = -1;
     /// <summary>WEAP while reading: Parts already hold the default object template's mods.</summary>
     [JsonIgnore] public bool DefaultTemplate { get; set; }
 }
@@ -35,7 +40,7 @@ public sealed class EsmRecord
 /// SeventySix.esm changes (so it is rebuilt automatically after a game update).</summary>
 public sealed class GameIndex
 {
-    const int CacheVersion = 12; // 5: ARMA additional races (Parts); 6: NPC_ (race, default outfit) and OTFT (items); 7: MISC components (MCQP) + CMPO; 8: WEAP first FULL; 9: WEAP default mods (Parts) + OMOD; 10: FURN; 11: ARMO ground models; 12: DOOR + MSTT (Everything else)
+    const int CacheVersion = 13; // 13: ARMA slots (BOD2) + female model index // 5: ARMA additional races (Parts); 6: NPC_ (race, default outfit) and OTFT (items); 7: MISC components (MCQP) + CMPO; 8: WEAP first FULL; 9: WEAP default mods (Parts) + OMOD; 10: FURN; 11: ARMO ground models; 12: DOOR + MSTT (Everything else)
     /// <summary>Record types that are things lying or standing in the world.</summary>
     public static readonly HashSet<string> WorldTypes = new() { "MISC", "ALCH", "INGR", "BOOK", "NOTE", "FLOR", "AMMO", "KEYM", "WEAP", "CONT", "ACTI" };
     static readonly HashSet<string> OtherTypes = new() { "LVLI", "COBJ", "MGEF", "RACE", "ARMA", "ARMO", "KYWD", "NPC_", "OTFT", "CMPO", "OMOD", "FURN", "DOOR", "MSTT" };
@@ -116,8 +121,13 @@ public sealed class GameIndex
                     // apparel lying on the ground: male / female world models (often *_go.nif, not the worn ones)
                     case "MOD2" or "MOD4" when type == "ARMO":
                     case "MOD2" or "MOD3" when type == "ARMA":
-                        if (ZString(val) is { Length: > 0 } m) (r.Models ??= new()).Add(m);
+                        if (ZString(val) is { Length: > 0 } m)
+                        {
+                            if (tag == "MOD3") r.FemaleAt = r.Models?.Count ?? 0;
+                            (r.Models ??= new()).Add(m);
+                        }
                         break;
+                    case "BOD2" when type == "ARMA" && val.Length >= 4: r.Slots = BitConverter.ToUInt32(val); break;
                     case "WNAM" when type == "RACE" && val.Length == 4: r.Link = BitConverter.ToUInt32(val); break;
                     case "RNAM" when type is "ARMA" or "NPC_" && val.Length == 4: r.Link = BitConverter.ToUInt32(val); break;
                     case "DOFT" when type == "NPC_" && val.Length == 4: r.Product = BitConverter.ToUInt32(val); break; // default outfit

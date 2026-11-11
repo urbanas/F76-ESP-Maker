@@ -414,6 +414,9 @@ public sealed class MainForm : Form
             bulkBar.Visible = n > 1;
         };
         list.SelectedIndexChanged += (_, _) => { if (!filling) { pickTimer.Stop(); pickTimer.Start(); } };
+        // the chips as high as the buttons next to them (30 px, 2 px top margin) - they sat lower (user, 2026-11-09)
+        filterChips.MinHeight = 30;
+        filterChips.Margin = new Padding(8, 2, 6, 2);
         top.Controls.AddRange(new Control[] { search, filterChips, tickAll, untickAll, catLookButton });
         // several rows picked: one bar for all of them
         Button BulkButton(string text, Action act)
@@ -460,6 +463,7 @@ public sealed class MainForm : Form
         inspector.LookEdited += LookEdited;
         inspector.OwnSwitched += OwnSwitched;
         inspector.TickSwitched += TickSwitched;
+        inspector.ResetClicked += ResetLook;
         inspector.PreviewPicked += e => { if (game != null) inspector.View.Show(game, e, inspector.Editor.Value, project.KeepOtherMods); };
         // the 3D view: other selected items to compare, plain junk to scatter, the last build's look (A/B)
         ModelView.TickedItems = () => cats.SelectMany(c => c.Entries.Where(e => e.Group == null && !e.JunkCopy && e.Models.Count > 0 && IsTicked(e)).Select(e => (c, e)))
@@ -526,7 +530,8 @@ public sealed class MainForm : Form
                 Item("Jump to...", () => QuickJump(), "Ctrl+K"),
                 Item("Search", () => search.Focus(), "Ctrl+F"),
                 new ToolStripSeparator(),
-                Item("Add presets...", RunPresets)),
+                Item("Add presets...", RunPresets),
+                Item("Colour by priority...", PriorityColours)),
             Menu("&View", darkItem, compactItem, new ToolStripSeparator(), logItem),
             Menu("&Options", keepItem, gameItem),
             Menu("&Help", Item("Show the tour...", () => { using var t = new Tutorial(Font); t.ShowDialog(this); })),
@@ -1186,6 +1191,37 @@ public sealed class MainForm : Form
     }
 
     Style LookOf(Category c) => project.CategoryStyles.GetValueOrDefault(c.Name) ?? c.DefaultStyle;
+
+    /// <summary>Priority tiers (one colour each) by category name / section; null = left alone (enemies, foliage).</summary>
+    static (string Colour, string Tier)? PriorityOf(Category c)
+    {
+        if (c.Section == "ENEMIES" || c.Name.StartsWith("Foliage")) return null;
+        bool Has(string pattern) => System.Text.RegularExpressions.Regex.IsMatch(c.Name, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (Has("bobble|magazine|plan|recipe|treasure|legendary|cap stash|mod box")) return ("#FFFFFF", "white - rare");
+        if (Has("xp|loot|event|expedition|raid|vending|workbench|storage")) return ("#FFC830", "gold - worth a detour");
+        if (c.Section == "JUNK" || Has("junk|misc|clothes|outfit|apparel|weapon|camp items|everything")) return ("#FF4A3A", "red - junk");
+        return ("#50FF70", "green - useful (aid, food, plants, ammo...)");
+    }
+
+    /// <summary>Edit > Colour by priority: every category's glow + marker colour by how much it's worth (own item looks stay).</summary>
+    void PriorityColours()
+    {
+        var tiers = cats.Select(c => PriorityOf(c)?.Tier).Where(t => t != null).Distinct();
+        if (MessageBox.Show(this, "Give every category a colour by how much it's worth:\n\n  " + string.Join("\n  ", tiers) +
+                            "\n\nEnemies and foliage keep theirs, and items with their own look too. Undo with Ctrl+Z.",
+                            "Colour by priority", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+        foreach (var c in cats)
+            if (PriorityOf(c) is { } p)
+            {
+                var st = LookOf(c).Clone();
+                st.GlowColor = st.BeamColor = p.Colour;
+                project.CategoryStyles[c.Name] = st;
+            }
+        Save();
+        RefreshColours();
+        ShowInspector();
+        Status("Categories coloured by priority.");
+    }
     /// <summary>The info box under the tree only takes the room its text needs.</summary>
     void FitInfo()
     {
@@ -1241,12 +1277,12 @@ public sealed class MainForm : Form
     {
         if (lookPopup == null)
         {
-            lookPopup = new Form
+            lookPopup = new SizablePopup
             {
                 FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, StartPosition = FormStartPosition.Manual,
                 KeyPreview = true, Padding = new Padding(1), Size = new Size(420, 700), Font = Font, Text = "Look",
             };
-            lookPopupInside = new Panel { Dock = DockStyle.Fill, Padding = new Padding(6) };
+            lookPopupInside = new EdgePanel { Dock = DockStyle.Fill, Padding = new Padding(6) };
             var close = new Button { Text = "✕", Width = 30, Height = 26, FlatStyle = FlatStyle.Flat, Anchor = AnchorStyles.Top | AnchorStyles.Right, TabStop = false };
             close.FlatAppearance.BorderSize = 0;
             close.Location = new Point(lookPopup.Width - close.Width - 6, 4);
@@ -1271,14 +1307,15 @@ public sealed class MainForm : Form
                     SendMessage(lookPopup.Handle, 0xA1, 2, IntPtr.Zero); // WM_NCLBUTTONDOWN, HTCAPTION
                 };
             // dragged somewhere: it opens there from now on (also after a restart)
-            lookPopup.ResizeEnd += (_, _) => { settings.PopupAt = new[] { lookPopup.Left, lookPopup.Top }; settings.Save(); };
-            inspector.WantedHeightChanged += FitLookPopup;
+            lookPopup.ResizeEnd += (_, _) => { settings.PopupAt = new[] { lookPopup.Left, lookPopup.Top }; settings.PopupSize = new[] { lookPopup.Width, lookPopup.Height }; settings.Save(); };
+            // (no growing / shrinking with the settings any more - user, 2026-11-09: it jumped; drag its edges instead)
         }
         if (inspector.Parent != lookPopupInside) lookPopupInside!.Controls.Add(inspector);
         ApplyTheme();
         var at = settings.PopupAt is { Length: 2 } p ? new Point(p[0], p[1]) : (Point?)null;
         var area = PopupArea(at is { } a0 && Screen.AllScreens.Any(s => s.WorkingArea.Contains(a0)) ? Screen.FromPoint(a0).WorkingArea : Screen.FromRectangle(anchor).WorkingArea);
-        var size = new Size(420, LookPopupHeight(area));
+        var size = settings.PopupSize is { Length: 2 } ps ? new Size(Math.Clamp(ps[0], 500, area.Width), Math.Clamp(ps[1], 400, area.Height))
+                                                           : new Size(Math.Min(LookPopupWidth, area.Width - 20), Math.Min(area.Height - 20, (int)(900 * DeviceDpi / 96f)));
         int x = anchor.Right + 6 + size.Width <= area.Right ? anchor.Right + 6 : Math.Max(area.Left, anchor.Left - size.Width - 6);
         int y = Math.Clamp(anchor.Top - 40, area.Top + 10, area.Bottom - size.Height - 10);
         if (at is { } a) // where it was dragged to, kept on the screen
@@ -1293,6 +1330,9 @@ public sealed class MainForm : Form
 
     /// <summary>Where the pop-up may go: the whole screen (it may reach past the main window's edges).</summary>
     static Rectangle PopupArea(Rectangle screen) => screen;
+
+    /// <summary>The look pop-up's width: room for the three sections side by side (2026-11-09; was 420, one column).</summary>
+    int LookPopupWidth => (int)(1090 * DeviceDpi / 96f);
 
     /// <summary>Tall enough to show everything without scrolling, as far as the window allows (then it scrolls).</summary>
     int LookPopupHeight(Rectangle area) => Math.Min(area.Height - 20, inspector.WantedHeight + lookPopup!.Padding.Vertical + lookPopupInside!.Padding.Vertical + 4);
@@ -1650,8 +1690,10 @@ public sealed class MainForm : Form
         if (Icons.Get(st.Icon) is Icons.Icon ic) parts.Add((e.NoIcon || st.Icon3D ? "3D " : "") + ic.Name.ToLowerInvariant() + " icon");
         else if (Models3D.Get(st.Icon) is Model3D m3) parts.Add(m3.Name.ToLowerInvariant() + " model");
         if (st.Brighten) parts.Add("bright colours");
+        if (st.Invisible && e.CanHide) parts.Add("item hidden");
         if (st.Label && !e.NoIcon) parts.Add(st.LabelText.Trim().Length > 0 ? $"name \"{st.LabelText.Trim()}\"" : "name");
-        if (st.HideAfter > 0 && parts.Count > 0) parts.Add($"hides after {st.HideAfter} s");
+        if (st.Timed && parts.Count > 0) parts.Add(st.AllFx.Any(x => x.HideAfter > 0 && x.BlinkOff > 0) ? "blinks" : "hides after a while");
+        if (st.Moves && parts.Count > 0) parts.Add("moving");
         return ((own ? "own: " : "") + (parts.Count > 0 ? "■ " + string.Join(" + ", parts) : "nothing"), Readable(Materials.Parse(st.Glow ? st.GlowColor : st.BeamColor)));
     }
 
@@ -1842,6 +1884,9 @@ public sealed class MainForm : Form
             // junk split by component (JUNK): each part starts with the Junk & misc look
             foreach (var c in cats.Where(c => c.Section == "JUNK")) project.CategoryStyles.TryAdd(c.Name, junkLook.Clone());
         }
+        if (project.Version < 9) // the big look pop-up: Bright is a glow shape, icon or name (one at a time); no blink (9)
+            foreach (var st in project.CategoryStyles.Values.Concat(project.Overrides.Values).Concat(project.PartLooks.Values.SelectMany(p => p.Values)))
+                st.OneAtATime();
         project.Version =Math.Max(project.Version, Project.CurrentVersion);
         project.RecipeLooks.RemoveWhere(id => !project.Overrides.ContainsKey(id) || !known.Contains(id));
         // parts lists: only entries and models that still exist
@@ -2134,7 +2179,7 @@ public sealed class MainForm : Form
                                             out StyleEditor ed)
     {
         var dlg = Ui.Dialog(new Form { Text = title, FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent, Font = font, AutoScaleMode = AutoScaleMode.Font, ShowIcon = false });
-        ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = icons3D, Sketch = false };
+        ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = icons3D, Sketch = false, Compact = true };
         var side = new Panel { Dock = DockStyle.Left, Width = 340 };
         side.Controls.Add(ed);
         var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 90, Height = 30 };
@@ -2168,7 +2213,7 @@ public sealed class MainForm : Form
                                     string? focusPart = null, IReadOnlyDictionary<string, Style>? partLooks = null)
     {
         var dlg = Ui.Dialog(new Form { Text = picked.Count == 1 ? "Look for: " + picked[0].Name : $"Look for {picked.Count} items", FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent, Font = font, AutoScaleMode = AutoScaleMode.Font, ShowIcon = false });
-        ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = picked.All(e => e.NoIcon), Sketch = false };
+        ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = picked.All(e => e.NoIcon), Sketch = false, Compact = true };
         var side = new Panel { Dock = DockStyle.Left, Width = 340 }; // the settings keep their own height
         // the same tick as in the list: the parts and the look below only matter while it is ticked
         tick = new CheckBox
@@ -2293,6 +2338,7 @@ public sealed class MainForm : Form
         if (inspItems.Count > 0)
         {
             foreach (var e in inspItems) { project.Overrides[e.Id] = look.Clone(); project.RecipeLooks.Remove(e.Id); } // their own now
+            if (inspItems.Any(e => !IsTicked(e))) { Save(); TickSwitched(true); return; } // changing the look selects it (the pop-up has no tick)
         }
         else if (inspCat is Category c)
         {
@@ -2303,6 +2349,18 @@ public sealed class MainForm : Form
         Save();
         RefreshColours();
         inspector.View.Look = look;
+    }
+
+    /// <summary>The pop-up's Reset: an item or part back to the look it follows, a category back to its starting look.</summary>
+    void ResetLook()
+    {
+        if (inspPart != null || inspItems.Count > 0) { OwnSwitched(false); return; }
+        if (inspCat is Category c && project.CategoryStyles.Remove(c.Name))
+        {
+            Save();
+            RefreshColours();
+            ShowInspector();
+        }
     }
 
     /// <summary>"Own look" / "Same as ...": an own look starts as a copy of the one it followed.</summary>
@@ -2679,7 +2737,7 @@ public sealed class MainForm : Form
     {
         using var dlg = Ui.Dialog(new Form { Text = Text, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ShowIcon = false,
                                    StartPosition = FormStartPosition.CenterParent, Font = Font, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(12) });
-        var flow = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Dock = DockStyle.Fill };
+        var flow = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Location = new Point(12, 12), Margin = Padding.Empty }; // placed, not docked: a docked panel in a self-sizing window cut the bottom row (Cancel)
         flow.Controls.Add(new Label { Text = text, AutoSize = true, MaximumSize = new Size(420, 0), UseMnemonic = false, Margin = new Padding(3, 3, 3, 14) });
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, MinimumSize = new Size(420, 0) };
         int picked = -1;
@@ -2704,13 +2762,13 @@ public sealed class MainForm : Form
     {
         using var dlg = Ui.Dialog(new Form { Text = title, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ShowIcon = false,
                                    StartPosition = FormStartPosition.CenterParent, Font = Font, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(12) });
-        var flow = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Dock = DockStyle.Fill };
+        var flow = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Location = new Point(12, 12), Margin = Padding.Empty }; // placed, not docked: a docked panel in a self-sizing window cut the bottom row (Cancel)
         var check = fill(flow);
         var error = new Label { AutoSize = true, ForeColor = Color.Firebrick, MaximumSize = new Size(360, 0), UseMnemonic = false };
         flow.Controls.Add(error);
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Width = 360 };
-        var ok = new Button { Text = okText, Width = 100 };
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 80 };
+        var ok = new Button { Text = okText, Width = 100, Height = 28 };
+        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 100, Height = 28 }; // 23 high clipped its text in dark (flat) mode
         buttons.Controls.AddRange(new Control[] { cancel, ok });
         flow.Controls.Add(buttons);
         dlg.Controls.Add(flow);
@@ -2849,7 +2907,7 @@ public sealed class MainForm : Form
                 await UseImport(r, false);
                 var lit = Ticked0().SelectMany(e => project.ModelsOf(e)).Select(Ba2Path.Normalize).ToHashSet();
                 log.Add($"     {r.Kind}: {r.Models} models, {r.Unknown.Count} unknown, {project.Selected.Count} selected, {project.OffParts.Count} with parts off, {project.CategoryStyles.Count} category looks, {project.Overrides.Count} own looks");
-                foreach (var g in project.CategoryStyles.Take(6)) log.Add($"     {g.Key}: glow {g.Value.Glow} {g.Value.GlowColor} fill {g.Value.GlowFill} walls {g.Value.ThroughWalls} beam {g.Value.Beam} arrow {g.Value.BeamArrow}");
+                foreach (var g in project.CategoryStyles.Take(6)) log.Add($"     {g.Key}: glow {g.Value.Glow} {g.Value.GlowColor} fill {g.Value.GlowFill} walls {g.Value.AllWalls} beam {g.Value.Beam} arrow {g.Value.BeamArrow}");
                 foreach (var m in r.Unknown.Take(6)) log.Add("     unknown: " + m);
                 var models = Ba2Archive.Open(r.Source).Entries.Where(e => e.Name.StartsWith(@"meshes\") && e.Name.EndsWith(".nif")).Select(e => e.Name[7..]).ToHashSet();
                 Check(lit.SetEquals(models.Except(r.Unknown)), $"selection lights the mod's models exactly ({lit.Count})");
@@ -2968,19 +3026,20 @@ public sealed class MainForm : Form
             log.Add("quick looks");
             Pick(guardian);
             OwnSwitched(true);
-            inspector.Editor.TestPreset(1); LookEdited(); // Outline + beam
+            var tw = inspector.Editor.Value; tw.Beam = true; tw.BeamFx.HideAfter = 30; tw.GlowFx.Walls = false; inspector.Editor.Value = tw; LookEdited();
             var ql = project.Overrides[guardian.Id];
-            Check(ql.Glow && !ql.GlowFill && ql.Beam && !ql.BeamArrow && ql.BeamLength == (int)(20 * StyleEditor.UnitsPerMetre), "Outline + beam stored");
-            Check(inspector.Editor.TestShown == "Outline + beam", $"box shows it: {inspector.Editor.TestShown}");
-            var tweaked = inspector.Editor.Value; tweaked.BeamLength = 999; inspector.Editor.Value = tweaked; LookEdited();
-            Check(inspector.Editor.TestShown.StartsWith("Custom"), $"a changed detail shows Custom: {inspector.Editor.TestShown}");
-            inspector.Editor.TestPreset(6); LookEdited(); // Tall beacon
-            Check(!project.Overrides[guardian.Id].Glow && project.Overrides[guardian.Id].BeamLength == (int)(30 * StyleEditor.UnitsPerMetre), "Tall beacon stored");
-            Check(project.Overrides[guardian.Id].GlowColor == ql.GlowColor, "the colour stays when a quick look is picked");
-            int h0 = inspector.Editor.Height; bool open0 = inspector.Editor.TestMoreOpen;
-            inspector.Editor.TestMore();
-            Check(inspector.Editor.TestMoreOpen != open0 && inspector.Editor.Height != h0, $"More settings folds / unfolds ({h0} -> {inspector.Editor.Height})");
-            inspector.Editor.TestMore();
+            Check(ql.Beam && ql.BeamFx.HideAfter == 30 && ql.GlowFx.HideAfter == 0 && !ql.GlowFx.Walls && ql.BeamFx.Walls, "section settings stored apart");
+            var json = System.Text.Json.JsonSerializer.Serialize(ql);
+            var readBack = System.Text.Json.JsonSerializer.Deserialize<Style>(json)!;
+            Check(readBack.BeamFx.HideAfter == 30 && !readBack.GlowFx.Walls && !json.Contains("\"ThroughWalls\""), "section settings saved and read back");
+            var old = System.Text.Json.JsonSerializer.Deserialize<Style>("{\"ThroughWalls\":false,\"HideAfter\":60,\"Pulse\":true,\"BeamFlow\":true}")!;
+            Check(!old.AllFx.Any(x => x.Walls) && old.AllFx.All(x => x.HideAfter == 60) && old.GlowFx.Pulse && old.BeamFx.Flow, "older saved look spread over the sections");
+            inspector.Editor.TestPreset(2);
+            var pl = inspector.Editor.Value;
+            Check(pl.Glow && pl.Beam && pl.Label && pl.Icon.Length == 0, "preset Glow + beam + name");
+            inspector.Editor.TestPreset(0);
+            pl = inspector.Editor.Value;
+            Check(pl.Glow && !pl.Beam && !pl.Label, "preset Glow only");
             OwnSwitched(false);
 
             log.Add("several items, copy / paste");
@@ -3024,7 +3083,7 @@ public sealed class MainForm : Form
             var bobbles = cats.First(c => c.Name == Catalog.Bobbleheads);
             Check(bobbles.Entries.All(IsTicked), "bobbleheads all checked");
             Check(project.CategoryStyles.GetValueOrDefault(Catalog.Bobbleheads) is { Glow: true, Beam: true, Icon: "model:bobblehead" }, "bobbleheads: glow, beam, 3D bobblehead");
-            Check(project.CategoryStyles.GetValueOrDefault("Robots") is { Beam: false, Glow: true, GlowFill: false, ThroughWalls: true, Icon: "" }, "enemies: outline, no beams");
+            Check(project.CategoryStyles.GetValueOrDefault("Robots") is { Beam: false, Glow: true, GlowFill: false, AllWalls: true, Icon: "" }, "enemies: outline, no beams");
             var everyday = cats.SelectMany(c => c.Entries).Where(e => e.Name.Contains("everyday clothes") && IsTicked(e)).ToList();
             Check(everyday.All(e => twins.GetValueOrDefault(e.Id, new()).Any(t => IsTicked(t) && !t.Name.Contains("everyday clothes"))),
                   $"everyday clothes only checked as twins ({everyday.Count})");
@@ -3053,7 +3112,7 @@ public sealed class MainForm : Form
             var older = Importer.Read(plain, cats);
             var look = older.Project.Overrides.GetValueOrDefault(guardian.Id) ?? older.Project.CategoryStyles.GetValueOrDefault(bosses.Name);
             Check(older.Kind == Importer.OlderBuild && older.Project.Selected.Contains(guardian.Id) && older.Project.OffParts.GetValueOrDefault(guardian.Id)?.Contains(baseModel) == true, "older build: item selected, left-out part off");
-            Check(look != null && look.GlowColor == "#123456" && look.GlowOpacity == 55 && look.GlowFill && !look.ThroughWalls && look.Beam && look.BeamColor == "#654321" && look.BeamStrength == 40, "older build: look read from its materials");
+            Check(look != null && look.GlowColor == "#123456" && look.GlowOpacity == 55 && look.GlowFill && !look.AllWalls && look.Beam && look.BeamColor == "#654321" && look.BeamStrength == 40, "older build: look read from its materials");
             Check(GameData.IsOwn(arch), "our archive is recognised");
             File.Delete(temp); File.Delete(plain);
 

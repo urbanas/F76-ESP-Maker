@@ -9,13 +9,16 @@ static class Ui
     static Color P(int r, int g, int b, int dr, int dg, int db) => Dark ? Color.FromArgb(dr, dg, db) : Color.FromArgb(r, g, b);
     public static Color Panel => P(243, 244, 242, 34, 39, 36);
     public static Color Window => P(255, 255, 255, 28, 32, 30);
-    public static Color Line => P(217, 220, 215, 58, 64, 60);
+    public static Color Line => P(192, 197, 190, 58, 64, 60);
     public static Color Sel => P(222, 231, 225, 52, 64, 57);
     public static Color Hover => P(234, 237, 233, 44, 50, 46);
-    public static Color Accent => P(184, 116, 26, 224, 160, 74);
-    public static Color AccentSoft => P(246, 231, 207, 58, 46, 29);
+    public static Color Accent => P(196, 106, 0, 224, 160, 74);
+    public static Color AccentSoft => P(252, 222, 176, 58, 46, 29);
+    /// <summary>A picked segment / chip: solid orange with white text in light mode (a soft fill looked pale), soft in dark.</summary>
+    public static Color LitBack => Dark ? AccentSoft : Accent;
+    public static Color LitText => Dark ? Accent : Color.White;
     public static Color Fg => P(31, 36, 33, 231, 235, 232);
-    public static Color Muted => P(104, 112, 107, 154, 163, 158);
+    public static Color Muted => P(84, 92, 87, 154, 163, 158);
     /// <summary>Dark mode's background for boxes to type in.</summary>
     static readonly Color Field = Color.FromArgb(46, 52, 48);
 
@@ -30,12 +33,12 @@ static class Ui
         (SystemColors.WindowText, Color.FromArgb(231, 235, 232)),
         (Color.FromArgb(31, 36, 33), Color.FromArgb(231, 235, 232)),
         (Color.DimGray, Color.FromArgb(154, 163, 158)),
-        (Color.FromArgb(104, 112, 107), Color.FromArgb(154, 163, 158)),
+        (Color.FromArgb(84, 92, 87), Color.FromArgb(154, 163, 158)),
         (SystemColors.GrayText, Color.FromArgb(130, 138, 133)),
         (Color.Gray, Color.FromArgb(130, 138, 133)),
-        (Color.FromArgb(217, 220, 215), Color.FromArgb(58, 64, 60)),
+        (Color.FromArgb(192, 197, 190), Color.FromArgb(58, 64, 60)),
         (SystemColors.ControlLight, Color.FromArgb(52, 64, 57)),
-        (Color.FromArgb(184, 116, 26), Color.FromArgb(224, 160, 74)),
+        (Color.FromArgb(196, 106, 0), Color.FromArgb(224, 160, 74)),
         (Color.FromArgb(20, 125, 60), Color.FromArgb(92, 191, 131)),
         (Color.SeaGreen, Color.FromArgb(92, 191, 131)),
         (Color.Firebrick, Color.FromArgb(240, 110, 100)),
@@ -492,8 +495,14 @@ sealed class SwatchRow : Control
 {
     public static readonly string[] Colours = { "#FFD23F", "#FF8A00", "#FF3B30", "#FF4FB3", "#A66BFF", "#3D8BFF", "#00E5FF", "#3CE07A", "#C8F03C", "#FFFFFF" };
     public Color Current = Color.Cyan;
-    const int D = 22, Gap = 6;
+    int D = 22, Gap = 6;
     int hover = -1;
+
+    /// <summary>Smaller dots (a narrow column).</summary>
+    public bool Small
+    {
+        set { D = value ? 17 : 22; Gap = value ? 4 : 6; Size = new Size(Colours.Length * (D + Gap) + D + 9, D + 8); Invalidate(); }
+    }
 
     /// <summary>A colour dot was clicked (its colour), or the "+" one (null).</summary>
     public event Action<Color?>? Picked;
@@ -502,11 +511,11 @@ sealed class SwatchRow : Control
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
         Cursor = Cursors.Hand;
-        Size = new Size((Colours.Length + 1) * (D + Gap), D + 6);
+        Size = new Size(Colours.Length * (D + Gap) + D + 9, D + 8); // room for the last dot's picked ring (it was cut)
         Margin = new Padding(3, 3, 3, 3);
     }
 
-    Rectangle Dot(int i) => new(3 + i * (D + Gap), 3, D, D);
+    Rectangle Dot(int i) => new(4 + i * (D + Gap), 4, D, D);
     int At(Point p) { for (int i = 0; i <= Colours.Length; i++) if (Dot(i).Contains(p)) return i; return -1; }
     protected override void OnMouseMove(MouseEventArgs e) { int h = At(e.Location); if (h != hover) { hover = h; Invalidate(); } base.OnMouseMove(e); }
     protected override void OnMouseLeave(EventArgs e) { hover = -1; Invalidate(); base.OnMouseLeave(e); }
@@ -578,7 +587,10 @@ sealed class Seg : Control
     }
 
     int W(int i) => TextRenderer.MeasureText(options[i], Font).Width + 14;
-    public override Size GetPreferredSize(Size proposed) => new(Enumerable.Range(0, options.Length).Sum(W) + 1, Font.Height + 10);
+    /// <summary>At least this high (e.g. the height of the buttons beside it); kept when the font changes.</summary>
+    public int MinHeight { get => minHeight; set { minHeight = value; Size = GetPreferredSize(Size.Empty); } }
+    int minHeight;
+    public override Size GetPreferredSize(Size proposed) => new(Enumerable.Range(0, options.Length).Sum(W) + 1, Math.Max(minHeight, Font.Height + 10));
     protected override void OnFontChanged(EventArgs e) { Size = GetPreferredSize(Size.Empty); base.OnFontChanged(e); }
     Rectangle Part(int i) { int x = 0; for (int j = 0; j < i; j++) x += W(j); return new(x, 0, W(i), Height - 1); }
     int At(Point p) { for (int i = 0; i < options.Length; i++) if (Part(i).Contains(p)) return i; return -1; }
@@ -606,8 +618,8 @@ sealed class Seg : Control
         {
             var r = Part(i);
             bool on = i == selected && Enabled;
-            using (var bg = new SolidBrush(on ? Ui.AccentSoft : i == hover && Enabled ? Ui.Hover : Ui.Window)) g.FillRectangle(bg, r);
-            TextRenderer.DrawText(g, options[i], Font, r, !Enabled ? Ui.Muted : on ? Ui.Accent : Ui.Fg,
+            using (var bg = new SolidBrush(on ? Ui.LitBack : i == hover && Enabled ? Ui.Hover : Ui.Window)) g.FillRectangle(bg, r);
+            TextRenderer.DrawText(g, options[i], Font, r, !Enabled ? Ui.Muted : on ? Ui.LitText : Ui.Fg,
                                   TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             if (i > 0) g.DrawLine(line, r.Left, 0, r.Left, r.Bottom);
         }
@@ -654,5 +666,84 @@ sealed class Toggle : Control
         int k = h - 4;
         using var knob = new SolidBrush(Ui.Dark ? Ui.Fg : Ui.Window);
         g.FillEllipse(knob, on ? w - k - 1 : 3, 3, k, k);
+    }
+}
+
+/// <summary>A borderless window that can still be resized by dragging its edges (the look pop-up).</summary>
+sealed class SizablePopup : Form
+{
+    const int Grip = 7;
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        if (m.Msg != 0x84 || WindowState != FormWindowState.Normal) return; // WM_NCHITTEST
+        var p = PointToClient(Cursor.Position);
+        bool l = p.X < Grip, r = p.X >= ClientSize.Width - Grip, t = p.Y < Grip, b = p.Y >= ClientSize.Height - Grip;
+        int hit = t && l ? 13 : t && r ? 14 : b && l ? 16 : b && r ? 17 : l ? 10 : r ? 11 : t ? 12 : b ? 15 : 0;
+        if (hit != 0) m.Result = hit;
+    }
+}
+
+/// <summary>A panel that lets the mouse through near its edges (to the window under it: <see cref="SizablePopup"/>'s grips).</summary>
+sealed class EdgePanel : Panel
+{
+    const int Grip = 6;
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == 0x84)
+        {
+            var p = PointToClient(Cursor.Position);
+            if (p.X < Grip || p.Y < Grip || p.X >= Width - Grip || p.Y >= Height - Grip) { m.Result = -1; return; } // HTTRANSPARENT
+        }
+        base.WndProc(ref m);
+    }
+}
+
+/// <summary>An on / off button with a word on it (an effect: Pulse, Rainbow...): a soft-accent pill while on.</summary>
+sealed class Chip : Control
+{
+    bool on, hover;
+
+    /// <summary>Checked changed (by a click or in code), like a check box.</summary>
+    public event EventHandler? CheckedChanged;
+
+    public Chip(string text)
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.Selectable | ControlStyles.ResizeRedraw, true);
+        Text = text;
+        Cursor = Cursors.Hand;
+        Fit();
+    }
+
+    public bool Checked
+    {
+        get => on;
+        set { if (on == value) return; on = value; Invalidate(); CheckedChanged?.Invoke(this, EventArgs.Empty); }
+    }
+
+    void Fit() => Size = new Size(TextRenderer.MeasureText(Text, Font).Width + 22, Font.Height + 10);
+    protected override void OnFontChanged(EventArgs e) { Fit(); base.OnFontChanged(e); }
+    protected override void OnTextChanged(EventArgs e) { Fit(); base.OnTextChanged(e); }
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseClick(MouseEventArgs e) { Focus(); Checked = !on; base.OnMouseClick(e); }
+    protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Space) Checked = !on; base.OnKeyDown(e); }
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Parent?.BackColor ?? Ui.Window);
+        float h = Height - 2, w = Width - 2;
+        using var pill = new GraphicsPath();
+        pill.AddArc(0.5f, 0.5f, h, h, 90, 180);
+        pill.AddArc(w - h + 0.5f, 0.5f, h, h, 270, 180);
+        pill.CloseFigure();
+        using (var b = new SolidBrush(on ? Ui.LitBack : hover ? Ui.Hover : Ui.Window)) g.FillPath(b, pill);
+        using (var p = new Pen(on || Focused ? Ui.Accent : Ui.Line, on ? 1.5f : 1f)) g.DrawPath(p, pill);
+        TextRenderer.DrawText(g, Text, Font, ClientRectangle, on ? Ui.LitText : Ui.Fg,
+                              TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
     }
 }

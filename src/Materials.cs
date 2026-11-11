@@ -12,6 +12,7 @@ public static class Materials
     const string TemplateTexture = "Effects/AmbientBeams_d.dds";
 
     // header (before the texture string; same layout in .bgsm and .bgem v22)
+    const int TileFlags = 0x08, VScale = 0x18;
     const int BlendSrc = 0x21, BlendDst = 0x25, AlphaTestRef = 0x29, AlphaTest = 0x2A, ZWrite = 0x2B, ZTest = 0x2C, Alpha = 0x1C, TextureLength = 0x3C, TextureStart = 0x40;
     // offsets in the stock file (texture string ends at 0x5B); shifted by the texture length change
     const int Lighting = 0x8F, Falloff = 0x90, Soft = 0x93, Color = 0x94, Scale = 0xA0, LightInfluence = 0xB4;
@@ -21,18 +22,20 @@ public static class Materials
     /// <summary>Outline instead of a full cover: almost clear where the surface faces the camera, full colour towards
     /// the edges (the Pint-Sized outline mods use the same falloff idea).</summary>
     /// <summary>The outline's opacity on faces that point at you.</summary>
-    public const float OutlineFace = 0.18f;
+    /// <remarks>0.18 up to 59 % (the edges are already full there); above it the tint spreads over the faces, up to 0.68 at
+    /// 100 %, so 60-100 % still gets stronger (user, 2026-11-09: no change above 60 %).</remarks>
+    public static float OutlineFace(float s) => s <= 0.59f ? 0.18f : 0.18f + Math.Min(1f, (s - 0.59f) / 0.41f) * 0.5f;
 
     /// <summary>Edge opacity of a normal-blend outline: 0.51 at the default 30 % (as before), full from 59 %,
     /// and fading to almost nothing at 5 % (the old 0.3 floor kept 5 % bright in game).</summary>
     public static float OutlineAlpha(float s) => Math.Min(1f, 1.7f * s);
 
-    static void Outline(byte[] m)
+    static void Outline(byte[] m, float s)
     {
         int d = BitConverter.ToInt32(m, TextureLength) - TemplateTexture.Length - 1;
         m[Falloff + d] = 1;
         // facing you: a faint tint (18 %) so flat faces - a wall safe seen head-on - still show; full colour at the edges
-        foreach (var (i, v) in new[] { (0, 0.6f), (1, 0.1f), (2, OutlineFace), (3, 1f) })
+        foreach (var (i, v) in new[] { (0, 0.6f), (1, 0.1f), (2, OutlineFace(s)), (3, 1f) })
             BitConverter.TryWriteBytes(m.AsSpan(FalloffAngles + d + 4 * i), v);
     }
 
@@ -63,13 +66,39 @@ public static class Materials
     /// <param name="strengthPercent">How visible: 100 % = the tested Spooky beam (alpha 0.75, colour scale 1.5).
     /// Below 100 the beam gets more see-through (the material blends normally, so dimming the colour only made
     /// it a darker stripe); above 100 first fully opaque, then brighter.</param>
-    public static byte[] Beam(byte[] template, Color c, bool throughWalls, int strengthPercent = 100)
+    public static byte[] Beam(byte[] template, Color c, bool throughWalls, int strengthPercent = 100, string? flowTexture = null, float flowTiles = 1)
     {
         float s = Math.Clamp(strengthPercent, 1, 300) / 100f;
-        if (strengthPercent == 100) return Make(template, TemplateTexture, c, 1.5f, falloff: true, throughWalls, alpha: null);
-        float alpha = Math.Min(1f, 0.75f * s);
-        float scale = 1.5f * Math.Max(1f, s * 0.75f);
-        return Make(template, TemplateTexture, c, scale, falloff: true, throughWalls, alpha: alpha);
+        string tex = flowTexture ?? TemplateTexture;
+        var m = strengthPercent == 100 ? Make(template, tex, c, 1.5f, falloff: true, throughWalls, alpha: null)
+                                       : Make(template, tex, c, 1.5f * Math.Max(1f, s * 0.75f), falloff: true, throughWalls, alpha: Math.Min(1f, 0.75f * s));
+        if (flowTexture != null)
+        {
+            // flowing beam: the banded texture repeats up the beam (tile U + V), the V offset is animated in the model
+            BitConverter.TryWriteBytes(m.AsSpan(TileFlags), 3u);
+            BitConverter.TryWriteBytes(m.AsSpan(VScale), flowTiles);
+        }
+        return m;
+    }
+
+    /// <summary>The banded texture of the flowing beam: soft bright bands along V (white, alpha = brightness).</summary>
+    public static Bitmap FlowTexture()
+    {
+        var bmp = new Bitmap(32, 128, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        for (int y = 0; y < 128; y++)
+        {
+            double band = 0.25 + 0.75 * Math.Pow(0.5 + 0.5 * Math.Sin(2 * Math.PI * y / 128), 3);
+            int a = (int)Math.Round(255 * band);
+            for (int x = 0; x < 32; x++) bmp.SetPixel(x, y, System.Drawing.Color.FromArgb(a, 255, 255, 255));
+        }
+        return bmp;
+    }
+
+    /// <summary>The colour strength (base colour scale) a material was written with - the pulse animates around it.</summary>
+    public static float BaseScale(byte[] m)
+    {
+        int d = BitConverter.ToInt32(m, TextureLength) - TemplateTexture.Length - 1;
+        return Scale + d + 4 <= m.Length ? BitConverter.ToSingle(m, Scale + d) : 1f;
     }
 
     /// <summary>Untextured see-through glow laid over the item's own shapes.</summary>
@@ -99,7 +128,7 @@ public static class Materials
             BitConverter.TryWriteBytes(b.AsSpan(BlendDst), 7);
             if (outline)
             {
-                Outline(b);
+                Outline(b, s);
                 // one-sided: the far side's faces point away from you, so the falloff makes them fully opaque - drawn
                 // through the item (visible through walls) they washed the whole thing out white (bobblehead in game)
                 b[0x30] = 0;
@@ -131,7 +160,7 @@ public static class Materials
         Additive(m);
         m[AlphaTest] = 1;
         m[AlphaTestRef] = testRef;
-        if (outline) Outline(m);
+        if (outline) Outline(m, s);
         return m;
     }
 

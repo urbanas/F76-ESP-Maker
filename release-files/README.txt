@@ -1,4 +1,4 @@
-ESP Maker 2.1 - make your own ESP mod for Fallout 76
+ESP Maker 2.2.2 - make your own ESP mod for Fallout 76
 ==================================================
 
 ESP Maker lets you pick what you want to spot in Fallout 76 - bobbleheads, magazines, plans,
@@ -33,18 +33,23 @@ The app finds the game by itself. If it can't, it asks for the folder:
 HOW TO USE
 1. Pick a section in the bar on the far left, then a category - or search (Ctrl+K jumps to any
    category or item). Select what you want to find.
-2. Click the category to choose its look in the pop-up (ready-made look, colour, icon). Click an
-   item for its own look. The pop-up stays open and follows the row you pick; drag it anywhere.
-   The Name card puts a floating name above the item; Hide after makes the highlight shrink
-   away after a while.
-   The 3D preview at its bottom shows the real model the way the mod will show it.
-   "Original" shows the plain game model, "Apply look" goes back (preview only).
-   "Bigger view" opens a large 3D window: walk around, add a person, a house or walls, change
-   the light, check colour-blind views, compare other selected items side by side.
+2. Click the category to choose its look in the pop-up. Click an item for its own look. The
+   pop-up stays open and follows the row you pick; drag it anywhere, drag its edges to resize.
+   Start from a preset (Glow only / Glow + beam / Glow + beam + name), then set the three parts:
+   1 The item (Outline / Fill / Bright glow, colour, strength, or Invisible), 2 Beam / Arrow,
+   3 Icon / Text. Each part has its own effects: X-ray (seen through walls), Pulse, Rainbow,
+   Spin, Bob, Light runs up (beam), and Hide after (it shrinks away after a while).
+   The 3D preview shows the real model the way the mod will show it: turn, zoom, walk around it
+   (WASD), "View options" adds a person, a house, a wall behind or a shed around it, changes the
+   light, shows colour-blind views and compares other selected items side by side.
+   "Show the look" off shows the plain game model (preview only). The preview plays the
+   effects too: Pulse, Rainbow, Spin, Bob, Light runs up and Hide after.
 3. Close the game, click "Build & save", type a name for your mod, click Build, start the game.
    Uncheck "Install in the game" to only make the .ba2.
 Changed something? Click "Build & save" again and pick the same name to replace the mod.
 Ctrl+Z / Ctrl+Y undo and redo. View -> Dark mode, Compact rows.
+Edit -> "Colour by priority..." colours your picks by how much they matter (white rare, gold worth
+a detour, green useful, red junk).
 
 Edit -> "Add presets...": Enemies, Legendary enemies, Bobbleheads, Magazines, Plans, the Slasher
 event, XP buffs, Player vendors and Bright plants in one click.
@@ -72,8 +77,10 @@ GOOD TO KNOW
 - The game highlights 3D models, not items: things that share a model light up together (hover an
   item to see what shares it). Magazines share a few covers; plans share two models.
 - Only things lying in the world can glow - loot inside containers and bodies can't.
-- CAMP storage boxes and loot bag skins light up for every player, not only yours. Clothes glow
-  only while lying on the ground, never on players wearing them.
+- CAMP storage boxes and loot bag skins light up for every player, not only yours. "Clothes lying
+  around" glow only on the ground; "All outfits (worn - wearers glow)" lights up whoever wears
+  them, you too. Invisible on a worn outfit hides it on everyone wearing it.
+- Foliage (hide it) makes grass, bushes and trees invisible - easier to spot things on the ground.
 - Enemies that turn invisible (cloaking) can't be highlighted while cloaked.
 - Plants lose their beam once harvested.
 - Bright colours changes the game's material, not the item: everything using that material brightens.

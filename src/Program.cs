@@ -20,6 +20,8 @@ public sealed class Settings
     public bool ShowAll { get; set; }
     /// <summary>Where the look pop-up was dragged to (x, y on the screen); null = next to the clicked look.</summary>
     public int[]? PopupAt { get; set; }
+    /// <summary>The look pop-up's size, as the user dragged it (null = the default).</summary>
+    public int[]? PopupSize { get; set; }
     /// <summary>Dark colours for the main window.</summary>
     public bool Dark { get; set; }
     /// <summary>More > Compact rows: lower rows in the category list and the item list.</summary>
@@ -75,6 +77,7 @@ static class Program
         if (args.Length is 3 or 4 && args[0] == "--preview") { Environment.Exit(SelfTest.Preview(args[1], args[2], args.Length == 4 ? args[3] : null)); return; }
         if (args.Length == 3 && args[0] == "--scene") { Environment.Exit(SelfTest.Scene(args[1], args[2])); return; }
         if (args.Length == 2 && args[0] == "--partnames") { Environment.Exit(SelfTest.PartNamesDump(args[1])); return; }
+        if (args.Length == 3 && args[0] == "--findblock") { Environment.Exit(SelfTest.FindBlock(args[1], args[2])); return; }
         if (args.Length == 3 && args[0] == "--tex") { Environment.Exit(SelfTest.Tex(args[1], args[2])); return; }
         if (args.Length is 3 or 4 && args[0] == "--lookshot") { Environment.Exit(SelfTest.LookShot(args[1], args[2], args.Length == 4 ? args[3] : null)); return; }
         if (args.Length is 2 or 3 && args[0] == "--tour-pages")

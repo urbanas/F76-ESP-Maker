@@ -31,6 +31,9 @@ public static class Builder
         // shared robot parts under their robot, not the boss; otherwise category order
         var work = cats.SelectMany(c => c.Entries.Where(e => project.Selected.Contains(e.Id)).Select(e => (Cat: c, Entry: e)))
                        .OrderBy(x => project.Overrides.ContainsKey(x.Entry.Id) || project.PartLooks.ContainsKey(x.Entry.Id) ? 0 : 1)
+                       // dedicated categories before the catch-all lists that happen to share a model (Clean Surgical Tools is
+                       // the paper bag: its white junk look won and the loot bags never showed their own - user, 2026-11-10)
+                       .ThenBy(x => CatchAll(x.Cat) ? 1 : 0)
                        .ThenBy(x => x.Entry.JunkCopy || x.Entry.LinkParts && x.Cat.Name == Enemies.Bosses ? 1 : 0).ToList();
         foreach (var (cat, e) in work)
             {
@@ -48,7 +51,7 @@ public static class Builder
                 PatchOptions Options(Style s, bool main)
                 {
                     // the arrow is a solid shape: the 3D-icon material (shaded by its vertex colours), in the beam colour
-                    string? beamMat = !s.Beam ? null : s.BeamArrow ? Icon3DMaterial(s, template, materials) : BeamMaterial(s, template, materials);
+                    string? beamMat = !s.Beam ? null : s.BeamArrow ? Icon3DMaterial(s, template, materials) : BeamMaterial(s, template, materials, files);
                     float beamLength = s.BeamArrow ? NifPatch.ArrowSize(s.BeamWidth) is var a ? a.Gap + a.Height : 0 : s.BeamLength; // icons go on top
                     // animated objects (first aid kits, wall safes, ammo boxes: skinned, not creatures) showed no outline in
                     // game, only a fill (2026-11-05) - they get the fill whatever the look says
@@ -66,10 +69,19 @@ public static class Builder
                     string? modelMat = model3d != null ? ModelMaterial(s, model3d, template, materials, files) : null;
                     string? labelMat = null;
                     float labelRatio = 0;
-                    if (main && s.Label && !e.NoIcon) (labelMat, labelRatio) = LabelMaterial(s, s.LabelText.Trim().Length > 0 ? s.LabelText.Trim() : Icons.LabelText(e.Name), template, materials, files, labels);
+                    if (main && s.Label && !e.NoIcon)
+                    {
+                        string text = s.LabelText.Trim().Length > 0 ? s.LabelText.Trim() : Icons.LabelText(e.Name);
+                        if (s.LabelCategory) text = Icons.LabelText(cat.Name) + " · " + text;
+                        (labelMat, labelRatio) = LabelMaterial(s, text, template, materials, files, labels);
+                    }
+                    static PartMotion? M(PartFx x, bool flow = false) => x.Moves || x.HideAfter > 0
+                        ? new PartMotion(x.Pulse, x.Rainbow, x.Spin, x.Bob, flow && x.Flow, x.HideAfter, x.HideAfter > 0 ? x.BlinkOff : 0) : null;
+                    var motion = s.Moves || s.Timed ? new Motion(M(s.GlowFx), M(s.BeamFx, !s.BeamArrow), M(s.IconFx), M(s.LabelFx)) : null;
                     return new PatchOptions(glowFor, main ? beamMat : null, beamLength, s.BeamWidth, e.Harvestable, iconMat, s.IconSize, mask, icon3dMat,
                                             s.BeamArrow, model3d != null ? Models3D.MeshOf(model3d) : null, modelMat,
-                                            labelMat, s.LabelSize * labelRatio, s.LabelSize, s.HideAfter);
+                                            labelMat, s.LabelSize * labelRatio, s.LabelSize, s.Invisible && e.CanHide,
+                                            motion, p => materials.TryGetValue(p, out var mb) ? Materials.BaseScale(mb) : 1f);
                 }
                 // invisible enemies: their shimmer's gradient in the glow colour (a game texture: into the texture archive)
                 if (e.Gradients != null && st.Glow)
@@ -100,15 +112,23 @@ public static class Builder
                     bool mainModel = own != null || beamModels == null || beamModels.Contains(model);
                     var opts = Options(look, mainModel);
                     if (done.TryGetValue(path, out var by)) { log($"  {e.Name}: {model} is also selected as {by} - that look is used"); continue; }
-                    var winner = game.Find(path);
-                    var src = project.KeepOtherMods ? winner : game.FindOriginal(path) ?? winner;
+                    // a hidden worn outfit: the bare body / hands go in its place (the outfit model is the body under it too)
+                    var srcPath = path;
+                    if (e.HideAs(model, look) is string bare)
+                    {
+                        opts = opts with { Invisible = false };
+                        if (bare.Length > 0) { srcPath = @"meshes\" + bare; log($"  {e.Name}: {model} - shown as {bare}"); }
+                        else log($"  {e.Name}: {model} - kept visible (covers hair / head, which can't be shown instead)");
+                    }
+                    var winner = game.Find(srcPath);
+                    var src = project.KeepOtherMods ? winner : game.FindOriginal(srcPath) ?? winner;
                     if (src == null) { log($"  {e.Name}: {model} not found in the game files - skipped"); failed++; continue; }
                     try
                     {
                         PatchResult r;
                         bool fellBack = false;
                         try { r = NifPatch.Apply(src.Archive.ReadFile(src), opts); }
-                        catch (Exception ex) when (game.FindOriginal(path) is { } orig && orig != src)
+                        catch (Exception ex) when (game.FindOriginal(srcPath) is { } orig && orig != src)
                         {
                             // the other mod's file is gone (removed while the app was open) or in a form this app can't change
                             log($"  {e.Name}: couldn't use {model} from {src.Archive.FileName} ({ex.Message}) - using the original game model");
@@ -139,13 +159,40 @@ public static class Builder
         if (files.Count == 0 && replaced.Count == 0 && brightened.Count == 0) throw new InvalidOperationException("Nothing to build - select at least one item that has glow or beam on.");
         files.AddRange(materials.Select(kv => (kv.Key, kv.Value)));
         files.AddRange(brightened.Select(kv => (kv.Key, kv.Value)));
-        files.Add((Importer.SetupPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(project, Json.Options))); // for Import
+        files.Add((Importer.SetupPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(SavedSetup(project, cats), Json.Options))); // for Import
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outFile))!);
         Ba2Writer.WriteGeneral(outFile, files);
         var texFile = TextureArchive(outFile);
         if (replaced.Count > 0) Ba2Writer.WriteTextures(texFile, replaced);
         else if (File.Exists(texFile)) File.Delete(texFile); // an earlier build's: no longer part of this one
         return new BuildResult(outFile, files.Count(f => f.Path.EndsWith(".nif")), failed, conflicts, replaced.Count > 0 ? texFile : null, brightened.Count);
+    }
+
+    /// <summary>The setup stored in the archive: only what the ticked items use - looks, parts and category looks of
+    /// unticked items stay out (bug report 2026-11-07: they showed up in setup.json).</summary>
+    /// <summary>A list of everything of a kind (junk, aid, CAMP items, plants, outfits, Everything else): on a shared
+    /// model it gives way to a category made for that thing (plans, loot bags, loot spots, events, enemies...).</summary>
+    public static bool CatchAll(Category c) =>
+        c.Section is "JUNK" or Catalog.AllSection || c.Name is "Junk & misc" or "Aid & food" or "Plants (all)" or Catalog.CampItemsName
+        || c.Name.StartsWith("All outfits", StringComparison.Ordinal);
+
+    static Project SavedSetup(Project project, List<Category> cats)
+    {
+        // only what this mod is built from: looks of unselected items, parts left out and categories none of the
+        // selected items take their look from stay out (user report, 2026-11-09)
+        var p = Json.Clone(project);
+        var known = cats.SelectMany(c => c.Entries).GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
+        p.Selected = p.Selected.Where(known.ContainsKey).ToHashSet();
+        bool On(string id) => p.Selected.Contains(id);
+        p.Overrides = p.Overrides.Where(kv => On(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
+        p.OffParts = p.OffParts.Where(kv => On(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
+        p.PartLooks = p.PartLooks.Where(kv => On(kv.Key))
+                       .Select(kv => (kv.Key, Parts: kv.Value.Where(m => p.ModelsOf(known[kv.Key]).Contains(m.Key)).ToDictionary(m => m.Key, m => m.Value)))
+                       .Where(x => x.Parts.Count > 0).ToDictionary(x => x.Key, x => x.Parts);
+        p.RecipeLooks = p.RecipeLooks.Where(On).ToHashSet();
+        var usedCats = cats.Where(c => c.Entries.Any(e => On(e.Id) && !p.Overrides.ContainsKey(e.Id))).Select(c => c.Name).ToHashSet();
+        p.CategoryStyles = p.CategoryStyles.Where(kv => usedCats.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
+        return p;
     }
 
     /// <summary>Name label: its text picture (once per text) and a material per text and colour, like the icon's.</summary>
@@ -163,12 +210,12 @@ public static class Builder
                 ratios[tex] = ratio = bmp.Width / (float)bmp.Height;
             }
         var c = Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor);
-        var path = $@"materials\itemfinder\label_{key}_{Key(Materials.Hex(c))}{(st.ThroughWalls ? "_x" : "")}.bgem";
-        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon(template, c, st.ThroughWalls, Icons.LabelMaterialTexture(key));
+        var path = $@"materials\itemfinder\label_{key}_{Key(Materials.Hex(c))}{(st.LabelFx.Walls ? "_x" : "")}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon(template, c, st.LabelFx.Walls, Icons.LabelMaterialTexture(key));
         return (path, ratio);
     }
 
-    static bool ChangesModel(Style s) => s.Glow || s.Beam || s.Label || Icons.Get(s.Icon) != null || Models3D.Get(s.Icon) != null;
+    static bool ChangesModel(Style s) => s.Glow || s.Beam || s.Label || s.Invisible || Icons.Get(s.Icon) != null || Models3D.Get(s.Icon) != null;
     static bool Shows(Style s) => ChangesModel(s) || s.Brighten;
 
     /// <summary>Brighter copies of the game materials a model uses, under the game's own paths. Always from the game's
@@ -230,8 +277,8 @@ public static class Builder
         if (method is "B" or "C")
         {
             var vc = Materials.Parse(st.GlowColor);
-            var vpath = $@"materials\itemfinder\glow{method.ToLowerInvariant()}_{Key(Materials.Hex(vc))}_{st.GlowOpacity}{(st.ThroughWalls ? "_x" : "")}{(st.GlowFill ? "" : "_o")}.bgem";
-            if (!mats.ContainsKey(vpath)) mats[vpath] = Materials.GlowVariant(template, vc, st.GlowOpacity, st.ThroughWalls, method == "B", !st.GlowFill);
+            var vpath = $@"materials\itemfinder\glow{method.ToLowerInvariant()}_{Key(Materials.Hex(vc))}_{st.GlowOpacity}{(st.GlowFx.Walls ? "_x" : "")}{(st.GlowFill ? "" : "_o")}.bgem";
+            if (!mats.ContainsKey(vpath)) mats[vpath] = Materials.GlowVariant(template, vc, st.GlowOpacity, st.GlowFx.Walls, method == "B", !st.GlowFill);
             // no blending block at all: keeping a cut-out part's own block hid the glow (its alpha test fails on the
             // see-through colour) - so animated cut-out parts glow whole
             return new GlowMat(vpath, -1, 1);
@@ -258,13 +305,13 @@ public static class Builder
         if (cut.Solid) return new GlowMat(GlowMaterial(st, template, mats));
         if (cut.Texture.Length == 0) return null;
         var c = Materials.Parse(st.GlowColor);
-        var path = $@"materials\itemfinder\glowa_{Key(Materials.Hex(c))}_{st.GlowOpacity}{(st.ThroughWalls ? "_x" : "")}{(st.GlowFill ? "" : "_o")}_cut{Ba2Hash.Crc(cut.Texture.ToLowerInvariant()):x8}.bgem";
+        var path = $@"materials\itemfinder\glowa_{Key(Materials.Hex(c))}_{st.GlowOpacity}{(st.GlowFx.Walls ? "_x" : "")}{(st.GlowFill ? "" : "_o")}_cut{Ba2Hash.Crc(cut.Texture.ToLowerInvariant()):x8}.bgem";
         if (!mats.ContainsKey(path))
         {
             // the part's own texture would tint the glow (dark red berries glowed almost black, green leaves bright):
             // a white copy keeping only its see-through parts gives the same cut-out in one even colour
             var mask = CutMask(game, cut.Texture, files);
-            mats[path] = Materials.CutoutGlow(template, c, st.GlowOpacity, st.ThroughWalls, mask ?? cut.Texture, cut.Ref, !st.GlowFill, white: mask != null);
+            mats[path] = Materials.CutoutGlow(template, c, st.GlowOpacity, st.GlowFx.Walls, mask ?? cut.Texture, cut.Ref, !st.GlowFill, white: mask != null);
         }
         return new GlowMat(path, mats[path][0x29]);
     }
@@ -309,8 +356,8 @@ public static class Builder
     static string GlowMaterial(Style st, byte[] template, Dictionary<string, byte[]> mats)
     {
         var c = Materials.Parse(st.GlowColor);
-        var path = $@"materials\itemfinder\glowa_{Key(Materials.Hex(c))}_{st.GlowOpacity.ToString(CultureInfo.InvariantCulture)}{(st.ThroughWalls ? "_x" : "")}.bgem";
-        if (!mats.ContainsKey(path)) mats[path] = Materials.Glow(template, c, st.GlowOpacity, st.ThroughWalls);
+        var path = $@"materials\itemfinder\glowa_{Key(Materials.Hex(c))}_{st.GlowOpacity.ToString(CultureInfo.InvariantCulture)}{(st.GlowFx.Walls ? "_x" : "")}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Glow(template, c, st.GlowOpacity, st.GlowFx.Walls);
         return path;
     }
 
@@ -322,8 +369,8 @@ public static class Builder
         if (!files.Any(f => f.Path == tex))
             using (var bmp = Icons.Draw(icon)) files.Add((tex, Icons.Dds(bmp)));
         var c = Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor);
-        var path = $@"materials\itemfinder\icon_{icon.Id}_{Key(Materials.Hex(c))}{(st.ThroughWalls ? "_x" : "")}.bgem";
-        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon(template, c, st.ThroughWalls, Icons.MaterialTexture(icon.Id));
+        var path = $@"materials\itemfinder\icon_{icon.Id}_{Key(Materials.Hex(c))}{(st.IconFx.Walls ? "_x" : "")}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon(template, c, st.IconFx.Walls, Icons.MaterialTexture(icon.Id));
         return path;
     }
 
@@ -335,8 +382,8 @@ public static class Builder
         if (!files.Any(f => f.Path == tex)) files.Add((tex, Models3D.Dds(model)));
         var c = model.Tinted ? Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor) : Color.White;
         string id = model.Id[Models3D.Prefix.Length..];
-        var path = $@"materials\itemfinder\model_{id}{(model.Tinted ? "_" + Key(Materials.Hex(c)) : "")}{(st.ThroughWalls ? "_x" : "")}.bgem";
-        if (!mats.ContainsKey(path)) mats[path] = Materials.Model(template, c, st.ThroughWalls, Models3D.MaterialTexture(model));
+        var path = $@"materials\itemfinder\model_{id}{(model.Tinted ? "_" + Key(Materials.Hex(c)) : "")}{(st.IconFx.Walls ? "_x" : "")}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Model(template, c, st.IconFx.Walls, Models3D.MaterialTexture(model));
         return path;
     }
 
@@ -369,16 +416,22 @@ public static class Builder
     static string Icon3DMaterial(Style st, byte[] template, Dictionary<string, byte[]> mats)
     {
         var c = Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor);
-        var path = $@"materials\itemfinder\icon3d_{Key(Materials.Hex(c))}{(st.ThroughWalls ? "_x" : "")}.bgem";
-        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon3D(template, c, st.ThroughWalls);
+        var path = $@"materials\itemfinder\icon3d_{Key(Materials.Hex(c))}{(st.IconFx.Walls ? "_x" : "")}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon3D(template, c, st.IconFx.Walls);
         return path;
     }
 
-    static string BeamMaterial(Style st, byte[] template, Dictionary<string, byte[]> mats)
+    const string FlowTexture = @"textures\itemfinder\beamflow.dds";
+
+    static string BeamMaterial(Style st, byte[] template, Dictionary<string, byte[]> mats, List<(string Path, byte[] Data)> files)
     {
         var c = Materials.Parse(st.BeamColor);
-        var path = $@"materials\itemfinder\beam_{Key(Materials.Hex(c))}_{st.BeamStrength}{(st.ThroughWalls ? "_x" : "")}.bgem";
-        if (!mats.ContainsKey(path)) mats[path] = Materials.Beam(template, c, st.ThroughWalls, st.BeamStrength);
+        // flowing beam: one band per 2 m of beam
+        int tiles = st.BeamFx.Flow && !st.BeamArrow ? Math.Max(1, (int)Math.Round(st.BeamLength / 140f)) : 0;
+        var path = $@"materials\itemfinder\beam_{Key(Materials.Hex(c))}_{st.BeamStrength}{(st.BeamFx.Walls ? "_x" : "")}{(tiles > 0 ? $"_flow{tiles}" : "")}.bgem";
+        if (tiles > 0 && !files.Any(f => f.Path == FlowTexture))
+            using (var bmp = Materials.FlowTexture()) files.Add((FlowTexture, Icons.Dds(bmp)));
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Beam(template, c, st.BeamFx.Walls, st.BeamStrength, tiles > 0 ? "itemfinder/beamflow.dds" : null, tiles);
         return path;
     }
 }
