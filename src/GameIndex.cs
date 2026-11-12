@@ -40,7 +40,7 @@ public sealed class EsmRecord
 /// SeventySix.esm changes (so it is rebuilt automatically after a game update).</summary>
 public sealed class GameIndex
 {
-    const int CacheVersion = 13; // 13: ARMA slots (BOD2) + female model index // 5: ARMA additional races (Parts); 6: NPC_ (race, default outfit) and OTFT (items); 7: MISC components (MCQP) + CMPO; 8: WEAP first FULL; 9: WEAP default mods (Parts) + OMOD; 10: FURN; 11: ARMO ground models; 12: DOOR + MSTT (Everything else)
+    const int CacheVersion = 14; // 14: names read as UTF-8 + NameIds // 13: 13: ARMA slots (BOD2) + female model index // 5: ARMA additional races (Parts); 6: NPC_ (race, default outfit) and OTFT (items); 7: MISC components (MCQP) + CMPO; 8: WEAP first FULL; 9: WEAP default mods (Parts) + OMOD; 10: FURN; 11: ARMO ground models; 12: DOOR + MSTT (Everything else)
     /// <summary>Record types that are things lying or standing in the world.</summary>
     public static readonly HashSet<string> WorldTypes = new() { "MISC", "ALCH", "INGR", "BOOK", "NOTE", "FLOR", "AMMO", "KEYM", "WEAP", "CONT", "ACTI" };
     static readonly HashSet<string> OtherTypes = new() { "LVLI", "COBJ", "MGEF", "RACE", "ARMA", "ARMO", "KYWD", "NPC_", "OTFT", "CMPO", "OMOD", "FURN", "DOOR", "MSTT" };
@@ -51,6 +51,9 @@ public sealed class GameIndex
     public List<EsmRecord> Records { get; set; } = new();
     /// <summary>How many times each base object is placed in the world (REFR records), by form id.</summary>
     public Dictionary<uint, int> Placed { get; set; } = new();
+    /// <summary>String ids of the record names (FULL): their translations win when one English text has several
+    /// ("Lost" the enemy, not "lost" the adjective).</summary>
+    public HashSet<uint> NameIds { get; set; } = new();
 
     [JsonIgnore] public Dictionary<uint, EsmRecord> ById { get; private set; } = new();
 
@@ -149,7 +152,10 @@ public sealed class GameIndex
                         for (int k = 0; k + 4 <= val.Length; k += 4) (r.Keywords ??= new()).Add(BitConverter.ToUInt32(val, k));
                         break;
                     // weapons: later FULLs name their object templates ("Default", "Simple Epic") - keep the first
-                    case "FULL" when val.Length == 4 && (type != "WEAP" || r.Name == ""): r.Name = names.GetValueOrDefault(BitConverter.ToUInt32(val)) ?? ""; break;
+                    case "FULL" when val.Length == 4 && (type != "WEAP" || r.Name == ""):
+                        r.Name = names.GetValueOrDefault(BitConverter.ToUInt32(val)) ?? "";
+                        idx.NameIds.Add(BitConverter.ToUInt32(val));
+                        break;
                     case "MODL" when r.Model == "": r.Model = ZString(val); break;
                     case "PFIG" when val.Length == 4: r.Harvest = BitConverter.ToUInt32(val); break;
                     case "EFID" when val.Length == 4: (r.Effects ??= new()).Add(BitConverter.ToUInt32(val)); break;
@@ -223,19 +229,7 @@ public sealed class GameIndex
     /// <summary>English names from the game's own strings file (inside SeventySix - Localization.ba2).</summary>
     static Dictionary<uint, string> ReadStrings(GameData game)
     {
-        var e = game.Find(@"strings\seventysix_en.strings") ?? throw new FileNotFoundException("English strings file not found");
-        var d = e.Archive.ReadFile(e);
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        var cp1252 = Encoding.GetEncoding(1252);
-        int count = BitConverter.ToInt32(d, 0), baseOff = 8 + 8 * count;
-        var map = new Dictionary<uint, string>(count);
-        for (int k = 0; k < count; k++)
-        {
-            uint id = BitConverter.ToUInt32(d, 8 + 8 * k);
-            int off = baseOff + BitConverter.ToInt32(d, 12 + 8 * k);
-            int end = Array.IndexOf(d, (byte)0, off);
-            if (end > off) map[id] = cp1252.GetString(d, off, end - off);
-        }
-        return map;
+        var map = Loc.ReadStrings(game, "en");
+        return map.Count > 0 ? map : throw new FileNotFoundException("English strings file not found");
     }
 }

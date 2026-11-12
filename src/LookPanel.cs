@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 namespace ItemFinder;
 
 /// <summary>The look panel on the right of the main window: what is picked (a category, items or one part), its tick,
@@ -5,9 +6,9 @@ namespace ItemFinder;
 /// the main window listens to the events and stores them.</summary>
 sealed class LookPanel : UserControl
 {
-    readonly Label title = new() { Dock = DockStyle.Top, Height = 30, Font = new Font("Segoe UI", 11.5f, FontStyle.Bold), AutoEllipsis = true, UseMnemonic = false, TextAlign = ContentAlignment.MiddleLeft };
+    readonly Label title = new() { Dock = DockStyle.Top, Height = 30, Font = new Font(Loc.UiFont, 11.5f, FontStyle.Bold), AutoEllipsis = true, UseMnemonic = false, TextAlign = ContentAlignment.MiddleLeft };
     readonly Label sub = new() { Dock = DockStyle.Top, Height = 38, ForeColor = Color.DimGray, UseMnemonic = false, AutoEllipsis = true };
-    readonly CheckBox tick = new() { Dock = DockStyle.Top, Height = 28, Text = "Lights up in the game", AutoCheck = false };
+    readonly CheckBox tick = new() { Dock = DockStyle.Top, Height = 28, Text = Tr("Lights up in the game"), AutoCheck = false };
     /// <summary>Whose look it uses: "Uses the Bosses look..." or "Own look · use the Bosses look again".</summary>
     readonly FlowLayoutPanel switchRow = new() { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Padding = new Padding(0, 2, 0, 6) };
     readonly Label followText = new() { AutoSize = true, MaximumSize = new Size(900, 0), UseMnemonic = false, ForeColor = Color.DimGray, Margin = new Padding(0, 5, 4, 0) };
@@ -16,7 +17,7 @@ sealed class LookPanel : UserControl
     public Control[] DragHandles => new Control[] { title, sub, titleRow };
     /// <summary>The title with "Reset" at its right (room left for the pop-up's close button).</summary>
     readonly Panel titleRow = new() { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0, 0, 40, 0) };
-    readonly Button reset = new() { Text = "↺ Reset", AutoSize = true, Dock = DockStyle.Right };
+    readonly Button reset = new() { Text = Tr("↺ Reset"), AutoSize = true, Dock = DockStyle.Right };
     /// <summary>"Reset" was clicked: back to the default look (an item: its category's; a category: the starting one).</summary>
     public event Action? ResetClicked;
     readonly Panel sameHint =new() { Dock = DockStyle.Top, Height = 0, Visible = false }; // (gone: the look is always editable)
@@ -46,20 +47,20 @@ sealed class LookPanel : UserControl
 
     public LookPanel()
     {
-        tick.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+        tick.Font = new Font(Loc.UiFont, 9.5f, FontStyle.Bold);
         switchRow.Controls.AddRange(new Control[] { followText, backLink });
         pickRow.Controls.Add(pick);
-        pickRow.Controls.Add(new Label { Text = "Preview on:", Dock = DockStyle.Left, Width = 80, TextAlign = ContentAlignment.MiddleLeft });
+        pickRow.Controls.Add(new Label { Text = Tr("Preview on:"), Dock = DockStyle.Left, Width = 80, TextAlign = ContentAlignment.MiddleLeft });
         Arrange();
         View.Settings = scroll;
         // the preview is the full 3D view (no separate big window); "Hide settings" gives it the whole pop-up
         View.MakeFull();
-        View.AddToolAction(() => settingsHidden ? "Show settings" : "Hide settings", () =>
+        View.AddToolAction(() => settingsHidden ? Tr("Show settings") : Tr("Hide settings"), () =>
         {
             settingsHidden = !settingsHidden;
             scroll.Visible = !settingsHidden;
             FitPreview();
-        }, "Give the whole pop-up to the 3D view (and back)");
+        }, Tr("Give the whole pop-up to the 3D view (and back)"));
         Controls.Add(body);
         Controls.Add(empty);
         Padding = new Padding(8, 4, 4, 4);
@@ -83,7 +84,7 @@ sealed class LookPanel : UserControl
         };
         backLink.LinkClicked += (_, _) => OwnSwitched?.Invoke(false);
         reset.Click += (_, _) => ResetClicked?.Invoke();
-        new ToolTip { AutoPopDelay = 20000 }.SetToolTip(reset, "Back to the default look: an item goes back to its category's look, a category to ESP Maker's starting look. Ctrl+Z undoes it.");
+        new ToolTip { AutoPopDelay = 20000 }.SetToolTip(reset, Tr("Back to the default look: an item goes back to its category's look, a category to ESP Maker's starting look. Ctrl+Z undoes it."));
         tick.Click += (_, _) => TickSwitched?.Invoke(tick.CheckState != CheckState.Checked);
         pick.SelectedIndexChanged += (_, _) => { if (!loading && pick.SelectedItem is Entry e) PreviewPicked?.Invoke(e); };
     }
@@ -158,10 +159,10 @@ sealed class LookPanel : UserControl
         switchRow.Visible = sameAs != null;
         // sameAs comes as "Same as Bosses" / "Same as their categories"
         var parent = sameAs == null ? "" : sameAs.StartsWith("Same as ") ? sameAs[8..] : sameAs;
-        var whose = parent == "their categories" ? "their categories' looks" : $"the {parent} look";
+        var whose = parent == "their categories" ? Tr("their categories' looks") : Tf("the {0} look", parent);
         follows = sameAs != null && !isOwn;
-        followText.Text = follows ? $"Uses {whose} - change anything to give it its own." : "Own look ·";
-        backLink.Text = $"use {whose} again";
+        followText.Text = follows ? Tf("Uses {0} - change anything to give it its own.", whose) : Tr("Own look ·");
+        backLink.Text = Tf("use {0} again", whose);
         backLink.Visible = !follows;
         Editor.Icons3D = icons3D;
         Editor.Value = look;

@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+using static ItemFinder.Loc;
+using System.Diagnostics;
 
 namespace ItemFinder;
 
@@ -9,6 +10,7 @@ public sealed class MainForm : Form
     readonly Settings settings = Settings.Load();
     Project project = new();
     GameData? game;
+    GameIndex? index;
     List<Category> cats = new();
     bool filling;
     /// <summary>Entries in other categories that share a model with an entry (e.g. Carrot in XP plants and in
@@ -38,24 +40,24 @@ public sealed class MainForm : Form
 
     bool IsTicked(Entry e) => e.Group != null ? e.Group.Any(IsTicked) : project.Selected.Contains(e.Id);
 
-    readonly TreeView catTree = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10f), HideSelection = false, ShowLines = false, FullRowSelect = true, ItemHeight = 22 };
-    static readonly Font SectionFont = new("Segoe UI", 10f, FontStyle.Bold);
-    readonly Label catTitle = new() { UseMnemonic = false, Dock = DockStyle.Top, Height = 28, Font = new Font("Segoe UI", 11f, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
+    readonly TreeView catTree = new() { Dock = DockStyle.Fill, Font = new Font(Loc.UiFont, 10f), HideSelection = false, ShowLines = false, FullRowSelect = true, ItemHeight = 22 };
+    static readonly Font SectionFont = new(Loc.UiFont, 10f, FontStyle.Bold);
+    readonly Label catTitle = new() { UseMnemonic = false, Dock = DockStyle.Top, Height = 28, Font = new Font(Loc.UiFont, 11f, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
     readonly Label catDesc = new() { UseMnemonic = false, Dock = DockStyle.Top, Height = 66, ForeColor = Color.DimGray };
     // the look of what is picked (category, items or a part), on the right; changes apply at once
     readonly LookPanel inspector = new() { Dock = DockStyle.Fill };
     readonly Panel logPanel = new() { Dock = DockStyle.Bottom, Height = 130, Visible = false, Padding = new Padding(8, 0, 8, 4) };
     Button? buildButton;
-    readonly ToolStripMenuItem keepItem = new("Keep other mods' changes");
+    readonly ToolStripMenuItem keepItem = new(Tr("Keep other mods' changes"));
     /// <summary>Which game install is used (Steam or Microsoft Store / Game Pass) - click to pick another.</summary>
-    readonly ToolStripMenuItem gameItem = new("Game folder...");
-    readonly TextBox search = new() { PlaceholderText = "Search all items...", Width = 190, Margin = new Padding(3, 6, 3, 3) };
+    readonly ToolStripMenuItem gameItem = new(Tr("Game folder..."));
+    readonly TextBox search = new() { PlaceholderText = Tr("Search all items..."), Width = 190, Margin = new Padding(3, 6, 3, 3) };
     /// <summary>Filter chips over the list (what is shown, with how many): All / Selected / Own look / Has parts.</summary>
-    readonly Seg filterChips = new("All", "Selected", "Own look", "Has parts") { Selected = 0, Margin = new Padding(8, 6, 6, 3) };
+    readonly Seg filterChips = new(Tr("All"), Tr("Selected"), Tr("Own look"), Tr("Has parts")) { Selected = 0, Margin = new Padding(8, 6, 6, 3) };
     int ListFilter => Math.Max(0, filterChips.Selected);
     /// <summary>Under the list when several rows are picked: what to do with all of them.</summary>
     readonly FlowLayoutPanel bulkBar = new() { Dock = DockStyle.Bottom, Height = 36, Visible = false, WrapContents = false, Padding = new Padding(2, 3, 0, 0) };
-    readonly Label bulkCount = new() { AutoSize = true, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), Margin = new Padding(4, 7, 10, 0), UseMnemonic = false };
+    readonly Label bulkCount = new() { AutoSize = true, Font = new Font(Loc.UiFont, 9.5f, FontStyle.Bold), Margin = new Padding(4, 7, 10, 0), UseMnemonic = false };
     /// <summary>Undo / redo: the setup (as JSON) before each stored change.</summary>
     readonly List<string> undo = new(), redo = new();
     string? lastSaved;
@@ -67,7 +69,7 @@ public sealed class MainForm : Form
     readonly Label listInfo = new() { Dock = DockStyle.Bottom, Height = 22, ForeColor = Color.DimGray };
     readonly TextBox logBox = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9f), BackColor = SystemColors.Window };
     readonly Label status = new() { Dock = DockStyle.Bottom, Height = 22, Padding = new Padding(4, 3, 0, 0), UseMnemonic = false };
-    readonly Label installState = new() { Dock = DockStyle.Top, Height = 24, Padding = new Padding(4, 2, 0, 0), Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), UseMnemonic = false };
+    readonly Label installState = new() { Dock = DockStyle.Top, Height = 24, Padding = new Padding(4, 2, 0, 0), Font = new Font(Loc.UiFont, 9.5f, FontStyle.Bold), UseMnemonic = false };
     readonly List<Button> actionButtons = new();
 
     /// <summary>The picked category; null when a section (ITEMS / EVENTS / ENEMIES) is picked.</summary>
@@ -92,19 +94,21 @@ public sealed class MainForm : Form
     readonly FlowLayoutPanel rail = new() { Dock = DockStyle.Left, Width = 80, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(4, 8, 4, 0), BackColor = Ui.Panel };
     /// <summary>Bottom bar: "★ N selected".</summary>
     readonly FlowLayoutPanel tray = new() { Dock = DockStyle.Left, AutoSize = true, WrapContents = false, Padding = new Padding(0, 0, 16, 0) };
-    readonly LinkLabel picksLink = new() { AutoSize = true, Margin = new Padding(0, 10, 10, 0), Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), LinkBehavior = LinkBehavior.HoverUnderline, LinkColor = Ui.Fg, ActiveLinkColor = Ui.Accent };
+    readonly LinkLabel picksLink = new() { AutoSize = true, Margin = new Padding(0, 10, 10, 0), Font = new Font(Loc.UiFont, 9.5f, FontStyle.Bold), LinkBehavior = LinkBehavior.HoverUnderline, LinkColor = Ui.Fg, ActiveLinkColor = Ui.Accent };
     readonly Label catCrumb = new() { UseMnemonic = false, Dock = DockStyle.Top, Height = 20, ForeColor = Ui.Muted, TextAlign = ContentAlignment.BottomLeft };
     /// <summary>The tree's contents are being swapped: its select events are not the user's.</summary>
     bool switchingRoot;
-    readonly Button catLookButton = new() { Text = "Category look...", AutoSize = true, Height = 30, Margin = new Padding(12, 2, 4, 2) };
-    readonly ToolStripMenuItem darkItem = new("Dark mode") { CheckOnClick = true };
-    readonly ToolStripMenuItem compactItem = new("Compact rows") { CheckOnClick = true };
+    readonly Button catLookButton = new() { Text = Tr("Category look..."), AutoSize = true, Height = 30, Margin = new Padding(12, 2, 4, 2) };
+    readonly ToolStripMenuItem darkItem = new(Tr("Dark mode")) { CheckOnClick = true };
+    readonly ToolStripMenuItem compactItem = new(Tr("Compact rows")) { CheckOnClick = true };
+    /// <summary>View > Language: item names (and, later, the window's text) in one of the game's languages.</summary>
+    readonly ToolStripMenuItem languageMenu = new(Tr("Language"));
     /// <summary>The list's sort: a column (-1 = the catalogue's own order) and the direction; a header click cycles
     /// up / down / off. Parts and ingredients stay under their row.</summary>
     MenuStrip? menu;
     int sortCol = -1;
     bool sortDesc;
-    static readonly string[] ColumnNames = { "Item", "Category", "Look (click to edit)", "Details" };
+    static readonly string[] ColumnNames = { Tr("Item"), Tr("Category"), Tr("Look (click to edit)"), Tr("Details") };
     /// <summary>The pop-up look editor (made the first time it opens).</summary>
     Form? lookPopup;
     Panel? lookPopupInside;
@@ -145,13 +149,13 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "ESP Maker " + AppVersion;
+        Text = Tr("ESP Maker ") + AppVersion;
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { } // the exe's own icon
         var area = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1600, 930);
         Width = Math.Min(1560, area.Width);
         Height = Math.Min(930, area.Height); // tall enough to list every category without scrolling
         StartPosition = FormStartPosition.CenterScreen;
-        Font = new Font("Segoe UI", 9.5f);
+        Font = new Font(Loc.UiFont, 9.5f);
 
         // left: categories, and what the picked one is
         // the rail picks the section (Your picks / Items / Junk / Events / Enemies); the tree lists only its categories
@@ -188,14 +192,26 @@ public sealed class MainForm : Form
         catBox.Controls.Add(infoBox);
         left.Controls.Add(catBox);
         left.Controls.Add(new Panel { Dock = DockStyle.Left, Width = 1, BackColor = Ui.Line });
-        left.Controls.Add(rail);
+        // the rail's bottom: the mod manager (not a section, so it never shows as picked)
+        var railBox = new Panel { Dock = DockStyle.Left, Width = rail.Width, BackColor = Ui.Panel };
+        rail.Dock = DockStyle.Fill;
+        var modsButton = new RailButton { Icon = "mods", Dock = DockStyle.Fill, AccessibleName = "Mod manager" };
+        modsButton.Set(Tr("Mods"), 0, false);
+        modsButton.Click += (_, _) => OpenModManager();
+        new ToolTip().SetToolTip(modsButton, Tr("Mod manager: turn the game's mods on / off and set their load order"));
+        railBox.Controls.Add(rail);
+        var modsHolder = new Panel { Dock = DockStyle.Bottom, Height = 72, Padding = new Padding(4, 0, 4, 8), BackColor = Ui.Panel };
+        modsHolder.Controls.Add(modsButton);
+        railBox.Controls.Add(modsHolder);
+        left.Controls.Add(railBox);
         left.Resize += (_, _) => FitInfo();
 
         // middle: search + item list (click a row: its look on the right)
         var middle = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
-        var top = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 38, WrapContents = false };
-        var tickAll = Btn("Select all", (_, _) => TickShown(true));
-        var untickAll = Btn("Deselect all", (_, _) => TickShown(false));
+        // wraps to a second row when the buttons don't fit (longer languages, a narrow window)
+        var top = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 38, WrapContents = true, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(0, 38) };
+        var tickAll = Btn(Tr("Select all"), (_, _) => TickShown(true));
+        var untickAll = Btn(Tr("Deselect all"), (_, _) => TickShown(false));
         // a ListView with checkboxes also flips the box on double-click; only a click on the box itself should
         bool doubleClick = false;
         list.DoubleClick += (_, _) =>
@@ -231,7 +247,7 @@ public sealed class MainForm : Form
             }
             // the look cell is a button: a "›" on every row, "Edit ›" and a lit cell under the mouse
             bool lookHot = e.ColumnIndex == 2 && hoverLink == (e.ItemIndex, 2);
-            string hint = e.Item.Tag is Category ? "" : lookHot ? "Edit ›" : "›";
+            string hint = e.Item.Tag is Category ? "" : lookHot ? Tr("Edit ›") : "›";
             int hintW = e.ColumnIndex == 2 ? TextRenderer.MeasureText(e.Graphics, hint, list.Font, Size.Empty, flags).Width + 8 : 0;
             var cellBg = selected ? (list.Focused ? SystemColors.Highlight : Ui.Sel) : lookHot ? Ui.Hover : list.BackColor;
             void EditHint()
@@ -312,7 +328,7 @@ public sealed class MainForm : Form
             int nameEnd = badgeRect.Left;
             if (shared > 0)
             {
-                var mark = $"+{shared} shared";
+                var mark = Tf("+{0} shared", shared);
                 int mw = TextRenderer.MeasureText(e.Graphics, mark, SharedFont).Width;
                 var markRect = new Rectangle(badgeRect.Left - mw - 2, row.Top, mw, row.Height);
                 TextRenderer.DrawText(e.Graphics, mark, SharedFont, markRect, lit ? SystemColors.HighlightText : Ui.Muted, flags);
@@ -375,26 +391,26 @@ public sealed class MainForm : Form
         };
         // right-click: copy / paste looks, tick / untick, back to the category's look
         var rowMenu = new ContextMenuStrip();
-        var copyItem = new ToolStripMenuItem("Copy look", null, (_, _) => CopyLook()) { ShortcutKeyDisplayString = "Ctrl+C" };
-        var pasteItem = new ToolStripMenuItem("Paste look", null, (_, _) => PasteLook()) { ShortcutKeyDisplayString = "Ctrl+V" };
-        var tickItem = new ToolStripMenuItem("Select", null, (_, _) => TickSelected(true));
-        var untickItem = new ToolStripMenuItem("Deselect", null, (_, _) => TickSelected(false));
-        var sameItem = new ToolStripMenuItem("Use the category's look", null, (_, _) => { ResetColours(); ShowInspector(); });
-        var editItem = new ToolStripMenuItem("Edit look...", null, (_, _) => EditLookOfSelection()) { Font = new Font(Font, FontStyle.Bold) };
+        var copyItem = new ToolStripMenuItem(Tr("Copy look"), null, (_, _) => CopyLook()) { ShortcutKeyDisplayString = Tr("Ctrl+C") };
+        var pasteItem = new ToolStripMenuItem(Tr("Paste look"), null, (_, _) => PasteLook()) { ShortcutKeyDisplayString = Tr("Ctrl+V") };
+        var tickItem = new ToolStripMenuItem(Tr("Select"), null, (_, _) => TickSelected(true));
+        var untickItem = new ToolStripMenuItem(Tr("Deselect"), null, (_, _) => TickSelected(false));
+        var sameItem = new ToolStripMenuItem(Tr("Use the category's look"), null, (_, _) => { ResetColours(); ShowInspector(); });
+        var editItem = new ToolStripMenuItem(Tr("Edit look..."), null, (_, _) => EditLookOfSelection()) { Font = new Font(Font, FontStyle.Bold) };
         rowMenu.Items.AddRange(new ToolStripItem[] { editItem, new ToolStripSeparator(), copyItem, pasteItem, sameItem, new ToolStripSeparator(), tickItem, untickItem });
         list.ContextMenuStrip = rowMenu;
         rowMenu.Opening += (_, e) =>
         {
             var sel = SelectedEntries();
             if (sel.Count == 0) { e.Cancel = true; return; }
-            string n = sel.Count > 1 ? $" {sel.Count} items" : "";
-            editItem.Text = sel.Count > 1 ? $"Edit look of {sel.Count} items..." : "Edit look...";
+            string n = sel.Count > 1 ? Tf(" {0} items", sel.Count) : "";
+            editItem.Text = sel.Count > 1 ? Tf("Edit look of {0} items...", sel.Count) : Tr("Edit look...");
             copyItem.Enabled = sel.Count == 1 && sel[0].Group == null;
-            copyItem.Text = copyItem.Enabled ? $"Copy look of {sel[0].Name}" : "Copy look (click one item)";
+            copyItem.Text = copyItem.Enabled ? Tf("Copy look of {0}", sel[0].Name) : Tr("Copy look (click one item)");
             pasteItem.Enabled = copiedLook != null;
-            pasteItem.Text = copiedLook != null ? $"Paste look of {copiedFrom}{(sel.Count > 1 ? " onto" + n : "")}" : "Paste look (copy one first)";
+            pasteItem.Text = copiedLook != null ? Tf("Paste look of {0}{1}", copiedFrom, (sel.Count > 1 ? Tr(" onto") + n : "")) : Tr("Paste look (copy one first)");
             sameItem.Enabled = sel.SelectMany(Leaves).Any(x => project.Overrides.ContainsKey(x.Id));
-            tickItem.Text = "Select" + n; untickItem.Text = "Deselect" + n;
+            tickItem.Text = Tr("Select") + n; untickItem.Text = Tr("Deselect") + n;
             tickItem.Enabled = sel.Any(x => !IsTicked(x) || IsPartial(x));
             untickItem.Enabled = sel.Any(IsTicked);
         };
@@ -410,7 +426,7 @@ public sealed class MainForm : Form
             pickTimer.Stop();
             ShowInspector();
             int n = list.SelectedItems.Cast<ListViewItem>().Count(li => li.Tag is Entry);
-            bulkCount.Text = $"{n} picked:";
+            bulkCount.Text = Tf("{0} picked:", n);
             bulkBar.Visible = n > 1;
         };
         list.SelectedIndexChanged += (_, _) => { if (!filling) { pickTimer.Stop(); pickTimer.Start(); } };
@@ -428,10 +444,10 @@ public sealed class MainForm : Form
         bulkBar.Controls.AddRange(new Control[]
         {
             bulkCount,
-            BulkButton("Edit look...", EditLookOfSelection),
-            BulkButton("Use the category's look", () => { ResetColours(); ShowInspector(); }),
-            BulkButton("Select", () => TickSelected(true)),
-            BulkButton("Deselect", () => TickSelected(false)),
+            BulkButton(Tr("Edit look..."), EditLookOfSelection),
+            BulkButton(Tr("Use the category's look"), () => { ResetColours(); ShowInspector(); }),
+            BulkButton(Tr("Select"), () => TickSelected(true)),
+            BulkButton(Tr("Deselect"), () => TickSelected(false)),
         });
         bulkBar.BackColor = Ui.Panel;
         list.Columns.Add(ColumnNames[0], 300);
@@ -453,7 +469,7 @@ public sealed class MainForm : Form
         middle.Controls.Add(listInfo);
         middle.Controls.Add(top);
         // above the list: section, then the category's name (layout A)
-        catTitle.Font = new Font("Segoe UI", 13f, FontStyle.Bold);
+        catTitle.Font = new Font(Loc.UiFont, 13f, FontStyle.Bold);
         catTitle.Height = 30;
         catTitle.ForeColor = Ui.Fg;
         middle.Controls.Add(catTitle);
@@ -490,51 +506,50 @@ public sealed class MainForm : Form
         // bottom: whether the game shows the current choices, and the one button that makes it so
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 46, Padding = new Padding(10, 6, 10, 6) };
         var actions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, FlowDirection = FlowDirection.RightToLeft };
-        var install = buildButton = new Button { Text = "Build && save", AutoSize = true, Height = 32, Padding = new Padding(14, 0, 14, 0), Font = new Font(Font, FontStyle.Bold) };
+        var install = buildButton = new Button { Text = Tr("Build && save"), AutoSize = true, Height = 32, Padding = new Padding(14, 0, 14, 0), Font = new Font(Font, FontStyle.Bold) };
         install.Click += (_, _) => BuildSave();
-        var import = new Button { Text = "Import .ba2...", AutoSize = true, Height = 32 };
+        var import = new Button { Text = Tr("Import .ba2..."), AutoSize = true, Height = 32 };
         import.Click += (_, _) => ImportBa2();
         gameItem.Click += (_, _) => PickGameFolder();
         keepItem.CheckOnClick = true;
         keepItem.CheckedChanged += (_, _) => { if (!filling) { project.KeepOtherMods = keepItem.Checked; Save(); } };
-        keepItem.ToolTipText = "On: if another mod (e.g. another ESP mod) already changed an item's model, keep its changes and add the glow/beam on top.\n" +
-                               "Off: start from the game's original model - for those items this mod's look replaces the other mod's.";
+        keepItem.ToolTipText = Tr("On: if another mod (e.g. another ESP mod) already changed an item's model, keep its changes and add the glow/beam on top.\nOff: start from the game's original model - for those items this mod's look replaces the other mod's.");
         // the menu bar (was the "More" button); shortcuts are only shown - the window's KeyDown handles them,
         // so Ctrl+Z / Ctrl+C still work normally while typing in a box
         static ToolStripMenuItem Menu(string text, params ToolStripItem[] items) { var m = new ToolStripMenuItem(text); m.DropDownItems.AddRange(items); return m; }
         static ToolStripMenuItem Item(string text, Action act, string? keys = null) => new(text, null, (_, _) => act()) { ShortcutKeyDisplayString = keys };
-        var logItem = Item("Show log", () => logPanel.Visible = !logPanel.Visible);
+        var logItem = Item(Tr("Show log"), () => logPanel.Visible = !logPanel.Visible);
         logPanel.VisibleChanged += (_, _) => logItem.Checked = logPanel.Visible;
-        var menuBar = new MenuStrip { Dock = DockStyle.Top, Padding = new Padding(4, 2, 0, 2), Font = new Font("Segoe UI", 9.5f) };
+        var menuBar = new MenuStrip { Dock = DockStyle.Top, Padding = new Padding(4, 2, 0, 2), Font = new Font(Loc.UiFont, 9.5f) };
         menuBar.Items.AddRange(new ToolStripItem[]
         {
-            Menu("&File",
-                Item("Build && save", BuildSave),
-                Item("Import .ba2...", ImportBa2),
+            Menu(Tr("&File"),
+                Item(Tr("Build && save"), BuildSave),
+                Item(Tr("Import .ba2..."), ImportBa2),
                 new ToolStripSeparator(),
-                Item("Start empty...", StartEmpty),
-                Item("Open project...", LoadSetup),
-                Item("Save project...", SaveSetup),
+                Item(Tr("Start empty..."), StartEmpty),
+                Item(Tr("Open project..."), LoadSetup),
+                Item(Tr("Save project..."), SaveSetup),
                 new ToolStripSeparator(),
                 Item("Open the output folder", () => { Directory.CreateDirectory(OutputDir); Process.Start("explorer.exe", OutputDir); }),
-                Item("Uninstall from the game...", Uninstall),
+                Item(Tr("Uninstall from the game..."), Uninstall),
                 new ToolStripSeparator(),
-                Item("Exit", Close)),
-            Menu("&Edit",
-                Item("Undo", () => UndoRedo(true), "Ctrl+Z"),
-                Item("Redo", () => UndoRedo(false), "Ctrl+Y"),
+                Item(Tr("Exit"), Close)),
+            Menu(Tr("&Edit"),
+                Item(Tr("Undo"), () => UndoRedo(true), Tr("Ctrl+Z")),
+                Item(Tr("Redo"), () => UndoRedo(false), Tr("Ctrl+Y")),
                 new ToolStripSeparator(),
-                Item("Copy look", CopyLook, "Ctrl+C"),
-                Item("Paste look", PasteLook, "Ctrl+V"),
+                Item(Tr("Copy look"), CopyLook, Tr("Ctrl+C")),
+                Item(Tr("Paste look"), PasteLook, Tr("Ctrl+V")),
                 new ToolStripSeparator(),
-                Item("Jump to...", () => QuickJump(), "Ctrl+K"),
-                Item("Search", () => search.Focus(), "Ctrl+F"),
+                Item(Tr("Jump to..."), () => QuickJump(), Tr("Ctrl+K")),
+                Item(Tr("Search"), () => search.Focus(), Tr("Ctrl+F")),
                 new ToolStripSeparator(),
-                Item("Add presets...", RunPresets),
-                Item("Colour by priority...", PriorityColours)),
-            Menu("&View", darkItem, compactItem, new ToolStripSeparator(), logItem),
-            Menu("&Options", keepItem, gameItem),
-            Menu("&Help", Item("Show the tour...", () => { using var t = new Tutorial(Font); t.ShowDialog(this); })),
+                Item(Tr("Add presets..."), RunPresets),
+                Item(Tr("Colour by priority..."), PriorityColours)),
+            Menu(Tr("&View"), darkItem, compactItem, languageMenu, new ToolStripSeparator(), logItem),
+            Menu(Tr("&Options"), Item(Tr("Mod manager..."), OpenModManager), new ToolStripSeparator(), keepItem, gameItem),
+            Menu(Tr("&Help"), Item(Tr("Show the tour..."), () => { using var t = new Tutorial(Font); t.ShowDialog(this); })),
         });
         MainMenuStrip = menuBar;
         menu = menuBar;
@@ -542,9 +557,20 @@ public sealed class MainForm : Form
         darkItem.CheckedChanged += (_, _) => { settings.Dark = darkItem.Checked; settings.Save(); ApplyTheme(); };
         compactItem.Checked = settings.Compact;
         compactItem.CheckedChanged += (_, _) => { settings.Compact = compactItem.Checked; settings.Save(); ApplyDensity(); };
-        var logLink = new LinkLabel { Text = "Show log", AutoSize = true, Padding = new Padding(0, 8, 12, 0) };
-        logLink.LinkClicked += (_, _) => { logPanel.Visible = !logPanel.Visible; logLink.Text = logPanel.Visible ? "Hide log" : "Show log"; };
-        logPanel.VisibleChanged += (_, _) => logLink.Text = logPanel.Visible ? "Hide log" : "Show log";
+        foreach (var (code, name) in Loc.Languages.Prepend(("auto", Tr("Same as the game"))))
+        {
+            var li = new ToolStripMenuItem(name) { Tag = code };
+            li.Click += (_, _) => SetLanguage(code);
+            languageMenu.DropDownItems.Add(li);
+            if (code == "auto") languageMenu.DropDownItems.Add(new ToolStripSeparator());
+        }
+        languageMenu.DropDownOpening += (_, _) =>
+        {
+            foreach (var li in languageMenu.DropDownItems.OfType<ToolStripMenuItem>()) li.Checked = (string)li.Tag! == settings.Language;
+        };
+        var logLink = new LinkLabel { Text = Tr("Show log"), AutoSize = true, Padding = new Padding(0, 8, 12, 0) };
+        logLink.LinkClicked += (_, _) => { logPanel.Visible = !logPanel.Visible; logLink.Text = logPanel.Visible ? Tr("Hide log") : Tr("Show log"); };
+        logPanel.VisibleChanged += (_, _) => logLink.Text = logPanel.Visible ? Tr("Hide log") : Tr("Show log");
         actions.Controls.AddRange(new Control[] { install, import, logLink });
         installState.Dock = DockStyle.Fill;
         installState.TextAlign = ContentAlignment.MiddleLeft;
@@ -576,7 +602,7 @@ public sealed class MainForm : Form
                 UndoRedo(e.KeyCode == Keys.Z && !e.Shift);
             }
         };
-        search.PlaceholderText = "Search everything (Ctrl+F)";
+        search.PlaceholderText = Tr("Search everything (Ctrl+F)");
         search.Width = 230;
         var searchTimer = new System.Windows.Forms.Timer { Interval = 250 };
         searchTimer.Tick += (_, _) => { searchTimer.Stop(); FillList(); ShowInspector(); };
@@ -694,7 +720,7 @@ public sealed class MainForm : Form
     void UndoRedo(bool back)
     {
         var from = back ? undo : redo;
-        if (from.Count == 0 || lastSaved == null) { Status(back ? "Nothing to undo." : "Nothing to redo."); return; }
+        if (from.Count == 0 || lastSaved == null) { Status(back ? Tr("Nothing to undo.") : Tr("Nothing to redo.")); return; }
         var to = from[^1];
         from.RemoveAt(from.Count - 1);
         (back ? redo : undo).Add(lastSaved);
@@ -702,7 +728,7 @@ public sealed class MainForm : Form
         try { UseProject(System.Text.Json.JsonSerializer.Deserialize<Project>(to, Json.Options)!); ShowInspector(); }
         finally { restoring = false; }
         lastUndoPoint = DateTime.MinValue;
-        Status(back ? $"Undone ({undo.Count} more to undo)." : "Redone.");
+        Status(back ? Tf("Undone ({0} more to undo).", undo.Count) : Tr("Redone."));
     }
 
     /// <summary>The key goes to a box being typed in (its own undo / copy), not to the window.</summary>
@@ -722,7 +748,7 @@ public sealed class MainForm : Form
     void ShowInstallState()
     {
         var mods = OwnMods();
-        installState.Text = mods.Count == 0 ? "Select what you want to find, then click \"Build & save\"." : "In the game: " + string.Join(", ", mods);
+        installState.Text = mods.Count == 0 ? Tr("Select what you want to find, then click \"Build & save\".") : Tr("In the game: ") + string.Join(", ", mods);
         installState.ForeColor = mods.Count == 0 ? Color.DimGray : Color.SeaGreen;
     }
 
@@ -732,7 +758,7 @@ public sealed class MainForm : Form
     {
         using var dlg = new FolderBrowserDialog
         {
-            Description = "Pick the Fallout 76 folder", UseDescriptionForTitle = true,
+            Description = Tr("Pick the Fallout 76 folder"), UseDescriptionForTitle = true,
             InitialDirectory = game?.GameFolder ?? "",
         };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
@@ -745,7 +771,7 @@ public sealed class MainForm : Form
         Save();
         settings.GameFolder = picked;
         settings.Save();
-        Box("ESP Maker restarts now to read that game.", Text);
+        Box(Tr("ESP Maker restarts now to read that game."), Text);
         Application.Restart();
         Environment.Exit(0);
     }
@@ -759,7 +785,7 @@ public sealed class MainForm : Form
         {
             var to = Path.Combine(Directory.CreateDirectory(OutputDir).FullName, "my mods");
             Directory.Move(old, to);
-            StartNotes.Add($"Your mods' setups moved to {to}: open them with File > Open project, or import the .ba2.");
+            StartNotes.Add(Tf("Your mods' setups moved to {0}: open them with File > Open project, or import the .ba2.", to));
         }
         catch (Exception ex) { StartNotes.Add($"Couldn't move {old}: {ex.Message}"); }
     }
@@ -801,13 +827,13 @@ public sealed class MainForm : Form
         var folder = GameData.FindGameFolder(settings.GameFolder);
         if (folder == null)
         {
-            using var dlg = new FolderBrowserDialog { Description = "Where is Fallout 76 installed?", UseDescriptionForTitle = true };
+            using var dlg = new FolderBrowserDialog { Description = Tr("Where is Fallout 76 installed?"), UseDescriptionForTitle = true };
             if (dlg.ShowDialog(this) == DialogResult.OK && GameData.GameFolderIn(dlg.SelectedPath) is string picked)
             {
                 settings.GameFolder = folder = picked;
                 settings.Save();
             }
-            else { Status("Fallout 76 not found."); return; }
+            else { Status(Tr("Fallout 76 not found.")); return; }
         }
         try
         {
@@ -816,7 +842,10 @@ public sealed class MainForm : Form
             {
                 var g = GameData.Load(folder, exclude, Status);
                 var idx = GameIndex.Load(g, Status);
-                Status("Sorting items into categories...");
+                index = idx;
+                Status(Tr("Reading names in the chosen language..."));
+                try { Loc.LoadNames(g, idx, Loc.UiLang); } catch { } // a broken strings file: English names
+                Status(Tr("Sorting items into categories..."));
                 bool Exists(string m) => g.Find(@"meshes\" + m) != null;
                 return (g, EventCatalog.BuildAll(idx, Exists, g.AllPaths));
             });
@@ -826,7 +855,7 @@ public sealed class MainForm : Form
             int dropped = 0;
             foreach (var c in cats.Where(c => c.Section is "ITEMS" or "JUNK")) dropped += c.Entries.RemoveAll(e => e.Spots == 0);
             cats.RemoveAll(c => c.Entries.Count == 0);
-            if (dropped > 0) Log($"{dropped:N0} things the game never places in the world (only crafted or looted) are left out - they can't be highlighted.");
+            if (dropped > 0) Log(Tf("{0:N0} things the game never places in the world (only crafted or looted) are left out - they can't be highlighted.", dropped));
             var kept = cats.SelectMany(c => c.Entries).ToHashSet();
             foreach (var c in cats.Where(c => c.Groups))
             {
@@ -859,14 +888,14 @@ public sealed class MainForm : Form
             // start on Your picks; with nothing ticked yet (a new user) on the first category instead
             SelectNode(project.Selected.Count > 0 ? picksNode : FirstCat(roots[1]));
             int ticked = cats.Sum(TickedIn);
-            Status($"Ready - {ShownCats.Sum(c => c.Entries.Count):N0} things to choose from ({game.Edition}: {game.GameFolder}).");
-            Log($"Fallout 76 ({game.Edition}) in {game.GameFolder}; mods are listed in {game.IniPath}.");
-            if (ticked > 0) Log($"Your last setup was loaded: {ticked} item(s) selected.");
-            Log($"ESP Maker {AppVersion}");
+            Status(Tf("Ready - {0:N0} things to choose from ({1}: {2}).", ShownCats.Sum(c => c.Entries.Count), game.Edition, game.GameFolder));
+            Log(Tf("Fallout 76 ({0}) in {1}; mods are listed in {2}.", game.Edition, game.GameFolder, game.IniPath));
+            if (ticked > 0) Log(Tf("Your last setup was loaded: {0} item(s) selected.", ticked));
+            Log(Tf("ESP Maker {0}", AppVersion));
             foreach (var note in StartNotes) Log(note);
-            gameItem.Text = $"Game: {game.Edition} - change...";
+            gameItem.Text = Tf("Game: {0} - change...", game.Edition);
             ShowInstallState();
-            if (game.OwnInstalled.Count > 0) Log($"Installed now: {string.Join(", ", game.OwnInstalled)} (not used as a starting point - rebuilds start from the original models).");
+            if (game.OwnInstalled.Count > 0) Log(Tf("Installed now: {0} (not used as a starting point - rebuilds start from the original models).", string.Join(", ", game.OwnInstalled)));
             SetBusy(false);
             // a new user: the tour, once
             if (!settings.TourSeen && project.Selected.Count == 0 && !NoTour)
@@ -876,7 +905,7 @@ public sealed class MainForm : Form
                 BeginInvoke(() => { using (var t = new Tutorial(Font)) t.ShowDialog(this); RunPresets(); }); // then the presets to start from
             }
         }
-        catch (Exception ex) { Status("Error: " + ex.Message); Log(ex.ToString()); }
+        catch (Exception ex) { Status(Tr("Error: ") + ex.Message); Log(ex.ToString()); }
     }
 
     void AddSectionNode(string section, IEnumerable<Category> sectionCats)
@@ -976,7 +1005,7 @@ public sealed class MainForm : Form
         foreach (RailButton b in rail.Controls)
         {
             var root = (TreeNode)b.Tag!;
-            string name = root.Tag is Picks ? "Picks" : root.Tag as string == Catalog.AllSection ? "Other" : Title((string)root.Tag!);
+            string name = root.Tag is Picks ? Tr("Picks") : root.Tag as string == Catalog.AllSection ? Tr("Other") : Title((string)root.Tag!);
             // the same counts as the tree's section line (linked twins count in each section they're in)
             int n = root.Tag is Picks ? ticked.Count : cats.Where(c => c.Section == (string)root.Tag!).Sum(TickedIn);
             b.Set(name, n, root == shownRoot);
@@ -985,7 +1014,7 @@ public sealed class MainForm : Form
     }
 
     /// <summary>The bottom bar's "★ N selected".</summary>
-    void UpdateTray(List<Entry> ticked) => picksLink.Text = $"★ {ticked.Count:N0} selected";
+    void UpdateTray(List<Entry> ticked) => picksLink.Text = Tf("★ {0:N0} selected", ticked.Count);
 
     /// <summary>The category list (layout A): the section as a heading, then one row per category with its
     /// counts on the right - amber when something in it is selected.</summary>
@@ -1006,7 +1035,7 @@ public sealed class MainForm : Form
             var arrow = new Rectangle(row.Left + 8, row.Top, 12, row.Height);
             TextRenderer.DrawText(g, n.IsExpanded ? "▾" : "▸", GroupFont, arrow, Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
             var label = new Rectangle(arrow.Right + 2, row.Top + 3, row.Width - arrow.Right - 50, row.Height - 3);
-            TextRenderer.DrawText(g, grp.Name.ToUpperInvariant(), GroupFont, label, Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+            TextRenderer.DrawText(g, Loc.Name(grp.Name).ToUpper(), GroupFont, label, Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
             if (t > 0)
                 TextRenderer.DrawText(g, t.ToString("N0"), GroupFont, new Rectangle(row.Right - 60, row.Top + 3, 50, row.Height - 3), Ui.Accent,
                                       TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
@@ -1016,20 +1045,20 @@ public sealed class MainForm : Form
         {
             // the heading: section name, then how much of it is selected
             int total, all;
-            if (n.Tag is Picks) { total = Ticked().Count; all = 0; name = "Your picks"; }
+            if (n.Tag is Picks) { total = Ticked().Count; all = 0; name = Tr("Your picks"); }
             else
             {
                 var sc = cats.Where(c => c.Section == (string)n.Tag!).ToList();
                 total = sc.Sum(TickedIn); all = sc.Sum(c => c.Entries.Count);
-                name = n.Tag as string == Catalog.AllSection ? "Everything else" : Title((string)n.Tag!);
+                name = n.Tag as string == Catalog.AllSection ? Tr("Everything else") : Title((string)n.Tag!);
             }
-            count = all > 0 ? $"{total:N0} of {all:N0} selected" : $"{total:N0} selected";
+            count = all > 0 ? Tf("{0:N0} of {1:N0} selected", total, all) : Tf("{0:N0} selected", total);
             lit = sel;
         }
         else if (n.Tag is Category c)
         {
             int t = TickedIn(c);
-            name = c.Name;
+            name = c.Shown;
             count = t > 0 ? $"{t} / {c.Entries.Count}" : $"{c.Entries.Count}";
             lit = t > 0;
         }
@@ -1050,7 +1079,7 @@ public sealed class MainForm : Form
         }
         g.SmoothingMode = g2;
         var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
-        using var countFont = new Font("Segoe UI", 8.5f, lit && n.Parent != null ? FontStyle.Bold : FontStyle.Regular);
+        using var countFont = new Font(Loc.UiFont, 8.5f, lit && n.Parent != null ? FontStyle.Bold : FontStyle.Regular);
         var countFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.Right;
         var cw = TextRenderer.MeasureText(g, count, countFont, Size.Empty, countFlags).Width;
         var countBox = new Rectangle(row.Right - cw - 10, row.Top, cw + 4, row.Height);
@@ -1067,9 +1096,9 @@ public sealed class MainForm : Form
         var nameBox = new Rectangle(nameLeft, row.Top, countBox.Left - nameLeft - 4, row.Height);
         TextRenderer.DrawText(g, name, nameFont, nameBox, Ui.Fg, flags);
     }
-    static readonly Font SelectedNameFont = new("Segoe UI", 10f, FontStyle.Bold);
-    static readonly Font GroupFont = new("Segoe UI", 8f, FontStyle.Bold);
-    static readonly Font SharedFont = new("Segoe UI", 8f);
+    static readonly Font SelectedNameFont = new(Loc.UiFont, 10f, FontStyle.Bold);
+    static readonly Font GroupFont = new(Loc.UiFont, 8f, FontStyle.Bold);
+    static readonly Font SharedFont = new(Loc.UiFont, 8f);
 
     /// <summary>Categories the tree and the search show: all of them (the "everything else" section is always on).</summary>
     IEnumerable<Category> ShownCats => cats;
@@ -1088,7 +1117,7 @@ public sealed class MainForm : Form
             if (sec.Tag is Picks)
             {
                 var ticked = Ticked();
-                var picksText = $"★ Your picks  ({ticked.Count})      ";
+                var picksText = Tf("★ Your picks  ({0})      ", ticked.Count);
                 if (sec.Text != picksText) sec.Text = picksText;
                 foreach (TreeNode part in sec.Nodes)
                 {
@@ -1112,7 +1141,7 @@ public sealed class MainForm : Form
             }
             var name = sec.Tag as string ?? "";
             // trailing spaces: a bold node font is wider than the tree font and would be clipped
-            var secText = $"{Title(name)}  ({total} of {all:N0} selected)      ";
+            var secText = Tf("{0}  ({1} of {2:N0} selected)      ", Title(name), total, all);
             if (sec.Text != secText) sec.Text = secText;
             MarkSelected(sec, total > 0, SectionFont);
         }
@@ -1150,15 +1179,15 @@ public sealed class MainForm : Form
         return shown;
     }
 
-    static string Title(string section) => section == Catalog.AllSection ? "Everything else"
-        : section.Length == 0 ? "" : section[..1] + section[1..].ToLowerInvariant();
+    static string Title(string section) => section == Catalog.AllSection ? Tr("Everything else")
+        : section.Length == 0 ? "" : Loc.Name(section[..1] + section[1..].ToLowerInvariant());
 
     /// <summary>The small line above the list's title: the section, and how much of the category is selected.</summary>
     void UpdateCrumb()
     {
-        var text = IsPicks ? "Everything selected, from all sections"
-            : CurrentSection is string s ? $"{Title(s)}  ·  every category"
-            : Current is Category c ? $"{Title(c.Section)}  ·  {TickedIn(c)} of {c.Entries.Count} selected" : "";
+        var text = IsPicks ? Tr("Everything selected, from all sections")
+            : CurrentSection is string s ? Tf("{0}  ·  every category", Title(s))
+            : Current is Category c ? Tf("{0}  ·  {1} of {2} selected", Title(c.Section), TickedIn(c), c.Entries.Count) : "";
         if (catCrumb.Text != text) catCrumb.Text = text;
     }
 
@@ -1170,23 +1199,23 @@ public sealed class MainForm : Form
         {
             var part = PicksSection;
             var ticked = Ticked().Where(e => part == null || CatOf(e).Section == part).ToList();
-            catTitle.Text = part == null ? $"Your picks ({ticked.Count})" : $"Your picks: {Title(part)} ({ticked.Count})";
+            catTitle.Text = part == null ? Tf("Your picks ({0})", ticked.Count) : Tf("Your picks: {0} ({1})", Title(part), ticked.Count);
             catDesc.Text = ticked.Count == 0
-                ? "Nothing selected yet. Pick a category above and select what you want to highlight."
-                : "Everything you selected is listed on the right - deselect there to remove it.";
+                ? Tr("Nothing selected yet. Pick a category above and select what you want to highlight.")
+                : Tr("Everything you selected is listed on the right - deselect there to remove it.");
             FitInfo();
             return;
         }
         if (CurrentSection is string s)
         {
             catTitle.Text = Title(s);
-            catDesc.Text = $"Everything in {Title(s)}. Pick one of its categories to see and set that category's look.";
+            catDesc.Text = Tf("Everything in {0}. Pick one of its categories to see and set that category's look.", Title(s));
             FitInfo();
             return;
         }
         if (Current is not Category c) return;
-        catTitle.Text = c.Name;
-        catDesc.Text = c.Description;
+        catTitle.Text = c.Shown;
+        catDesc.Text = Tr(c.Description);
         FitInfo();
     }
 
@@ -1197,19 +1226,19 @@ public sealed class MainForm : Form
     {
         if (c.Section == "ENEMIES" || c.Name.StartsWith("Foliage")) return null;
         bool Has(string pattern) => System.Text.RegularExpressions.Regex.IsMatch(c.Name, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (Has("bobble|magazine|plan|recipe|treasure|legendary|cap stash|mod box")) return ("#FFFFFF", "white - rare");
-        if (Has("xp|loot|event|expedition|raid|vending|workbench|storage")) return ("#FFC830", "gold - worth a detour");
-        if (c.Section == "JUNK" || Has("junk|misc|clothes|outfit|apparel|weapon|camp items|everything")) return ("#FF4A3A", "red - junk");
-        return ("#50FF70", "green - useful (aid, food, plants, ammo...)");
+        if (Has("bobble|magazine|plan|recipe|treasure|legendary|cap stash|mod box")) return ("#FFFFFF", Tr("white - rare"));
+        if (Has("xp|loot|event|expedition|raid|vending|workbench|storage")) return ("#FFC830", Tr("gold - worth a detour"));
+        if (c.Section == "JUNK" || Has("junk|misc|clothes|outfit|apparel|weapon|camp items|everything")) return ("#FF4A3A", Tr("red - junk"));
+        return ("#50FF70", Tr("green - useful (aid, food, plants, ammo...)"));
     }
 
     /// <summary>Edit > Colour by priority: every category's glow + marker colour by how much it's worth (own item looks stay).</summary>
     void PriorityColours()
     {
         var tiers = cats.Select(c => PriorityOf(c)?.Tier).Where(t => t != null).Distinct();
-        if (MessageBox.Show(this, "Give every category a colour by how much it's worth:\n\n  " + string.Join("\n  ", tiers) +
-                            "\n\nEnemies and foliage keep theirs, and items with their own look too. Undo with Ctrl+Z.",
-                            "Colour by priority", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+        if (MessageBox.Show(this, Tr("Give every category a colour by how much it's worth:\n\n  ") + string.Join("\n  ", tiers) +
+                            Tr("\n\nEnemies and foliage keep theirs, and items with their own look too. Undo with Ctrl+Z."),
+                            Tr("Colour by priority"), MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
         foreach (var c in cats)
             if (PriorityOf(c) is { } p)
             {
@@ -1220,7 +1249,7 @@ public sealed class MainForm : Form
         Save();
         RefreshColours();
         ShowInspector();
-        Status("Categories coloured by priority.");
+        Status(Tr("Categories coloured by priority."));
     }
     /// <summary>The info box under the tree only takes the room its text needs.</summary>
     void FitInfo()
@@ -1280,7 +1309,7 @@ public sealed class MainForm : Form
             lookPopup = new SizablePopup
             {
                 FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, StartPosition = FormStartPosition.Manual,
-                KeyPreview = true, Padding = new Padding(1), Size = new Size(420, 700), Font = Font, Text = "Look",
+                KeyPreview = true, Padding = new Padding(1), Size = new Size(420, 700), Font = Font, Text = Tr("Look"),
             };
             lookPopupInside = new EdgePanel { Dock = DockStyle.Fill, Padding = new Padding(6) };
             var close = new Button { Text = "✕", Width = 30, Height = 26, FlatStyle = FlatStyle.Flat, Anchor = AnchorStyles.Top | AnchorStyles.Right, TabStop = false };
@@ -1349,11 +1378,26 @@ public sealed class MainForm : Form
         lookPopup.Bounds = new Rectangle(lookPopup.Left, y, lookPopup.Width, h);
     }
 
+    /// <summary>View > Language: the window's text and the game's names in that language (English stays the saved key).
+    /// The window is built in its language, so the app restarts (the setup is saved first).</summary>
+    void SetLanguage(string code)
+    {
+        if (code == settings.Language) return;
+        settings.Language = code;
+        settings.Save();
+        string now = code == "auto" ? (game != null ? Loc.GameLanguage(game) : "en") : code;
+        if (now == Loc.UiLang && now == Loc.Lang) return;
+        Save();
+        Box(Tr("ESP Maker restarts now to change the language."), Text);
+        Application.Restart();
+        Environment.Exit(0);
+    }
+
     /// <summary>More > Compact rows: lower rows in both lists (more fit on the screen).</summary>
     void ApplyDensity()
     {
         catTree.ItemHeight = settings.Compact ? 21 : 26;
-        list.Font = new Font("Segoe UI", settings.Compact ? 8.5f : 9.5f);
+        list.Font = new Font(Loc.UiFont, settings.Compact ? 8.5f : 9.5f);
         list.Invalidate();
     }
 
@@ -1415,7 +1459,7 @@ public sealed class MainForm : Form
         using var dlg = Ui.Dialog(new Form { FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, StartPosition = FormStartPosition.Manual,
                                              Size = new Size(560, 380), BackColor = Ui.Line, Padding = new Padding(1), KeyPreview = true, Font = Font });
         dlg.Location = new Point(Left + (Width - dlg.Width) / 2, Top + 90);
-        var box = new TextBox { Dock = DockStyle.Top, Font = new Font("Segoe UI", 12f), BorderStyle = BorderStyle.None, PlaceholderText = "Jump to a category or item, or type an action..." };
+        var box = new TextBox { Dock = DockStyle.Top, Font = new Font(Loc.UiFont, 12f), BorderStyle = BorderStyle.None, PlaceholderText = Tr("Jump to a category or item, or type an action...") };
         var boxPad = new Panel { Dock = DockStyle.Top, Height = 40, Padding = new Padding(12, 9, 12, 0), BackColor = Ui.Window };
         boxPad.Controls.Add(box);
         var hits = new ListBox { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 28, IntegralHeight = false, BackColor = Ui.Window };
@@ -1423,21 +1467,21 @@ public sealed class MainForm : Form
         dlg.Controls.Add(boxPad);
         var found = new List<(string Name, string Where, TreeNode? Node, Entry? Item, Action? Do)>();
         // what the app can do from here, with its shortcut
-        (string, string, TreeNode?, Entry?, Action?) Act(string name, string keys, Action a) => (name, "Action" + (keys != "" ? " · " + keys : ""), null, null, a);
+        (string, string, TreeNode?, Entry?, Action?) Act(string name, string keys, Action a) => (name, Tr("Action") + (keys != "" ? " · " + keys : ""), null, null, a);
         var actions = new[]
         {
-            Act("Build & save", "", () => buildButton!.PerformClick()),
-            Act("Category look...", "", () => catLookButton.PerformClick()),
-            Act("Undo", "Ctrl+Z", () => UndoRedo(true)),
-            Act("Redo", "Ctrl+Y", () => UndoRedo(false)),
-            Act("Search everything", "Ctrl+F", () => { search.Focus(); search.SelectAll(); }),
-            Act("Add presets...", "", RunPresets),
-            Act("Import a .ba2...", "", ImportBa2),
-            Act("Save project...", "", SaveSetup),
-            Act("Open project...", "", LoadSetup),
-            Act(settings.Dark ? "Light mode" : "Dark mode", "", () => darkItem.Checked = !darkItem.Checked),
-            Act(settings.Compact ? "Normal rows" : "Compact rows", "", () => compactItem.Checked = !compactItem.Checked),
-            Act("Show the tour...", "", () => { using var t = new Tutorial(Font); t.ShowDialog(this); }),
+            Act(Tr("Build & save"), "", () => buildButton!.PerformClick()),
+            Act(Tr("Category look..."), "", () => catLookButton.PerformClick()),
+            Act(Tr("Undo"), Tr("Ctrl+Z"), () => UndoRedo(true)),
+            Act(Tr("Redo"), Tr("Ctrl+Y"), () => UndoRedo(false)),
+            Act(Tr("Search everything"), Tr("Ctrl+F"), () => { search.Focus(); search.SelectAll(); }),
+            Act(Tr("Add presets..."), "", RunPresets),
+            Act(Tr("Import a .ba2..."), "", ImportBa2),
+            Act(Tr("Save project..."), "", SaveSetup),
+            Act(Tr("Open project..."), "", LoadSetup),
+            Act(settings.Dark ? Tr("Light mode") : Tr("Dark mode"), "", () => darkItem.Checked = !darkItem.Checked),
+            Act(settings.Compact ? Tr("Normal rows") : Tr("Compact rows"), "", () => compactItem.Checked = !compactItem.Checked),
+            Act(Tr("Show the tour..."), "", () => { using var t = new Tutorial(Font); t.ShowDialog(this); }),
         };
         void Find()
         {
@@ -1447,13 +1491,13 @@ public sealed class MainForm : Form
             if (words.Length == 0)
             {
                 // nothing typed: where it jumped lately, then the actions
-                found.AddRange(recentJumps.Select(r => (r.Name, "Recent · " + r.Where, r.Node, r.Item, (Action?)null)));
+                found.AddRange(recentJumps.Select(r => (r.Name, Tr("Recent · ") + r.Where, r.Node, r.Item, (Action?)null)));
                 found.AddRange(actions);
             }
             else
             {
                 foreach (var n in catNodes.Where(n => Has(((Category)n.Tag).Name)).Take(8))
-                    found.Add((((Category)n.Tag).Name, "Category · " + Title(((Category)n.Tag).Section), n, null, null));
+                    found.Add((((Category)n.Tag).Name, Tr("Category · ") + Title(((Category)n.Tag).Section), n, null, null));
                 found.AddRange(actions.Where(a => Has(a.Item1)));
                 foreach (var n in catNodes)
                     foreach (var en in ((Category)n.Tag).Entries.Where(x => Has(x.Name)))
@@ -1535,17 +1579,17 @@ public sealed class MainForm : Form
             var words = q.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             // every word in the same name ("pumpkin pie stand" must not match "Pumpkin" + "Pie" + "Stand" from three different plans)
             bool In(string n) => words.All(w => n.Contains(w, StringComparison.OrdinalIgnoreCase));
-            src = src.Where(e => In(e.Name) || e.ItemNames.Any(In) || e.EditorIds?.Any(In) == true);
+            src = src.Where(e => e.SearchNames.Any(In) || e.EditorIds?.Any(In) == true);
         }
         // the filter chips: each with how many of what's shown it keeps
         var scope = src.ToList();
         bool Sel(Entry e) => Leaves(e).Any(x => project.Selected.Contains(x.Id)) || keepShown.Contains(e.Id);
         bool Own(Entry e) => Leaves(e).Any(x => project.Overrides.ContainsKey(x.Id) || project.PartLooks.ContainsKey(x.Id));
         static bool Parts(Entry e) => e.Group == null && e.Models.Count > 1 || HasRows(e);
-        filterChips.SetText(0, $"All {scope.Count:N0}");
-        filterChips.SetText(1, $"Selected {scope.Count(Sel):N0}");
-        filterChips.SetText(2, $"Own look {scope.Count(Own):N0}");
-        filterChips.SetText(3, $"Has parts {scope.Count(Parts):N0}");
+        filterChips.SetText(0, Tf("All {0:N0}", scope.Count));
+        filterChips.SetText(1, Tf("Selected {0:N0}", scope.Count(Sel)));
+        filterChips.SetText(2, Tf("Own look {0:N0}", scope.Count(Own)));
+        filterChips.SetText(3, Tf("Has parts {0:N0}", scope.Count(Parts)));
         var all = ListFilter switch { 1 => scope.Where(Sel).ToList(), 2 => scope.Where(Own).ToList(), 3 => scope.Where(Parts).ToList(), _ => scope };
         all = Sorted(all);
         var picked = list.SelectedItems.Cast<ListViewItem>().Select(li => li.Tag).ToList();
@@ -1554,28 +1598,30 @@ public sealed class MainForm : Form
         list.Items.Clear();
         ListViewItem AddRow(Entry e, string indent)
         {
-            var li = new ListViewItem(indent + e.Name) { Tag = e, Checked = IsTicked(e), UseItemStyleForSubItems = false };
-            li.SubItems.Add(e.Category);
+            var li = new ListViewItem(indent + e.Shown) { Tag = e, Checked = IsTicked(e), UseItemStyleForSubItems = false };
+            li.SubItems.Add(Loc.Name(e.Category));
             li.SubItems.Add("");
             var tw = twins.GetValueOrDefault(e.Id, new());
-            var also = string.Join(", ", tw.Select(t => t.Category).Distinct());
-            var where = e.Spots switch { <= 0 => "", 1 => "1 spot in the world", _ => $"{e.Spots:N0} spots in the world" };
+            var also = string.Join(", ", tw.Select(t => Loc.Name(t.Category)).Distinct());
+            var where = e.Spots switch { <= 0 => "", 1 => Tr("1 spot in the world"), _ => Tf("{0:N0} spots in the world", e.Spots) };
             var offParts = IsTicked(e) ? project.OffParts.GetValueOrDefault(e.Id)?.Count ?? 0 : 0; // unticked: nothing lights up
             var ownParts = project.PartLooks.GetValueOrDefault(e.Id)?.Count ?? 0;
-            var partsNote = string.Join(" · ", new[] { offParts > 0 ? $"{e.Models.Count - offParts} of {e.Models.Count} parts light up" : "",
-                                                       ownParts > 0 ? $"{ownParts} part{(ownParts > 1 ? "s" : "")} with own look" : "" }.Where(x => x.Length > 0));
+            var partsNote = string.Join(" · ", new[] { offParts > 0 ? Tf("{0} of {1} parts light up", e.Models.Count - offParts, e.Models.Count) : "",
+                                                       ownParts > 0 ? Tf("{0} part{1} with own look", ownParts, (ownParts > 1 ? "s" : "")) : "" }.Where(x => x.Length > 0));
             // found through a thing sharing its model (Live & Love 8 is on the same cover as 40 other magazines): say which
             var words = q.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var via = words.Length == 0 || words.All(w => e.Name.Contains(w, StringComparison.OrdinalIgnoreCase)) ? null
-                : e.ItemNames.FirstOrDefault(n => words.All(w => n.Contains(w, StringComparison.OrdinalIgnoreCase)));
-            var matchNote = via != null && e.Group == null ? $"matches: {via} (same model)" : "";
-            var detail = string.Join(" · ", new[] { matchNote, where, e.Detail, partsNote, tw.Count > 0 ? "also in: " + also : "" }.Where(x => x.Length > 0));
+            bool HasWords(string n) => words.All(w => n.Contains(w, StringComparison.OrdinalIgnoreCase));
+            var via = words.Length == 0 || HasWords(e.Name) || HasWords(e.Shown) ? null
+                : e.ItemNames.FirstOrDefault(HasWords) is string hit ? Loc.Name(hit)
+                : e.ItemNames.Select(Loc.Name).FirstOrDefault(HasWords);
+            var matchNote = via != null && e.Group == null ? Tf("matches: {0} (same model)", via) : "";
+            var detail = string.Join(" · ", new[] { matchNote, where, Loc.Name(e.Detail), partsNote, tw.Count > 0 ? Tr("also in: ") + also : "" }.Where(x => x.Length > 0));
             li.SubItems.Add(detail);
-            li.ToolTipText = e.Group != null ? e.Name + " - ingredients:\n" + string.Join("\n", e.Group.Select(g => $"{g.Name} ({g.Category})"))
+            li.ToolTipText = e.Group != null ? e.Shown + Tr(" - ingredients:\n") + string.Join("\n", e.Group.Select(g => $"{g.Shown} ({Loc.Name(g.Category)})"))
                 : (e.ItemNames.Count > 1
-                    ? "Lights up together (same model):\n" + string.Join("\n", e.ItemNames.Take(25)) + (e.ItemNames.Count > 25 ? $"\n... and {e.ItemNames.Count - 25} more" : "")
-                    : e.Name)
-                  + (tw.Count > 0 ? "\n\nChecked together with (same model):\n" + string.Join("\n", tw.Select(t => $"{t.Name} ({t.Category})")) : "");
+                    ? Tr("Lights up together (same model):\n") + string.Join("\n", e.ItemNames.Take(25).Select(Loc.Name)) + (e.ItemNames.Count > 25 ? Tf("\n... and {0} more", e.ItemNames.Count - 25) : "")
+                    : e.Shown)
+                  + (tw.Count > 0 ? Tr("\n\nChecked together with (same model):\n") + string.Join("\n", tw.Select(t => $"{t.Shown} ({Loc.Name(t.Category)})")) : "");
             SetColourCell(li);
             list.Items.Add(li);
             return li;
@@ -1584,13 +1630,13 @@ public sealed class MainForm : Form
         if (q.Length > 0 && ListFilter == 0)
         {
             var qw = q.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            foreach (var c in ShownCats.Where(c => qw.All(w => c.Name.Contains(w, StringComparison.OrdinalIgnoreCase))))
+            foreach (var c in ShownCats.Where(c => qw.All(w => c.Name.Contains(w, StringComparison.OrdinalIgnoreCase)) || qw.All(w => c.Shown.Contains(w, StringComparison.OrdinalIgnoreCase))))
             {
-                var cli = new ListViewItem(c.Name) { Tag = c, UseItemStyleForSubItems = false, ToolTipText = c.Description };
-                cli.SubItems.Add(c.Section == Catalog.AllSection ? "Other" : Title(c.Section));
+                var cli = new ListViewItem(c.Shown) { Tag = c, UseItemStyleForSubItems = false, ToolTipText = Tr(c.Description) };
+                cli.SubItems.Add(c.Section == Catalog.AllSection ? Tr("Other") : Title(c.Section));
                 cli.SubItems.Add("");
                 int t = TickedIn(c);
-                cli.SubItems.Add($"Category · {c.Entries.Count:N0} items" + (t > 0 ? $" · {t:N0} selected" : "") + " · click to open it");
+                cli.SubItems.Add($"Category · {c.Entries.Count:N0} items" + (t > 0 ? Tf(" · {0:N0} selected", t) : "") + Tr(" · click to open it"));
                 list.Items.Add(cli);
             }
         }
@@ -1600,7 +1646,7 @@ public sealed class MainForm : Form
             if (!Expandable(e)) continue;
             // a recipe (its ingredients, the same entries as in their own categories) or a thing made of parts: ► opens it
             bool open = expanded.Contains(e.Id);
-            li.Text = (open ? "▼ " : "► ") + e.Name;
+            li.Text = (open ? "▼ " : "► ") + e.Shown;
             if (!open) continue;
             if (HasRows(e)) { foreach (var g in e.Group!) AddRow(g, "          "); continue; }
             // parts with their own look first, then the beam-carrying main part, then by name
@@ -1614,7 +1660,7 @@ public sealed class MainForm : Form
                 pli.SubItems.Add("");
                 pli.SubItems.Add("");
                 var others = SharedWith(e)(m);
-                pli.SubItems.Add(m + (others.Count > 0 ? " · also part of: " + string.Join(", ", others) : ""));
+                pli.SubItems.Add(m + (others.Count > 0 ? Tr(" · also part of: ") + string.Join(", ", others) : ""));
                 pli.ToolTipText = PartLabel(pr) + "\n" + m;
                 SetColourCell(pli);
                 list.Items.Add(pli);
@@ -1631,8 +1677,8 @@ public sealed class MainForm : Form
         if (keepScroll && list.Items.Count > 0) list.TopItem = list.Items[Math.Min(top, list.Items.Count - 1)];
         filling = false;
         if (Ui.Dark) ThemeRows();
-        listInfo.Text = (all.Count > MaxShown ? $"Showing the first {MaxShown:N0} of {all.Count:N0} - type in the search box to narrow it down."
-                      : $"{all.Count:N0} shown. Hover an item to see what else shares its model.");
+        listInfo.Text = (all.Count > MaxShown ? Tf("Showing the first {0:N0} of {1:N0} - type in the search box to narrow it down.", MaxShown, all.Count)
+                      : Tf("{0:N0} shown. Hover an item to see what else shares its model.", all.Count));
     }
 
     /// <summary>The rows in the header-click order: name; category; own looks first, then by the look's text;
@@ -1647,9 +1693,9 @@ public sealed class MainForm : Form
             2 => (sortDesc ? rows.OrderBy(e => project.Overrides.ContainsKey(e.Id)) : rows.OrderByDescending(e => project.Overrides.ContainsKey(e.Id)))
                  .ThenBy(e => e.Group == null ? LookCell(e).Text : HasRows(e) || e.Group.FirstOrDefault() is not Entry g ? "" : LookCell(g).Text, cmp),
             3 => sortDesc ? rows.OrderByDescending(e => e.Spots) : rows.OrderBy(e => e.Spots),
-            _ => sortDesc ? rows.OrderByDescending(e => e.Name, cmp) : rows.OrderBy(e => e.Name, cmp),
+            _ => sortDesc ? rows.OrderByDescending(e => e.Shown, cmp) : rows.OrderBy(e => e.Shown, cmp),
         };
-        return (sortCol == 0 ? o : o.ThenBy(e => e.Name, cmp)).ToList();
+        return (sortCol == 0 ? o : o.ThenBy(e => e.Shown, cmp)).ToList();
     }
 
     void SetColourCell(ListViewItem li)
@@ -1660,7 +1706,7 @@ public sealed class MainForm : Form
             var own = project.PartLooks.GetValueOrDefault(pr.Entry.Id)?.GetValueOrDefault(pr.Model);
             var pc = li.SubItems[2];
             if (own != null) (pc.Text, pc.ForeColor) = LookText(own, pr.Entry, true);
-            else { pc.Text = "as the item"; pc.ForeColor = SystemColors.GrayText; }
+            else { pc.Text = Tr("as the item"); pc.ForeColor = SystemColors.GrayText; }
             li.ForeColor = PartOn(pr) ? list.ForeColor : SystemColors.GrayText;
             return;
         }
@@ -1685,16 +1731,16 @@ public sealed class MainForm : Form
     (string Text, Color Colour) LookText(Style st, Entry e, bool own)
     {
         var parts = new List<string>();
-        if (st.Glow) parts.Add("glow");
-        if (st.Beam) parts.Add(st.BeamArrow ? "arrow" : $"beam {Math.Round(st.BeamLength / StyleEditor.UnitsPerMetre)} m");
-        if (Icons.Get(st.Icon) is Icons.Icon ic) parts.Add((e.NoIcon || st.Icon3D ? "3D " : "") + ic.Name.ToLowerInvariant() + " icon");
-        else if (Models3D.Get(st.Icon) is Model3D m3) parts.Add(m3.Name.ToLowerInvariant() + " model");
-        if (st.Brighten) parts.Add("bright colours");
-        if (st.Invisible && e.CanHide) parts.Add("item hidden");
-        if (st.Label && !e.NoIcon) parts.Add(st.LabelText.Trim().Length > 0 ? $"name \"{st.LabelText.Trim()}\"" : "name");
-        if (st.Timed && parts.Count > 0) parts.Add(st.AllFx.Any(x => x.HideAfter > 0 && x.BlinkOff > 0) ? "blinks" : "hides after a while");
-        if (st.Moves && parts.Count > 0) parts.Add("moving");
-        return ((own ? "own: " : "") + (parts.Count > 0 ? "■ " + string.Join(" + ", parts) : "nothing"), Readable(Materials.Parse(st.Glow ? st.GlowColor : st.BeamColor)));
+        if (st.Glow) parts.Add(Tr("glow"));
+        if (st.Beam) parts.Add(st.BeamArrow ? Tr("arrow") : Tf("beam {0} m", Math.Round(st.BeamLength / StyleEditor.UnitsPerMetre)));
+        if (Icons.Get(st.Icon) is Icons.Icon ic) parts.Add((e.NoIcon || st.Icon3D ? "3D " : "") + Tr(ic.Name).ToLower() + Tr(" icon"));
+        else if (Models3D.Get(st.Icon) is Model3D m3) parts.Add(Tr(m3.Name).ToLower() + Tr(" model"));
+        if (st.Brighten) parts.Add(Tr("bright colours"));
+        if (st.Invisible && e.CanHide) parts.Add(Tr("item hidden"));
+        if (st.Label && !e.NoIcon) parts.Add(st.LabelText.Trim().Length > 0 ? Tf("name \"{0}\"", st.LabelText.Trim()) : Tr("name"));
+        if (st.Timed && parts.Count > 0) parts.Add(st.AllFx.Any(x => x.HideAfter > 0 && x.BlinkOff > 0) ? Tr("blinks") : Tr("hides after a while"));
+        if (st.Moves && parts.Count > 0) parts.Add(Tr("moving"));
+        return ((own ? Tr("own: ") : "") + (parts.Count > 0 ? "■ " + string.Join(" + ", parts) : Tr("nothing")), Readable(Materials.Parse(st.Glow ? st.GlowColor : st.BeamColor)));
     }
 
     /// <summary>The look colour as text on the white list: very light colours (pale pink, light cyan...) are
@@ -1905,7 +1951,7 @@ public sealed class MainForm : Form
         using var dlg = new SaveFileDialog { Filter = "ESP Maker project|*.itemfinder.json", FileName = ArchiveName(project.ModName)[..^4] + ".itemfinder.json", InitialDirectory = Directory.CreateDirectory(OutputDir).FullName };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         Json.Write(dlg.FileName, project);
-        Log($"Project saved: {dlg.FileName}");
+        Log(Tf("Project saved: {0}", dlg.FileName));
     }
 
     void LoadSetup()
@@ -1914,17 +1960,17 @@ public sealed class MainForm : Form
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         Project? p;
         try { p = Json.Read<Project>(dlg.FileName); }
-        catch (Exception ex) { Box("Can't read that file: " + ex.Message, Text); return; }
+        catch (Exception ex) { Box(Tr("Can't read that file: ") + ex.Message, Text); return; }
         if (p == null) return;
         UseProject(p);
-        Log($"Project opened: {Path.GetFileName(dlg.FileName)} - {project.Selected.Count} item(s) selected. Click \"Build & save\" to use it in the game.");
+        Log(Tf("Project opened: {0} - {1} item(s) selected. Click \"Build & save\" to use it in the game.", Path.GetFileName(dlg.FileName), project.Selected.Count));
     }
 
     void StartEmpty()
     {
-        if (project.Selected.Count > 0 && Box("Clear everything selected now? Mods already in the game stay there.", Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+        if (project.Selected.Count > 0 && Box(Tr("Clear everything selected now? Mods already in the game stay there."), Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
         UseProject(Project.Fresh());
-        Log("Started empty.");
+        Log(Tr("Started empty."));
     }
 
     /// <summary>Opens a .ba2 as a project: an ESP Maker mod comes back as it was built; for other mods the items they
@@ -1932,30 +1978,30 @@ public sealed class MainForm : Form
     async void ImportBa2()
     {
         if (game == null) return;
-        using var dlg = new OpenFileDialog { Title = "Import a mod", Filter = "BA2 archive|*.ba2", InitialDirectory = game.DataFolder };
+        using var dlg = new OpenFileDialog { Title = Tr("Import a mod"), Filter = "BA2 archive|*.ba2", InitialDirectory = game.DataFolder };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         ImportResult r;
         SetBusy(true);
-        Status($"Reading {Path.GetFileName(dlg.FileName)}...");
+        Status(Tf("Reading {0}...", Path.GetFileName(dlg.FileName)));
         try
         {
             var c = cats;
             r = await Task.Run(() => Importer.Read(dlg.FileName, c));
         }
-        catch (Exception ex) { Status(""); Box($"Can't import {Path.GetFileName(dlg.FileName)}: {ex.Message}", Text); return; }
+        catch (Exception ex) { Status(""); Box(Tf("Can't import {0}: {1}", Path.GetFileName(dlg.FileName), ex.Message), Text); return; }
         finally { SetBusy(false); }
         if (r.Project.Selected.Count == 0)
         {
             Status("");
-            foreach (var m in r.Unknown) Log("  not in the lists: " + m);
-            Box($"Nothing to import: none of the {r.Models} model(s) {Path.GetFileName(r.Source)} changes are in ESP Maker's lists. Your selection stays as it is.", Text);
+            foreach (var m in r.Unknown) Log(Tr("  not in the lists: ") + m);
+            Box(Tf("Nothing to import: none of the {0} model(s) {1} changes are in ESP Maker's lists. Your selection stays as it is.", r.Models, Path.GetFileName(r.Source)), Text);
             return;
         }
         bool add = false;
         if (project.Selected.Count > 0)
         {
-            int answer = Choose($"{Path.GetFileName(r.Source)} selects {r.Project.Selected.Count} item(s). You have {project.Selected.Count} selected now.",
-                                "Replace my selection", "Add to my selection");
+            int answer = Choose(Tf("{0} selects {1} item(s). You have {2} selected now.", Path.GetFileName(r.Source), r.Project.Selected.Count, project.Selected.Count),
+                                Tr("Replace my selection"), Tr("Add to my selection"));
             if (answer < 0) return;
             add = answer == 1;
         }
@@ -1967,17 +2013,17 @@ public sealed class MainForm : Form
     string ImportReport(ImportResult r)
     {
         var name = Path.GetFileName(r.Source);
-        if (r.Kind == Importer.Exact) return $"{name} is back as it was built: {r.Project.Selected.Count} item(s) selected.";
-        var text = $"{name} changes {r.Models} model(s): {r.Models - r.Unknown.Count} found, {r.Project.Selected.Count} item(s) selected.";
+        if (r.Kind == Importer.Exact) return Tf("{0} is back as it was built: {1} item(s) selected.", name, r.Project.Selected.Count);
+        var text = Tf("{0} changes {1} model(s): {2} found, {3} item(s) selected.", name, r.Models, r.Models - r.Unknown.Count, r.Project.Selected.Count);
         text += r.Kind == Importer.OlderBuild
-            ? "\n\nThis build is from an older ESP Maker. Beam length and width start at the category's."
-            : "\n\nColours are read from the mod where possible, so check the looks.";
+            ? Tr("\n\nThis build is from an older ESP Maker. Beam length and width start at the category's.")
+            : Tr("\n\nColours are read from the mod where possible, so check the looks.");
         if (r.Unknown.Count > 0)
         {
-            text += $"\n\n{r.Unknown.Count} model(s) aren't in ESP Maker's lists and are not included - the log lists them.";
+            text += Tf("\n\n{0} model(s) aren't in ESP Maker's lists and are not included - the log lists them.", r.Unknown.Count);
             logPanel.Visible = true;
         }
-        if (r.Kind == Importer.OtherMod) text += $"\n\nThe original mod stays installed until you turn it off. Name yours when you click \"Build & save\".";
+        if (r.Kind == Importer.OtherMod) text += Tr("\n\nThe original mod stays installed until you turn it off. Name yours when you click \"Build & save\".");
         return text;
     }
 
@@ -1986,8 +2032,8 @@ public sealed class MainForm : Form
     {
         var before = project.ImportedFrom.ToList();
         if (add) AddProject(r.Project); else UseProject(r.Project);
-        Log($"Imported {Path.GetFileName(r.Source)} ({r.Kind}): {r.Models} model(s), {r.Project.Selected.Count} item(s) selected.");
-        foreach (var m in r.Unknown) Log("  not in the lists: " + m);
+        Log(Tf("Imported {0} ({1}): {2} model(s), {3} item(s) selected.", Path.GetFileName(r.Source), Tr(r.Kind), r.Models, r.Project.Selected.Count));
+        foreach (var m in r.Unknown) Log(Tr("  not in the lists: ") + m);
         if (project.ImportedFrom.SequenceEqual(before) || game == null) return;
         var folder = game.GameFolder;
         var exclude = project.ImportedFrom.ToList();
@@ -2079,9 +2125,9 @@ public sealed class MainForm : Form
         SetTicked(en, on);
         if (twins.GetValueOrDefault(en.Id) is { Count: > 0 } tw)
         {
-            Status($"{en.Name}: also {(on ? "selected" : "unselected")} {string.Join(", ", tw.Take(3).Select(t => t.Name))}{(tw.Count > 3 ? $" and {tw.Count - 3} more" : "")} (same 3D model).");
-            Log($"{en.Name}: also {(on ? "selected" : "unselected")} {string.Join(", ", tw.Select(t => $"{t.Name} ({t.Category})"))} - " +
-                "the game uses the same 3D model for them, so they always light up together.");
+            Status(Tf("{0}: also {1} {2}{3} (same 3D model).", en.Name, (on ? Tr("selected") : Tr("unselected")), string.Join(", ", tw.Take(3).Select(t => t.Name)), (tw.Count > 3 ? Tf(" and {0} more", tw.Count - 3) : "")));
+            Log(Tf("{0}: also {1} {2} - ", en.Name, (on ? Tr("selected") : Tr("unselected")), string.Join(", ", tw.Select(t => $"{t.Name} ({t.Category})"))) +
+                Tr("the game uses the same 3D model for them, so they always light up together."));
         }
     }
 
@@ -2129,7 +2175,7 @@ public sealed class MainForm : Form
     List<Entry> Picked()
     {
         var picked = list.SelectedItems.Cast<ListViewItem>().Select(li => li.Tag).OfType<Entry>().SelectMany(Leaves).Distinct().ToList();
-        if (picked.Count == 0) Box("Click one or more items in the list first (Ctrl/Shift for several).", Text);
+        if (picked.Count == 0) Box(Tr("Click one or more items in the list first (Ctrl/Shift for several)."), Text);
         return picked;
     }
 
@@ -2166,7 +2212,7 @@ public sealed class MainForm : Form
         {
             var off = view.OffParts;
             if (off.Count > 0) project.OffParts[first.Id] = off; else project.OffParts.Remove(first.Id);
-            if (off.Count > 0) Log($"{first.Name}: {first.Models.Count - off.Count} of {first.Models.Count} parts light up.");
+            if (off.Count > 0) Log(Tf("{0}: {1} of {2} parts light up.", first.Name, first.Models.Count - off.Count, first.Models.Count));
         }
         foreach (var e in picked) SyncParts(e);
         Save();
@@ -2183,7 +2229,7 @@ public sealed class MainForm : Form
         var side = new Panel { Dock = DockStyle.Left, Width = 340 };
         side.Controls.Add(ed);
         var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 90, Height = 30 };
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Height = 30 };
+        var cancel = new Button { Text = Tr("Cancel"), DialogResult = DialogResult.Cancel, Width = 90, Height = 30 };
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 42, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(4) };
         buttons.Controls.AddRange(new Control[] { cancel, ok });
         var right = new Panel { Dock = DockStyle.Fill, Padding = new Padding(4, 0, 0, 0) };
@@ -2192,7 +2238,7 @@ public sealed class MainForm : Form
         foreach (var e in entries) pick.Items.Add(e);
         right.Controls.Add(view);
         right.Controls.Add(pick);
-        right.Controls.Add(new Label { Text = "Preview:", Dock = DockStyle.Top, Height = 20 });
+        right.Controls.Add(new Label { Text = Tr("Preview:"), Dock = DockStyle.Top, Height = 20 });
         dlg.Controls.Add(right);
         dlg.Controls.Add(side);
         dlg.Controls.Add(buttons);
@@ -2212,13 +2258,13 @@ public sealed class MainForm : Form
                                     IReadOnlySet<string>? offParts, Func<string, List<string>>? shared, CheckState ticked, out CheckBox tick,
                                     string? focusPart = null, IReadOnlyDictionary<string, Style>? partLooks = null)
     {
-        var dlg = Ui.Dialog(new Form { Text = picked.Count == 1 ? "Look for: " + picked[0].Name : $"Look for {picked.Count} items", FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent, Font = font, AutoScaleMode = AutoScaleMode.Font, ShowIcon = false });
+        var dlg = Ui.Dialog(new Form { Text = picked.Count == 1 ? Tr("Look for: ") + picked[0].Name : Tf("Look for {0} items", picked.Count), FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent, Font = font, AutoScaleMode = AutoScaleMode.Font, ShowIcon = false });
         ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = picked.All(e => e.NoIcon), Sketch = false, Compact = true };
         var side = new Panel { Dock = DockStyle.Left, Width = 340 }; // the settings keep their own height
         // the same tick as in the list: the parts and the look below only matter while it is ticked
         tick = new CheckBox
         {
-            Text = picked.Count == 1 ? "Selected - lights up in the game" : $"Selected - all {picked.Count} light up in the game",
+            Text = picked.Count == 1 ? Tr("Selected - lights up in the game") : Tf("Selected - all {0} light up in the game", picked.Count),
             Dock = DockStyle.Top, Height = 30, Font = new Font(font, FontStyle.Bold), CheckState = ticked,
             Padding = new Padding(4, 0, 0, 0),
         };
@@ -2228,13 +2274,13 @@ public sealed class MainForm : Form
         var fit = ed;
         dlg.Load += (_, _) => { int g = fit.FitHeight(); if (g > 0) dlg.Height += Math.Max(0, fit.Bottom + 8 - side.ClientSize.Height); };
         var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 90, Height = 30 };
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Height = 30 };
+        var cancel = new Button { Text = Tr("Cancel"), DialogResult = DialogResult.Cancel, Width = 90, Height = 30 };
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 42, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(4) };
         buttons.Controls.AddRange(new Control[] { cancel, ok });
         // the item as the mod will show it, redrawn as the look changes
         view = new ModelView { Dock = DockStyle.Fill, Padding = new Padding(4, 0, 0, 0), Settings = side };
         var v2 = view;
-        if (picked.Count > 1) buttons.Controls.Add(new Label { Text = $"Preview: {picked[0].Name}", AutoSize = true, UseMnemonic = false, Padding = new Padding(0, 9, 12, 0), ForeColor = SystemColors.GrayText });
+        if (picked.Count > 1) buttons.Controls.Add(new Label { Text = Tf("Preview: {0}", picked[0].Name), AutoSize = true, UseMnemonic = false, Padding = new Padding(0, 9, 12, 0), ForeColor = SystemColors.GrayText });
         dlg.Controls.Add(view);
         dlg.Controls.Add(side);
         dlg.Controls.Add(buttons);
@@ -2264,12 +2310,12 @@ public sealed class MainForm : Form
     /// <summary>Can be opened in the list: a recipe (its ingredients) or a thing made of several models (its parts).</summary>
     static bool Expandable(Entry e) => HasRows(e) || e.Group == null && e.Models.Count > 1;
 
-    string PartLabel(PartRow p) => p.Entry.PartNames?.GetValueOrDefault(p.Model) ?? Path.GetFileNameWithoutExtension(p.Model);
+    string PartLabel(PartRow p) => p.Entry.PartNames?.GetValueOrDefault(p.Model) is string n ? Loc.Name(n) : Path.GetFileNameWithoutExtension(p.Model);
 
     bool PartOn(PartRow p) => IsTicked(p.Entry) && project.OffParts.GetValueOrDefault(p.Entry.Id)?.Contains(p.Model) != true;
 
     Func<string, List<string>> SharedWith(Entry first) => m => (entriesByModel.GetValueOrDefault(m) ?? new())
-        .Where(o => o != first).Select(o => $"{o.Name} ({o.Category})").Distinct().ToList();
+        .Where(o => o != first).Select(o => $"{o.Shown} ({Loc.Name(o.Category)})").Distinct().ToList();
 
     /// <summary>Shows the picked rows (or the picked category when no row is) in the look panel.</summary>
     void ShowInspector()
@@ -2283,8 +2329,8 @@ public sealed class MainForm : Form
             var e = pr.Entry;
             var looks = project.PartLooks.GetValueOrDefault(e.Id);
             bool own = looks?.ContainsKey(pr.Model) == true;
-            inspector.ShowLook(PartLabel(pr), $"Part of {e.Name} ({e.Category})", PartOn(pr) ? CheckState.Checked : CheckState.Unchecked,
-                               $"Same as {e.Name}", own, own ? looks![pr.Model] : project.StyleOf(e, CatOf(e)), e.NoIcon, null);
+            inspector.ShowLook(PartLabel(pr), Tf("Part of {0} ({1})", e.Shown, Loc.Name(e.Category)), PartOn(pr) ? CheckState.Checked : CheckState.Unchecked,
+                               Tf("Same as {0}", e.Shown), own, own ? looks![pr.Model] : project.StyleOf(e, CatOf(e)), e.NoIcon, null);
             inspector.View.Show(game, e, project.StyleOf(e, CatOf(e)), project.KeepOtherMods, project.OffParts.GetValueOrDefault(e.Id), SharedWith(e),
                                 IsTicked(e), pr.Model, looks);
             return;
@@ -2297,12 +2343,12 @@ public sealed class MainForm : Form
             int tickedNow = items.Count(e => project.Selected.Contains(e.Id));
             var tickState = tickedNow == items.Count ? CheckState.Checked : tickedNow == 0 ? CheckState.Unchecked : CheckState.Indeterminate;
             if (items.Count == 1 && tickState == CheckState.Checked && IsPartial(first)) tickState = CheckState.Indeterminate; // some parts left out
-            var catNames = items.Select(e => e.Category).Distinct().ToList();
-            string heading = items.Count == 1 ? first.Name : $"{items.Count} items";
+            var catNames = items.Select(e => Loc.Name(e.Category)).Distinct().ToList();
+            string heading = items.Count == 1 ? first.Shown : Tf("{0} items", items.Count);
             string text = items.Count == 1
-                ? $"In {first.Category}" + (first.Models.Count > 1 ? $" · {first.Models.Count} parts (► in the list opens them)" : "")
-                : string.Join(", ", items.Take(4).Select(e => e.Name)) + (items.Count > 4 ? "..." : "") + " - changes go to all of them";
-            inspector.ShowLook(heading, text, tickState, catNames.Count == 1 ? $"Same as {catNames[0]}" : "Same as their categories",
+                ? Tf("In {0}", Loc.Name(first.Category)) + (first.Models.Count > 1 ? Tf(" · {0} parts (► in the list opens them)", first.Models.Count) : "")
+                : string.Join(", ", items.Take(4).Select(e => e.Shown)) + (items.Count > 4 ? "..." : "") + Tr(" - changes go to all of them");
+            inspector.ShowLook(heading, text, tickState, catNames.Count == 1 ? Tf("Same as {0}", catNames[0]) : Tr("Same as their categories"),
                                project.Overrides.ContainsKey(first.Id), project.StyleOf(first, CatOf(first)), items.All(e => e.NoIcon), null);
             inspector.View.Show(game, first, project.StyleOf(first, CatOf(first)), project.KeepOtherMods, project.OffParts.GetValueOrDefault(first.Id),
                                 SharedWith(first), IsTicked(first), null, project.PartLooks.GetValueOrDefault(first.Id));
@@ -2313,12 +2359,12 @@ public sealed class MainForm : Form
             inspCat = c;
             // preview on: ticked things first, then the rest (recipes: their ingredients' entries)
             var entries = c.Entries.SelectMany(Leaves).Distinct().OrderByDescending(e => project.Selected.Contains(e.Id)).Take(500).ToList();
-            inspector.ShowLook(c.Name, "The look of everything in this category. Click an item's look in the list to give it its own.",
+            inspector.ShowLook(c.Shown, Tr("The look of everything in this category. Click an item's look in the list to give it its own."),
                                null, null, true, LookOf(c), c.Entries.Count > 0 && c.Entries.All(e => e.NoIcon), entries);
             return;
         }
-        inspector.ShowEmpty(IsPicks ? "Everything you selected, from all categories.\n\nClick an item to see and change its look."
-                                    : "Pick a category on the left, or click an item, to see and change its look.");
+        inspector.ShowEmpty(IsPicks ? Tr("Everything you selected, from all categories.\n\nClick an item to see and change its look.")
+                                    : Tr("Pick a category on the left, or click an item, to see and change its look."));
     }
 
     /// <summary>The look settings in the panel changed: store them for what is shown.</summary>
@@ -2471,15 +2517,15 @@ public sealed class MainForm : Form
         Image I(string icon, string colour) => Icons.Get(icon) is Icons.Icon ic ? IconPicker.Tile(ic, Materials.Parse(colour), 64) : new Bitmap(64, 64);
         var tiles = new List<PresetPicker.Tile>
         {
-            new("enemies", "Enemies", "each kind its own colour, glow, through walls", M("model:skull", "#FF642F")),
-            new("legendary", "Legendary enemies", "glow, beam and a 3D crown", M("model:crown", "#FFD700")),
-            new("bobbleheads", "Bobbleheads", "glow, beam and a 3D bobblehead", M("model:bobblehead", "#FFFFFF")),
-            new("magazines", "Magazines", "glow, beam and a magazine icon", I("magazine", "#FFFFFF")),
-            new("plans", "Plans", "glow, beam and a plan icon", I("scroll", "#FFFFFF")),
-            new("slasher", "Slasher event", "Spooky Scorched purple with a pumpkin; the Slasher mask green with a clown", M("model:pumpkin", SlasherPurple)),
-            new("xp", "XP buffs", "every XP recipe's ingredients: glow and a 3D ramen", M("model:ramen", Catalog.PlantGreen)),
-            new("vending", "Player vendors", "every CAMP vending machine: glow, a tall beam and a $ icon", I("dollar", "#FFB347")),
-            new("plants", "Bright plants", "harvestable plants in their own colours, brighter - nothing added, not through walls", I("herb", Catalog.PlantGreen)),
+            new("enemies", Tr("Enemies"), Tr("each kind its own colour, glow, through walls"), M("model:skull", "#FF642F")),
+            new("legendary", Tr("Legendary enemies"), Tr("glow, beam and a 3D crown"), M("model:crown", "#FFD700")),
+            new("bobbleheads", Tr("Bobbleheads"), Tr("glow, beam and a 3D bobblehead"), M("model:bobblehead", "#FFFFFF")),
+            new("magazines", Tr("Magazines"), Tr("glow, beam and a magazine icon"), I("magazine", "#FFFFFF")),
+            new("plans", Tr("Plans"), Tr("glow, beam and a plan icon"), I("scroll", "#FFFFFF")),
+            new("slasher", Tr("Slasher event"), Tr("Spooky Scorched purple with a pumpkin; the Slasher mask green with a clown"), M("model:pumpkin", SlasherPurple)),
+            new("xp", Tr("XP buffs"), Tr("every XP recipe's ingredients: glow and a 3D ramen"), M("model:ramen", Catalog.PlantGreen)),
+            new("vending", Tr("Player vendors"), Tr("every CAMP vending machine: glow, a tall beam and a $ icon"), I("dollar", "#FFB347")),
+            new("plants", Tr("Bright plants"), Tr("harvestable plants in their own colours, brighter - nothing added, not through walls"), I("herb", Catalog.PlantGreen)),
         };
         return tiles.Where(t => PresetEntries(t.Key).Count > 0).ToList();
     }
@@ -2575,7 +2621,7 @@ public sealed class MainForm : Form
         ShowCategory();
         FillList();
         ShowInspector();
-        Log($"Presets added: {string.Join(", ", picked)} - {Ticked().Count} things selected now.");
+        Log(Tf("Presets added: {0} - {1} things selected now.", string.Join(", ", picked), Ticked().Count));
     }
 
 
@@ -2594,10 +2640,10 @@ public sealed class MainForm : Form
                 if (!File.Exists(path)) continue;
                 int shared = Ba2Archive.Open(path).Entries.Count(e => ours.Contains(e.Name));
                 if (shared > 0)
-                    Log($"Note: {other} changes {shared} of the same models - for those only one mod shows (the one listed later in {game.IniName}, now {ArchiveName(project.ModName)}).");
+                    Log(Tf("Note: {0} changes {1} of the same models - for those only one mod shows (the one listed later in {2}, now {3}).", other, shared, game.IniName, ArchiveName(project.ModName)));
             }
         }
-        catch (Exception ex) { Log("Couldn't compare with the other mods: " + ex.Message); }
+        catch (Exception ex) { Log(Tr("Couldn't compare with the other mods: ") + ex.Message); }
     }
 
     /// <summary>The "More" menu items that show a setting.</summary>
@@ -2622,7 +2668,7 @@ public sealed class MainForm : Form
         // unticked: nothing lights up, so just how many there are (the part choice is kept for when it's ticked again)
         int off = IsTicked(e) ? project.OffParts.GetValueOrDefault(e.Id)?.Count ?? 0 : 0;
         int own = project.PartLooks.GetValueOrDefault(e.Id)?.Count ?? 0; // parts with their own look
-        return (off > 0 ? $"{e.Models.Count - off}/{e.Models.Count} parts" : $"{e.Models.Count} parts") + (own > 0 ? $" ◆{own}" : "") + " ›";
+        return (off > 0 ? Tf("{0}/{1} parts", e.Models.Count - off, e.Models.Count) : Tf("{0} parts", e.Models.Count)) + (own > 0 ? $" ◆{own}" : "") + " ›";
     }
 
     Rectangle LinkRect(Rectangle cell, string text)
@@ -2651,7 +2697,7 @@ public sealed class MainForm : Form
         if (sel.Count != 1 || sel[0].Group != null) return;
         copiedLook = project.StyleOf(sel[0], CatOf(sel[0])).Clone();
         copiedFrom = sel[0].Name;
-        Log($"Copied the look of {copiedFrom} - right-click other items and Paste look (or Ctrl+V).");
+        Log(Tf("Copied the look of {0} - right-click other items and Paste look (or Ctrl+V).", copiedFrom));
     }
 
     void PasteLook()
@@ -2662,7 +2708,7 @@ public sealed class MainForm : Form
         foreach (var e in picked) { project.Overrides[e.Id] = copiedLook.Clone(); project.RecipeLooks.Remove(e.Id); } // now their own
         Save();
         RefreshColours();
-        Log($"Pasted the look of {copiedFrom} onto {(picked.Count == 1 ? picked[0].Name : $"{picked.Count} items")}.");
+        Log(Tf("Pasted the look of {0} onto {1}.", copiedFrom, (picked.Count == 1 ? picked[0].Name : Tf("{0} items", picked.Count))));
     }
 
     /// <summary>Ticks / unticks the selected rows (as clicking their boxes would).</summary>
@@ -2687,14 +2733,14 @@ public sealed class MainForm : Form
     async Task<BuildResult?> Build(string outFile)
     {
         if (game == null) return null;
-        if (project.Selected.Count == 0) { Box("Select at least one item first.", Text); return null; }
+        if (project.Selected.Count == 0) { Box(Tr("Select at least one item first."), Text); return null; }
         var (models, bytes) = Builder.Estimate(project, cats, game);
         if (models > 500 && Box(
-                $"That's {models:N0} models (roughly {bytes / 1_000_000:N0} MB). A very big mod makes the game load longer and fills the world with beams.\n\nBuild it anyway?",
+                Tf("That's {0:N0} models (roughly {1:N0} MB). A very big mod makes the game load longer and fills the world with beams.\n\nBuild it anyway?", models, bytes / 1_000_000),
                 Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return null;
         SetBusy(true);
         logBox.Clear();
-        Log($"Building {Path.GetFileName(outFile)}...");
+        Log(Tf("Building {0}...", Path.GetFileName(outFile)));
         try
         {
             var p = project;
@@ -2704,13 +2750,13 @@ public sealed class MainForm : Form
             game = await Task.Run(() => GameData.Load(folder, exclude, _ => { }));
             var g = game;
             var r = await Task.Run(() => Builder.Build(p, cats, g, outFile, Log));
-            foreach (var c in r.Conflicts) Log("Note: " + c);
-            Log($"Done: {r.Models} model(s) changed{(r.Brightened > 0 ? $", {r.Brightened} material(s) brightened" : "")}{(r.Failed > 0 ? $", {r.Failed} could not be changed" : "")}. File: {outFile}");
+            foreach (var c in r.Conflicts) Log(Tr("Note: ") + c);
+            Log(Tf("Done: {0} model(s) changed{1}{2}. File: {3}", r.Models, (r.Brightened > 0 ? Tf(", {0} material(s) brightened", r.Brightened) : ""), (r.Failed > 0 ? Tf(", {0} could not be changed", r.Failed) : ""), outFile));
             if (r.Failed > 0)
-                Box($"{r.Failed} model(s) could not be changed and are not in the mod - see the log for which and why.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Box(Tf("{0} model(s) could not be changed and are not in the mod - see the log for which and why.", r.Failed), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return r;
         }
-        catch (Exception ex) { Log("Failed: " + ex.Message); Box(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error); return null; }
+        catch (Exception ex) { Log(Tr("Failed: ") + ex.Message); Box(ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error); return null; }
         finally { SetBusy(false); }
     }
 
@@ -2725,8 +2771,8 @@ public sealed class MainForm : Form
         else if (icon == MessageBoxIcon.Warning) System.Media.SystemSounds.Exclamation.Play();
         return buttons switch
         {
-            MessageBoxButtons.YesNo => Choose(text, false, "Yes", "No") == 0 ? DialogResult.Yes : DialogResult.No,
-            MessageBoxButtons.YesNoCancel => Choose(text, true, "Yes", "No") switch { 0 => DialogResult.Yes, 1 => DialogResult.No, _ => DialogResult.Cancel },
+            MessageBoxButtons.YesNo => Choose(text, false, Tr("Yes"), Tr("No")) == 0 ? DialogResult.Yes : DialogResult.No,
+            MessageBoxButtons.YesNoCancel => Choose(text, true, Tr("Yes"), Tr("No")) switch { 0 => DialogResult.Yes, 1 => DialogResult.No, _ => DialogResult.Cancel },
             MessageBoxButtons.OKCancel => Choose(text, true, "OK") == 0 ? DialogResult.OK : DialogResult.Cancel,
             _ => Ok(),
         };
@@ -2741,7 +2787,7 @@ public sealed class MainForm : Form
         flow.Controls.Add(new Label { Text = text, AutoSize = true, MaximumSize = new Size(420, 0), UseMnemonic = false, Margin = new Padding(3, 3, 3, 14) });
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, MinimumSize = new Size(420, 0) };
         int picked = -1;
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true, MinimumSize = new Size(80, 0) };
+        var cancel = new Button { Text = Tr("Cancel"), DialogResult = DialogResult.Cancel, AutoSize = true, MinimumSize = new Size(80, 0) };
         if (withCancel) buttons.Controls.Add(cancel);
         for (int i = choices.Length - 1; i >= 0; i--)
         {
@@ -2768,7 +2814,7 @@ public sealed class MainForm : Form
         flow.Controls.Add(error);
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Width = 360 };
         var ok = new Button { Text = okText, Width = 100, Height = 28 };
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 100, Height = 28 }; // 23 high clipped its text in dark (flat) mode
+        var cancel = new Button { Text = Tr("Cancel"), DialogResult = DialogResult.Cancel, Width = 100, Height = 28 }; // 23 high clipped its text in dark (flat) mode
         buttons.Controls.AddRange(new Control[] { cancel, ok });
         flow.Controls.Add(buttons);
         dlg.Controls.Add(flow);
@@ -2785,23 +2831,23 @@ public sealed class MainForm : Form
     (string Name, bool Install)? AskSave()
     {
         var box = new ComboBox { Text = project.ModName, Width = 360, DropDownStyle = ComboBoxStyle.DropDown };
-        var install = new CheckBox { Text = "Install in the game", AutoSize = true, Checked = true };
-        bool done = AskDialog("Build & save", "Build", flow =>
+        var install = new CheckBox { Text = Tr("Install in the game"), AutoSize = true, Checked = true };
+        bool done = AskDialog(Tr("Build & save"), Tr("Build"), flow =>
         {
-            flow.Controls.Add(new Label { Text = "Mod name (its .ba2 file) - pick one of your mods to replace it:", AutoSize = true });
+            flow.Controls.Add(new Label { Text = Tr("Mod name (its .ba2 file) - pick one of your mods to replace it:"), AutoSize = true });
             box.Items.AddRange(OwnMods().Select(n => (object)Path.GetFileNameWithoutExtension(n)).ToArray());
             flow.Controls.Add(box);
             flow.Controls.Add(install);
             return () =>
             {
                 var n = box.Text.Trim();
-                if (n.Length == 0) return "Type a name.";
+                if (n.Length == 0) return Tr("Type a name.");
                 if (!install.Checked) return null;
                 var inData = Path.Combine(game!.DataFolder, ArchiveName(n));
                 if (!File.Exists(inData)) return null;
-                if (!IsOwnFile(inData)) return $"The game already has a {ArchiveName(n)} from another mod - pick another name.";
+                if (!IsOwnFile(inData)) return Tf("The game already has a {0} from another mod - pick another name.", ArchiveName(n));
                 if (string.Equals(ArchiveName(n), ArchiveName(project.ModName), StringComparison.OrdinalIgnoreCase)) return null;
-                return Box($"Replace your mod {ArchiveName(n)}?", Text, MessageBoxButtons.YesNo) == DialogResult.Yes ? null : "Pick another name.";
+                return Box(Tf("Replace your mod {0}?", ArchiveName(n)), Text, MessageBoxButtons.YesNo) == DialogResult.Yes ? null : Tr("Pick another name.");
             };
         });
         return done ? (box.Text.Trim(), install.Checked) : null;
@@ -2816,12 +2862,12 @@ public sealed class MainForm : Form
     async void BuildSave()
     {
         if (game == null) return;
-        if (project.Selected.Count == 0) { Box("Select at least one item first.", Text); return; }
+        if (project.Selected.Count == 0) { Box(Tr("Select at least one item first."), Text); return; }
         if (AskSave() is not var (name, install)) return;
         project.ModName = name;
         Save();
         if (!install) { BuildFile(); return; }
-        if (GameData.GameRunning) { Box("Close Fallout 76 first - the game locks its archives while it runs.", Text); return; }
+        if (GameData.GameRunning) { Box(Tr("Close Fallout 76 first - the game locks its archives while it runs."), Text); return; }
         var outFile = Path.Combine(OutputDir, ArchiveName(name));
         if (await Build(outFile) is not BuildResult built) return;
         try
@@ -2837,18 +2883,18 @@ public sealed class MainForm : Form
             game.OwnInstalled.AddRange(names);
             ShowInstallState();
             WarnOverlaps(outFile);
-            Log("Installed. Start the game to see it (changes need a game restart).");
+            Log(Tr("Installed. Start the game to see it (changes need a game restart)."));
             var originals = project.ImportedFrom.Where(n => game.ReadArchiveList().Contains(n, StringComparer.OrdinalIgnoreCase) && File.Exists(Path.Combine(game.DataFolder, n))).ToList();
             if (originals.Count > 0)
-                Box($"{ArchiveName(name)} is installed and wins over the mod you imported.\n\n{string.Join(", ", originals)} is still installed - turn it off in your mod manager if you only want yours.", Text);
+                Box(Tf("{0} is installed and wins over the mod you imported.\n\n{1} is still installed - turn it off in your mod manager if you only want yours.", ArchiveName(name), string.Join(", ", originals)), Text);
         }
         catch (UnauthorizedAccessException ex) when (game.Microsoft)
         {
-            Log("Install failed: " + ex.Message);
+            Log(Tr("Install failed: ") + ex.Message);
             Box("Windows didn't allow writing to the game's Data folder.\n\nIn the Xbox app open Fallout 76, click \"...\" next to Play " +
                                   "and turn on \"Enable mods\" (if it's not there, the game may need to be reinstalled to a normal folder such as C:\\XboxGames), then try again.", Text);
         }
-        catch (Exception ex) { Log("Install failed: " + ex.Message); Box("Install failed: " + ex.Message, Text); }
+        catch (Exception ex) { Log(Tr("Install failed: ") + ex.Message); Box(Tr("Install failed: ") + ex.Message, Text); }
     }
 
     /// <summary>"Install in the game" off: only the file, wherever the user wants it.</summary>
@@ -2858,23 +2904,33 @@ public sealed class MainForm : Form
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         if (await Build(dlg.FileName) is BuildResult r)
             Log(r.TextureArchive != null
-                ? $"Two files: {Path.GetFileName(dlg.FileName)} and {Path.GetFileName(r.TextureArchive)}. To use them: put both in the game's Data folder and add both names to the END of sResourceArchive2List in {game?.IniName ?? "Fallout76Custom.ini"} (or install them with your mod manager)."
-                : $"To use it: put the file in the game's Data folder and add its name to the END of sResourceArchive2List in {game?.IniName ?? "Fallout76Custom.ini"} (or install it with your mod manager).");
+                ? Tf("Two files: {0} and {1}. To use them: put both in the game's Data folder and add both names to the END of sResourceArchive2List in {2} (or install them with your mod manager).", Path.GetFileName(dlg.FileName), Path.GetFileName(r.TextureArchive), game?.IniName ?? "Fallout76Custom.ini")
+                : Tf("To use it: put the file in the game's Data folder and add its name to the END of sResourceArchive2List in {0} (or install it with your mod manager).", game?.IniName ?? "Fallout76Custom.ini"));
+    }
+
+    void OpenModManager()
+    {
+        if (game == null) { Box(Tr("Pick the game folder first (Options - Game folder...)."), Text); return; }
+        using var f = Ui.Dialog(new ModManager(game, Font, Log));
+        f.ShowDialog(this);
+        if (!f.Saved) return;
+        game.OwnInstalled.RemoveAll(n => !File.Exists(Path.Combine(game.DataFolder, n))); // deleted there
+        ShowInstallState();
     }
 
     void Uninstall()
     {
         if (game == null) return;
-        if (GameData.GameRunning) { Box("Close Fallout 76 first.", Text); return; }
+        if (GameData.GameRunning) { Box(Tr("Close Fallout 76 first."), Text); return; }
         var mods = OwnMods();
-        if (mods.Count == 0) { Box("There are no ESP Maker mods in the game.", Text); return; }
+        if (mods.Count == 0) { Box(Tr("There are no ESP Maker mods in the game."), Text); return; }
         var boxes = new CheckedListBox { Width = 360, Height = 24 + 20 * Math.Min(mods.Count, 8), CheckOnClick = true, IntegralHeight = false };
         foreach (var m in mods) boxes.Items.Add(m, m.Equals(ArchiveName(project.ModName), StringComparison.OrdinalIgnoreCase) || mods.Count == 1);
-        bool done = AskDialog("Uninstall", "Remove", flow =>
+        bool done = AskDialog(Tr("Uninstall"), Tr("Remove"), flow =>
         {
-            flow.Controls.Add(new Label { Text = "Remove from the game:", AutoSize = true });
+            flow.Controls.Add(new Label { Text = Tr("Remove from the game:"), AutoSize = true });
             flow.Controls.Add(boxes);
-            return () => boxes.CheckedItems.Count == 0 ? "Select a mod." : null;
+            return () => boxes.CheckedItems.Count == 0 ? Tr("Select a mod.") : null;
         });
         if (!done) return;
         var names = boxes.CheckedItems.Cast<string>().SelectMany(n => ModFiles(Path.GetFileNameWithoutExtension(n))).ToList();
@@ -2883,9 +2939,9 @@ public sealed class MainForm : Form
             game.Uninstall(names, Log);
             game.OwnInstalled.RemoveAll(n => names.Contains(n, StringComparer.OrdinalIgnoreCase));
             ShowInstallState();
-            Log("Uninstalled.");
+            Log(Tr("Uninstalled."));
         }
-        catch (Exception ex) { Log("Uninstall failed: " + ex.Message); Box("Uninstall failed: " + ex.Message, Text); }
+        catch (Exception ex) { Log(Tr("Uninstall failed: ") + ex.Message); Box(Tr("Uninstall failed: ") + ex.Message, Text); }
     }
 
     // ---------------------------------------------------------------- dev: import test

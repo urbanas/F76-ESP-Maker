@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 using System.Drawing.Drawing2D;
 
 namespace ItemFinder;
@@ -262,13 +263,13 @@ sealed class RailButton : Control
         }
         var colour = On ? Ui.Fg : Ui.Muted;
         DrawIcon(g, Icon, new RectangleF(Width / 2f - 11, 9, 22, 22), colour);
-        using var font = new Font("Segoe UI", 8.5f, On ? FontStyle.Bold : FontStyle.Regular);
+        using var font = new Font(Loc.UiFont, 8.5f, On ? FontStyle.Bold : FontStyle.Regular);
         TextRenderer.DrawText(g, Text, font, new Rectangle(0, 34, Width, Height - 36), colour,
                               TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
         if (Count > 0)
         {
             var s = Count.ToString("N0");
-            using var bf = new Font("Segoe UI", 7.5f, FontStyle.Bold);
+            using var bf = new Font(Loc.UiFont, 7.5f, FontStyle.Bold);
             var sz = TextRenderer.MeasureText(g, s, bf, Size.Empty, TextFormatFlags.NoPadding);
             var badge = new RectangleF(Width / 2f + 4, 4, sz.Width + 9, sz.Height + 2);
             using var bb = new SolidBrush(Ui.Accent);
@@ -288,6 +289,11 @@ sealed class RailButton : Control
         using var pen = new Pen(c, 1.7f) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round };
         switch (icon)
         {
+            case "mods": // stacked layers = the load order
+                g.DrawPolygon(pen, new PointF[] { new(12, 4), new(20, 8), new(12, 12), new(4, 8) });
+                g.DrawLines(pen, new PointF[] { new(4, 12), new(12, 16), new(20, 12) });
+                g.DrawLines(pen, new PointF[] { new(4, 16), new(12, 20), new(20, 16) });
+                break;
             case "picks":
                 g.DrawPolygon(pen, new PointF[] { new(12, 3), new(14.6f, 8.6f), new(20.6f, 9.3f), new(16.1f, 13.4f), new(17.3f, 19.4f), new(12, 16.4f), new(6.7f, 19.4f), new(7.9f, 13.4f), new(3.4f, 9.3f), new(9.4f, 8.6f) });
                 break;
@@ -415,8 +421,8 @@ sealed class PresetTiles : Control
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Parent?.BackColor ?? Ui.Panel);
-        using var font = new Font("Segoe UI", 8f);
-        using var bold = new Font("Segoe UI", 8f, FontStyle.Bold);
+        using var font = new Font(Loc.UiFont, 8f);
+        using var bold = new Font(Loc.UiFont, 8f, FontStyle.Bold);
         for (int i = 0; i < Names.Length; i++)
         {
             var r = Tile(i);
@@ -430,7 +436,7 @@ sealed class PresetTiles : Control
             }
             var pic = new Rectangle(r.X + (r.Width - 52) / 2, r.Y + 5, 52, 52);
             DrawLook(g, Names[i], pic, Colour);
-            TextRenderer.DrawText(g, Names[i], on ? bold : font, new Rectangle(r.X + 2, pic.Bottom, r.Width - 4, r.Bottom - pic.Bottom),
+            TextRenderer.DrawText(g, Tr(Names[i]), on ? bold : font, new Rectangle(r.X + 2, pic.Bottom, r.Width - 4, r.Bottom - pic.Bottom),
                                   Ui.Fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         }
         if (Focused && ShowFocusCues && Selected >= 0)

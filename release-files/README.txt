@@ -1,4 +1,4 @@
-ESP Maker 2.2.2 - make your own ESP mod for Fallout 76
+ESP Maker 2.3 - make your own ESP mod for Fallout 76
 ==================================================
 
 ESP Maker lets you pick what you want to spot in Fallout 76 - bobbleheads, magazines, plans,
@@ -48,6 +48,12 @@ HOW TO USE
    Uncheck "Install in the game" to only make the .ba2.
 Changed something? Click "Build & save" again and pick the same name to replace the mod.
 Ctrl+Z / Ctrl+Y undo and redo. View -> Dark mode, Compact rows.
+View -> Language: the app and the item names follow your game's language (all 13 of them), or
+pick one yourself; the app restarts in the new language. The translations are new and were made
+with AI help - some wording may be off. Please report anything that reads wrong.
+Options -> Mod manager (or the Mods button at the bottom of the left bar): every mod in your Data
+folder - tick to turn it on or off, drag to change the load order (lower wins), see which mods
+change the same files, delete a mod. Your ini is backed up before saving.
 Edit -> "Colour by priority..." colours your picks by how much they matter (white rare, gold worth
 a detour, green useful, red junk).
 

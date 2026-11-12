@@ -15,6 +15,8 @@ Choose what you want to spot: bobbleheads, magazines, plans, XP food, pre-war fo
 
 Each part can have effects: rainbow colours, pulse, spin, bob, light running up the beam, and a timer that hides it after a set time.
 
+The app speaks all 13 of the game's languages (**View → Language**). Item, enemy and category names come from your game's own text. The window text was translated with AI help, so some wording may be off; corrections are welcome.
+
 ESP Maker builds the mod (`.ba2`) and installs it for you. It only changes how things look on your own PC. The result is a normal `.ba2` mod listed in your custom ini, like any other Fallout 76 mod.
 
 ## Download
@@ -30,7 +32,7 @@ Get the ready-to-run app from the [Releases](../../releases) page or from Nexus 
 3. Click the category (or an item) to choose its look in the pop-up. The 3D preview shows the real game model the way the mod will show it; **Bigger view** lets you walk around it.
 4. Close the game, click **Build & save**, name your mod, click **Build**, then start the game.
 
-**Edit → Add presets...** adds common setups in one click: enemies, legendary enemies, bobbleheads, magazines, plans, XP buffs, player vendors and more. **Import .ba2...** opens an existing mod (yours or someone else's) so you can change it or merge it with another.
+**Edit → Add presets...** adds common setups in one click: enemies, legendary enemies, bobbleheads, magazines, plans, XP buffs, player vendors and more. **Import .ba2...** opens an existing mod (yours or someone else's) so you can change it or merge it with another. **Options → Mod manager** (or the **Mods** button) turns any of your mods on or off, changes the load order and shows which mods change the same files.
 
 The full guide, with limits and tips, is in [release-files/README.txt](release-files/README.txt). The version history is in [release-files/CHANGELOG.txt](release-files/CHANGELOG.txt).
 

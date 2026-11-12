@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -173,12 +174,35 @@ public sealed class Entry
     /// <summary>Editor ids of the records using the models (Everything else only: searchable there).</summary>
     public List<string>? EditorIds;
 
+    /// <summary>The name in the app's language (Name stays the English key). Cached: the language is fixed for a session
+    /// (a change restarts the app); the cache is dropped if the language or the name changes (dev tests switch it).</summary>
+    public string Shown => shownLang == Loc.Lang && shownFor == Name ? shown! : Cache();
+    string? shown, shownFor, shownLang;
+    List<string>? search;
+    string Cache()
+    {
+        (shown, shownFor, shownLang, search) = (Loc.Name(Name), Name, Loc.Lang, null);
+        return shown;
+    }
+    /// <summary>For search: the English names and, in another language, the translated ones too.</summary>
+    public IEnumerable<string> SearchNames
+    {
+        get
+        {
+            if (Loc.English) return ItemNames.Prepend(Name);
+            var s = Shown; // refreshes the cache (and drops a stale list) when the language changed
+            return search ??= ItemNames.Prepend(Name).Concat(ItemNames.Select(Loc.Name)).Append(s).Distinct().ToList();
+        }
+    }
+
     public override string ToString() => Name;
 }
 
 public sealed class Category
 {
     public string Name = "";
+    /// <summary>The name in the app's language (Name stays the English key).</summary>
+    public string Shown => Loc.Name(Name);
     public string Description = "";
     public Style DefaultStyle = new();
     public List<Entry> Entries = new();
@@ -335,8 +359,7 @@ public static class Catalog
         var bobble = new Category
         {
             Name = Bobbleheads,
-            Description = "Each bobblehead type has its own model, so you can pick them one by one. " +
-                          "Bobbleheads shown on a Bobblehead Stand in a CAMP light up too.",
+            Description = Tr("Each bobblehead type has its own model, so you can pick them one by one. Bobbleheads shown on a Bobblehead Stand in a CAMP light up too."),
             DefaultStyle = Look(Collectible),
         };
         foreach (var g in world.Where(r => r.Type is "MISC" or "ALCH" && Regex.IsMatch(r.Name, @"^(Glowing )?Bobblehead: ", RegexOptions.IgnoreCase))
@@ -352,9 +375,7 @@ public static class Catalog
         var mags = new Category
         {
             Name = Magazines,
-            Description = "Magazines have no model of their own: each sits on one of a few covers, and every title on a cover " +
-                          "lights up together (hover an entry to see its titles). Pick the covers you want. " +
-                          "Magazines lying around as decoration light up too.",
+            Description = Tr("Magazines have no model of their own: each sits on one of a few covers, and every title on a cover lights up together (hover an entry to see its titles). Pick the covers you want. Magazines lying around as decoration light up too."),
             DefaultStyle = Look(Collectible),
         };
         var magRecs = world.Where(r => r.Type is "BOOK" or "ALCH" && Regex.IsMatch(r.EditorId, @"^(Magazine_|PerkMag)", RegexOptions.IgnoreCase)).ToList();
@@ -371,7 +392,7 @@ public static class Catalog
                 : titles.Count == 1 ? titles[0] : series.Count == 1 ? $"{series[0].Key} ({titles.Count} issues)" : $"{file} ({titles.Count} magazines)";
             var e = MakeEntry(mags, "magazines:" + g.Key, name, new[] { g.Key }, byModel, "");
             e.ItemNames = titles.Concat(e.ItemNames).Distinct().ToList(); // the titles first in the hover list
-            e.Detail = series.Count == 1 ? $"{titles.Count} title(s)" : string.Join(", ", series.Take(4).Select(x => $"{x.Key} ×{x.Count()}")) + (series.Count > 4 ? ", ..." : "");
+            e.Detail = series.Count == 1 ? Tf("{0} title(s)", titles.Count) : string.Join(", ", series.Take(4).Select(x => $"{x.Key} ×{x.Count()}")) + (series.Count > 4 ? ", ..." : "");
             mags.Entries.Add(e);
         }
         var magModels = mags.Entries.SelectMany(e => e.Models).ToHashSet();
@@ -383,11 +404,7 @@ public static class Catalog
         var xp = new Category
         {
             Name = XpRecipes,
-            Description = "Food that boosts XP or Intelligence (from the game's own recipes). Selecting a recipe selects its " +
-                          "ingredients - the plants to harvest and the ingredients lying in the world, as listed in Plants, " +
-                          "Aid & food... (they show in Your picks one by one, each with its own category's look). " +
-                          "Click ► in front of a recipe to see them and deselect the ones you already have. The look set here " +
-                          "goes to what a recipe selects (shown as their own look).",
+            Description = Tr("Food that boosts XP or Intelligence (from the game's own recipes). Selecting a recipe selects its ingredients - the plants to harvest and the ingredients lying in the world, as listed in Plants, Aid & food... (they show in Your picks one by one, each with its own category's look). Click ► in front of a recipe to see them and deselect the ones you already have. The look set here goes to what a recipe selects (shown as their own look)."),
             DefaultStyle = Look(PlantGreen, 600),
             Groups = true,
         };
@@ -463,8 +480,7 @@ public static class Catalog
         var plans = new Category
         {
             Name = Plans,
-            Description = "Almost all plans use one of two models - a rolled blueprint or Brotherhood tech documents - " +
-                          "so the game can't light up a single plan. Select one or both kinds.",
+            Description = Tr("Almost all plans use one of two models - a rolled blueprint or Brotherhood tech documents - so the game can't light up a single plan. Select one or both kinds."),
             DefaultStyle = Look(Collectible),
         };
         var planLabels = new Dictionary<string, string>
@@ -480,7 +496,7 @@ public static class Catalog
             var label = planLabels.GetValueOrDefault(g.Key) ?? g.OrderBy(r => r.Name.Length).First().Name;
             var e = MakeEntry(plans, "plans:" + g.Key, label, new[] { g.Key }, byModel, "");
             int n = g.Select(r => r.Name).Distinct().Count();
-            e.Detail = n == 1 ? "1 plan" : $"{n} plans";
+            e.Detail = n == 1 ? Tr("1 plan") : Tf("{0} plans", n);
             plans.Entries.Add(e);
         }
         plans.Entries.Sort((a, b) => b.ItemNames.Count.CompareTo(a.ItemNames.Count));
@@ -490,8 +506,7 @@ public static class Catalog
         var spots = new Category
         {
             Name = LootSpots,
-            Description = "Containers and spots worth finding - caps stashes, safes, treasure map mounds... (event objects are under EVENTS) " +
-                          "They keep their beam after you've looted them (the game uses one model for full and empty).",
+            Description = Tr("Containers and spots worth finding - caps stashes, safes, treasure map mounds... (event objects are under EVENTS) They keep their beam after you've looted them (the game uses one model for full and empty)."),
             DefaultStyle = Look(LootViolet),
         };
         foreach (var (label, names, extra) in new (string, string, string[])[]
@@ -512,7 +527,7 @@ public static class Catalog
                               .Select(r => NormalizeModel(r.Model)).Concat(extra.Where(Exists)).Distinct().OrderBy(m => m).ToList();
             if (models.Count == 0) continue;
             var e = MakeEntry(spots, "spot:" + label.ToLowerInvariant(), label, models, byModel, "");
-            e.Detail = models.Count == 1 ? "1 model" : $"{models.Count} models";
+            e.Detail = models.Count == 1 ? Tr("1 model") : Tf("{0} models", models.Count);
             spots.Entries.Add(e);
         }
         cats.Add(spots);
@@ -521,8 +536,7 @@ public static class Catalog
         var prewar = new Category
         {
             Name = PreWarFood,
-            Description = "Packaged food from before the war (Fancy Lads, Sugar Bombs, Cram, InstaMash...). The same entries as in " +
-                          "Aid & food - selecting one here selects it there too. Some share a model with cooked food (hover to see).",
+            Description = Tr("Packaged food from before the war (Fancy Lads, Sugar Bombs, Cram, InstaMash...). The same entries as in Aid & food - selecting one here selects it there too. Some share a model with cooked food (hover to see)."),
             DefaultStyle = Look(Everyday),
         };
         var prewarNames = PreWarFoods.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -546,8 +560,7 @@ public static class Catalog
         var notes = new Category
         {
             Name = Notes,
-            Description = "Notes, letters and holotapes lying around. They share a few models (paper, torn paper, holotape...), so " +
-                          "every note on a model lights up together - hover an entry to see them. Notes you've already read light up too.",
+            Description = Tr("Notes, letters and holotapes lying around. They share a few models (paper, torn paper, holotape...), so every note on a model lights up together - hover an entry to see them. Notes you've already read light up too."),
             DefaultStyle = Look(Collectible),
         };
         bool IsNote(EsmRecord r) => r.Type is "BOOK" or "NOTE" && !Junk.IsMatch(r.EditorId)
@@ -573,7 +586,7 @@ public static class Catalog
             var titles = g.Select(r => r.Name.Trim()).Distinct().OrderBy(n => n).ToList();
             var e = MakeEntry(notes, "notes:" + g.Key, noteLabels.GetValueOrDefault(g.Key) ?? (titles.Count == 1 ? titles[0] : Label(g.ToList())), new[] { g.Key }, byModel, "");
             e.ItemNames = titles.Concat(e.ItemNames).Distinct().ToList();
-            e.Detail = titles.Count == 1 ? "1 note" : $"{titles.Count} notes";
+            e.Detail = titles.Count == 1 ? Tr("1 note") : Tf("{0} notes", titles.Count);
             notes.Entries.Add(e);
         }
         notes.Entries.Sort((a, b) => b.ItemNames.Count.CompareTo(a.ItemNames.Count));
@@ -607,8 +620,8 @@ public static class Catalog
             Category JunkCat(string comp) => junk.TryGetValue(comp, out var jc) ? jc : junk[comp] = new Category
             {
                 Name = "Junk: " + comp, Section = "JUNK", Group = JunkKind(comp), DefaultStyle = Look(color),
-                Description = $"Junk that scraps into {comp.ToLowerInvariant()} (hover an entry to see everything it scraps into). " +
-                              "Junk with several components is listed under each of them. Give each component its own colour to tell look-alike junk apart.",
+                Description = Tf("Junk that scraps into {0} (hover an entry to see everything it scraps into). Junk with several components is listed under each of them. Give each component its own colour to tell look-alike junk apart.",
+                                 Loc.Name(comp).ToLower()),
             };
             // one label per model, then models with the same label become one entry
             var labelled = new List<(string Label, string Model)>();
@@ -641,9 +654,9 @@ public static class Catalog
                 var main = Component(models[0]);
                 var into = main != null ? JunkCat(main) : c;
                 var e = MakeEntry(into, $"name:{name}:{g.Key.ToLowerInvariant()}", g.Key, models, byModel, "");
-                if (models.Count > 1) e.Detail = $"{models.Count} models" + (e.Detail.Length > 0 ? ", " + e.Detail : "");
+                if (models.Count > 1) e.Detail = Tf("{0} models", models.Count) + (e.Detail.Length > 0 ? ", " + e.Detail : "");
                 var scraps = main != null ? Scraps(models) : new();
-                if (scraps.Count > 0) e.Detail = "scraps into: " + string.Join(", ", scraps) + (e.Detail.Length > 0 ? " · " + e.Detail : "");
+                if (scraps.Count > 0) e.Detail = Tr("scraps into: ") + string.Join(", ", scraps) + (e.Detail.Length > 0 ? " · " + e.Detail : "");
                 e.Harvestable = types.Contains("FLOR");
                 e.Assembled = types.Contains("WEAP") && models.Count > 1;
                 into.Entries.Add(e);
@@ -690,7 +703,7 @@ public static class Catalog
                 {
                     Id = recipe.Id + ":" + ing.ToLowerInvariant(), Category = string.Join(" + ", members.Select(m => m.Category).Distinct()),
                     Name = ing, Group = members, Spots = -1, NoLink = true, ItemNames = new() { ing },
-                    Detail = string.Join(" · ", members.Select(m => (m.Category.StartsWith("Plants") ? "harvest: " : "lying around: ") + m.Name)),
+                    Detail = string.Join(" · ", members.Select(m => (m.Category.StartsWith("Plants") ? Tr("harvest: ") : Tr("lying around: ")) + m.Name)),
                 });
             }
             recipe.Detail = string.Join(" · ", new[] { string.Join(", ", recipe.Group.Select(g => g.Name)), recipe.Detail }.Where(x => x.Length > 0));
@@ -761,9 +774,7 @@ public static class Catalog
         var c = new Category
         {
             Name = Vending,
-            Description = "Player vending machines in CAMPs - every design (Vendor Bot, Slocum's Joe, cash registers...) has a model of its " +
-                          "own, so only shops light up. \"Select all\" finds any player's shop. The Legendary Exchange machines at " +
-                          "train stations are here too.",
+            Description = Tr("Player vending machines in CAMPs - every design (Vendor Bot, Slocum's Joe, cash registers...) has a model of its own, so only shops light up. \"Select all\" finds any player's shop. The Legendary Exchange machines at train stations are here too."),
             DefaultStyle = Look("#FFB347"),
         };
         // designs that come in several colours / versions: one entry, named for all of them
@@ -808,7 +819,7 @@ public static class Catalog
         var c = new Category
         {
             Name = Workbenches,
-            Description = "Crafting stations: every design of each kind, in the world and in CAMPs (players' CAMP stations light up too).",
+            Description = Tr("Crafting stations: every design of each kind, in the world and in CAMPs (players' CAMP stations light up too)."),
             DefaultStyle = Look("#7FE0FF"),
         };
         var kinds = new (string Name, string Match)[]
@@ -835,7 +846,7 @@ public static class Catalog
             {
                 Id = "workbench:" + name.ToLowerInvariant(), Category = Workbenches, Name = name, Models = models,
                 ItemNames = mine.Select(r => r.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n).ToList(),
-                Detail = $"{models.Count} design{(models.Count == 1 ? "" : "s")} · CAMP ones too",
+                Detail = Tf("{0} design{1} · CAMP ones too", models.Count, (models.Count == 1 ? "" : "s")),
                 Spots = placed > 0 ? placed : -1, // CAMP-only kinds aren't placed in the world: unknown, not "never"
             });
         }
@@ -864,8 +875,7 @@ public static class Catalog
         var c = new Category
         {
             Name = LootBagsName,
-            Description = "Loot bags: dropped items (paper bag), creature meat piles, robot scrap piles and every loot bag skin " +
-                          "players can pick. Some skins reuse a world model (paper bags, gravestones...) - those light up too.",
+            Description = Tr("Loot bags: dropped items (paper bag), creature meat piles, robot scrap piles and every loot bag skin players can pick. Some skins reuse a world model (paper bags, gravestones...) - those light up too."),
             DefaultStyle = Look(LootViolet),
         };
         var names = new Dictionary<string, string>
@@ -899,7 +909,7 @@ public static class Catalog
         var c = new Category
         {
             Name = StorageBoxesName,
-            Description = "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.",
+            Description = Tr("Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours."),
             DefaultStyle = Look("#B08CFF"),
         };
         foreach (var (name, match) in new[] { ("Aid boxes", "^My Aid Box$"), ("Ammo boxes", "^My Ammo Storage Box$"), ("Scrapboxes", "^My Scrapbox$"), ("Stash boxes", "^My Stash Box$") })
@@ -925,8 +935,7 @@ public static class Catalog
         var c = new Category
         {
             Name = ApparelName,
-            Description = "Clothes and hats lying on the ground (pre-war dresses, suits, hats...). Only their ground models - " +
-                          "clothes whose ground model is also the worn one are left out, so players wearing them don't glow.",
+            Description = Tr("Clothes and hats lying on the ground (pre-war dresses, suits, hats...). Only their ground models - clothes whose ground model is also the worn one are left out, so players wearing them don't glow."),
             DefaultStyle = Look(Everyday),
         };
         var worn = idx.Records.Where(r => r.Type == "ARMA" && r.Models != null).SelectMany(r => r.Models!).Select(NormalizeModel).ToHashSet();
@@ -944,7 +953,7 @@ public static class Catalog
             c.Entries.Add(new Entry
             {
                 Id = "apparel:" + model, Category = ApparelName, Name = Label(recs, worldSpots), Models = new() { model },
-                ItemNames = names, Spots = spots, Detail = names.Count > 1 ? $"+{names.Count - 1} more share this model" : "",
+                ItemNames = names, Spots = spots, Detail = names.Count > 1 ? Tf("+{0} more share this model", names.Count - 1) : "",
             });
         }
         c.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
@@ -965,11 +974,11 @@ public static class Catalog
         {
             Name = name,
             Description = worn
-                ? "Every outfit, hat and armour piece in the game (not power armour), as worn: anyone wearing it glows - other players, NPCs and you too. " +
+                ? Tr("Every outfit, hat and armour piece in the game (not power armour), as worn: anyone wearing it glows - other players, NPCs and you too. " +
                   "Glow and marker only (no icon or name on worn clothes). Invisible: outfits show the bare body, gloves bare hands; " +
-                  "hats and helmets that cover the hair or head stay visible (the game draws no hair or head under them)."
-                : "Every outfit and hat in the game, found in the world or not (Atomic Shop, rewards, events): its ground model - " +
-                  "lying around, dropped, or on a display. Nobody wearing it glows (unless that outfit's ground model is also its worn one).",
+                  "hats and helmets that cover the hair or head stay visible (the game draws no hair or head under them).")
+                : Tr("Every outfit and hat in the game, found in the world or not (Atomic Shop, rewards, events): its ground model - " +
+                  "lying around, dropped, or on a display. Nobody wearing it glows (unless that outfit's ground model is also its worn one)."),
             DefaultStyle = Look(Everyday),
         };
         var armo = idx.Records.Where(r => r.Type == "ARMO" && r.Name.Trim() is { Length: > 0 } n && n != "Default" && !Junk.IsMatch(r.EditorId)).ToList();
@@ -1003,7 +1012,7 @@ public static class Catalog
                 ItemNames = new() { g.Key }, NoLink = true, NoIcon = worn, Worn = worn,
                 BeamModels = worn ? new() { models[0] } : null,
                 Bare = worn ? models.Where(bare.ContainsKey).ToDictionary(m => m, m => bare[m]) : null,
-                Detail = models.Count > 1 ? $"{models.Count} parts" : "",
+                Detail = models.Count > 1 ? Tf("{0} parts", models.Count) : "",
             });
         }
         c.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
@@ -1051,8 +1060,8 @@ public static class Catalog
             var c = new Category
             {
                 Name = OtherPrefix + name, Section = AllSection, DefaultStyle = Look("#7FE3FF"),
-                Description = $"{name} the other categories don't have, named after the game's records - not sorted or checked by hand. " +
-                              "Search also finds editor ids here." + (PlacedOnly(types) ? " Only ones placed in the world (or by a spawn list) are listed." : ""),
+                Description = Tf("{0} the other categories don't have, named after the game's records - not sorted or checked by hand. Search also finds editor ids here.", Loc.Name(name))
+                              + (PlacedOnly(types) ? " " + Tr("Only ones placed in the world (or by a spawn list) are listed.") : ""),
             };
             bool placedOnly = PlacedOnly(types);
             // apparel: its ground models (male / female); the rest: the record's model
@@ -1072,7 +1081,7 @@ public static class Catalog
                 {
                     Id = "all:" + g.Key, Category = c.Name, Name = Label(recs, spots), Models = new() { g.Key },
                     ItemNames = names, EditorIds = ids, Spots = n == 0 ? -1 : n, Harvestable = types.Contains("FLOR"),
-                    Detail = string.Join(" · ", new[] { ids.FirstOrDefault() ?? "", names.Count > 1 ? $"+{names.Count - 1} more share this model" : "",
+                    Detail = string.Join(" · ", new[] { ids.FirstOrDefault() ?? "", names.Count > 1 ? Tf("+{0} more share this model", names.Count - 1) : "",
                                                         n == 0 ? "not placed directly - only where something spawns it" : "" }.Where(x => x.Length > 0)),
                 });
             }
@@ -1094,8 +1103,7 @@ public static class Catalog
         var c = new Category
         {
             Name = "Foliage (hide it)", DefaultStyle = look,
-            Description = "Grass, bushes, vines and trees, already set to Invisible: check what gets in your way (the Mire) and loot on the " +
-                          "ground shows. Invisible trees and bushes are still there - you bump into them. Harvestable plants are not in here.",
+            Description = Tr("Grass, bushes, vines and trees, already set to Invisible: check what gets in your way (the Mire) and loot on the ground shows. Invisible trees and bushes are still there - you bump into them. Harvestable plants are not in here."),
         };
         var flora = idx.Records.Where(r => r.Type == "FLOR" && r.Model.Length > 0).Select(r => NormalizeModel(r.Model)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var skip = new Regex(@"flora|hulk|marker|fx|lod|planter|picked|switchnode|harvest|ingredient|placeholder|decal|_go\b", RegexOptions.IgnoreCase);
@@ -1117,7 +1125,7 @@ public static class Catalog
             var ms = models.Where(has).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(m => m).ToList();
             if (ms.Count == 0) continue;
             c.Entries.Add(new Entry { Id = "foliage:" + id, Category = c.Name, Name = name, Models = ms, NoLink = true,
-                                      Detail = (detail.Length > 0 ? detail + " · " : "") + $"{ms.Count} models" });
+                                      Detail = (detail.Length > 0 ? detail + " · " : "") + Tf("{0} models", ms.Count) });
         }
         return c;
     }
@@ -1131,9 +1139,7 @@ public static class Catalog
         var c = new Category
         {
             Name = CampItemsName, DefaultStyle = Look("#FFB45C"),
-            Description = "Things built in CAMPs - collectors (Pumpkin Pie Stand, Toxic Gooler Cooler...), extractors, generators, purifiers, " +
-                          "turrets, signs and displays, named after the game's records. Every player's copy lights up, not only yours. " +
-                          "Plain decorations (chairs, beds, statues) aren't in the game index, so they're not here.",
+            Description = Tr("Things built in CAMPs - collectors (Pumpkin Pie Stand, Toxic Gooler Cooler...), extractors, generators, purifiers, turrets, signs and displays, named after the game's records. Every player's copy lights up, not only yours. Plain decorations (chairs, beds, statues) aren't in the game index, so they're not here."),
         };
         var covered = cats.SelectMany(x => x.Entries).SelectMany(e => e.Models).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var spots = idx.WorldSpots();
@@ -1152,7 +1158,7 @@ public static class Catalog
             {
                 Id = "camp:" + g.Key, Category = c.Name, Name = Label(recs), Models = new() { g.Key },
                 ItemNames = names, EditorIds = ids, Spots = n == 0 ? -1 : n,
-                Detail = string.Join(" · ", new[] { recs[0].EditorId, names.Count > 1 ? $"+{names.Count - 1} more share this model" : "" }.Where(x => x.Length > 0)),
+                Detail = string.Join(" · ", new[] { recs[0].EditorId, names.Count > 1 ? Tf("+{0} more share this model", names.Count - 1) : "" }.Where(x => x.Length > 0)),
             });
         }
         c.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
@@ -1167,7 +1173,7 @@ public static class Catalog
                             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
         e.ItemNames = names;
         int others = names.Count(n => !n.Equals(name, StringComparison.OrdinalIgnoreCase));
-        e.Detail = detail.Length > 0 ? detail : others > 0 ? $"+{others} more share this model" : "";
+        e.Detail = detail.Length > 0 ? detail : others > 0 ? Tf("+{0} more share this model", others) : "";
         return e;
     }
 }

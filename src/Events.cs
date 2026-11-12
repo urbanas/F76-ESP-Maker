@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 using System.Text.RegularExpressions;
 
 namespace ItemFinder;
@@ -65,6 +66,27 @@ public static class EventCatalog
              new Pick("Paint buckets (graffiti)", new[] { @"props\paint\paintbucket_generic.nif", @"props\paint\paintbucket_blue.nif", @"props\paint\paintbucket_red.nif", @"props\paint\paintbucket_yellow.nif", @"props\paint\paintbucketpink_tol.nif" }, "paint buckets everywhere light up too"),
              new Pick("Fireworks crates", new[] { @"setdressing\fireworkscrate\mn2_fireworkscrate.nif" }),
              new Pick("Costumed Lost (mummy & costume)", new[] { @"atx\clothes\mummy\atx_mummy_m.nif", @"atx\clothes\mummy\atx_mummy_f.nif", @"clothes\halloweencostumes\halloweencostume02_male_body.nif", @"clothes\halloweencostumes\halloweencostume02_female_body.nif" }, "players wearing these costumes glow too"),
+         }),
+        // Holiday Scorched (December): Scorched in the game's Creature_Holiday_* outfits (OTFT CreatureOutfit_Festive_Scorched)
+        // and the Festive Scorched Exterminator bosses (MrClausHat / SantaBeard NONPLAYABLE) drop Holiday Gifts. The gifts,
+        // waterlogged gifts (fishing) and handmade gifts all share giftbox.nif; gift wrap = giftwrappingpaper_01.nif
+        ("Holiday Scorched", "^(c_)?Festive_", "(?!)", "#30E070",
+         "Holiday Scorched: Scorched in Santa, Mrs. Claus, elf and snowflake pant-suit outfits - they drop Holiday Gifts. " +
+         "Also the gifts and gift wrap when they lie on the ground.",
+         new[]
+         {
+             new Pick(FestiveCostumes, new[]
+             {
+                 @"atx\clothes\mrclaus\mrclausm.nif", @"atx\clothes\mrclaus\mrclausf.nif",
+                 @"atx\clothes\mrclaus\mrclaushatm.nif", @"atx\clothes\mrclaus\mrclaushatf.nif",
+                 @"atx\clothes\mrsclaus\mrsclausm.nif", @"atx\clothes\mrsclaus\mrsclausf.nif",
+                 @"atx\clothes\christmaself\christmaselfm.nif", @"atx\clothes\christmaself\christmaselff.nif",
+                 @"atx\clothes\christmaself\christmaselfhatm.nif", @"atx\clothes\christmaself\christmaselfhatf.nif",
+                 @"atx\clothes\pantsuit\atx_pantsuit_m.nif", @"atx\clothes\pantsuit\atx_pantsuit_f.nif",
+                 @"atx\clothes\santabeard\santabeardm.nif", @"atx\clothes\santabeard\santabeardfemale.nif",
+             }, "Santa suits & hats, Mrs. Claus dresses, elf outfits, snowflake pant suits, Santa beards · players wearing them glow too"),
+             new Pick("Holiday gifts", new[] { @"atx\setdressing\giftboxes\giftbox.nif" }, "gifts on the ground (also waterlogged and handmade ones) · the Atlantic City gift-box clue lights up too"),
+             new Pick("Gift wrap", new[] { @"setdressing\giftbox\giftwrappingpaper_01.nif" }),
          }),
         ("Fasnacht", "^E01F_", @"(fasnacht|helvetia|helv_|cm0059e955)", "#40D0FF", "Fasnacht Day: bonfire, beehives, frog egg clusters and the other supply spots.", Array.Empty<Pick>()),
         ("Meat Week", "^E02A_", @"(meat_bbq|meatweek|grahm|cm0054a3a6)", "#FF4040", "Meat Week (Grahm's) cookout objects.", Array.Empty<Pick>()),
@@ -200,7 +222,7 @@ public static class EventCatalog
             foreach (var e in c.Entries.Where(e => e.Id.StartsWith("enemy:") && e.Id.EndsWith(" clothes")))
             {
                 e.Models.RemoveAll(costumes.Contains);
-                e.Detail = $"{e.Models.Count} models - human clothes made to fit them: players wearing these glow too";
+                e.Detail = Tf("{0} models - human clothes made to fit them: players wearing these glow too", e.Models.Count);
             }
             c.Entries.RemoveAll(e => e.Id.StartsWith("enemy:") && e.Id.EndsWith(" clothes") && e.Models.Count == 0);
         }
@@ -214,7 +236,7 @@ public static class EventCatalog
     static string EventGroup(string name) =>
         name.Contains("(raid)") || name.Contains("expeditions") ? "Raids & expeditions"
         : name is "The Slasher (Halloween)" or "Mischief Night" or "Fasnacht" or "Meat Week" or "Mothman Equinox"
-            or "Invaders from Beyond" or "Lucky Strike" ? "Seasonal"
+            or "Invaders from Beyond" or "Lucky Strike" or "Holiday Scorched" ? "Seasonal"
         : "Public events";
 
     public static List<Category> Build(GameIndex idx, Func<string, bool> exists)
@@ -242,7 +264,7 @@ public static class EventCatalog
                     {
                         Id = $"event:{name.ToLowerInvariant()}:{pick.ToLowerInvariant()}", Category = name, Name = pick, Models = ms,
                         ItemNames = ms.SelectMany(m => byModel.GetValueOrDefault(m) ?? new()).Select(r => r.Name.Trim()).Where(n => n.Length > 0).Distinct().Append(pick).ToList(),
-                        Detail = detail.Length > 0 ? detail : ms.Count == 1 ? "1 model" : $"{ms.Count} models",
+                        Detail = detail.Length > 0 ? detail : ms.Count == 1 ? Tr("1 model") : Tf("{0} models", ms.Count),
                         // worn outfits are animated (skinned): only the 3D icon survives on them, like on creatures
                         NoIcon = ms.All(m => (m.Contains(@"clothes\") || m.Contains(@"powerarmor\")) && !m.EndsWith("_go.nif")),
                     });
@@ -275,7 +297,7 @@ public static class EventCatalog
                 {
                     Id = $"event:{name.ToLowerInvariant()}:{g.Key.ToLowerInvariant()}", Category = name, Name = g.Key, Models = models,
                     ItemNames = new() { g.Key }, Harvestable = g.Any(r => r.Type == "FLOR"),
-                    Detail = models.Count == 1 ? "1 model" : $"{models.Count} models",
+                    Detail = models.Count == 1 ? Tr("1 model") : Tf("{0} models", models.Count),
                 });
             }
             if (c.Entries.Count == 0) continue;
@@ -288,7 +310,7 @@ public static class EventCatalog
 
     /// <summary>The pick for the costumes Spooky Scorched wear; built as two entries, heads and bodies.</summary>
     public const string SpookyCostumes = "Spooky Scorched (costumes)", SpookyHeads = "Spooky Scorched (costume heads)",
-                        SpookyBodies = "Spooky Scorched (costume bodies)";
+                        SpookyBodies = "Spooky Scorched (costume bodies)", FestiveCostumes = "Festive Scorched (costumes)";
     // the Silver Shroud costume has no head piece: its gloves carry the beam and icon, as in Spooky Beacons
     static readonly Regex HeadPiece = new(@"(hat|helmet|mask|hood|headgear|headwear|facebones|silvershroudgloves)", RegexOptions.IgnoreCase);
 
@@ -296,7 +318,7 @@ public static class EventCatalog
     static readonly HashSet<string> EnemyPicks = new()
     {
         "Pint-Sized Slasher (costume)", "Pint-Sized Phantoms (outfit)", "Uninvited Guest (Pale Rider armour)", SpookyHeads, SpookyBodies,
-        "Costumed Lost (mummy & costume)", "Ultragenetic Mole Miner Stalker",
+        "Costumed Lost (mummy & costume)", "Ultragenetic Mole Miner Stalker", FestiveCostumes,
     };
 
     public const string EventEnemies = "Event enemies";
@@ -308,8 +330,7 @@ public static class EventCatalog
         var copies = new Category
         {
             Name = EventEnemies, Section = "ENEMIES",
-            Description = "Enemies of seasonal events and raids (the Pint-Sized Slasher, Spooky Scorched, costumed Lost, the Gleaming Depths Stalker...). " +
-                          "The same entries as under EVENTS - selecting one here selects it there too.",
+            Description = Tr("Enemies of seasonal events and raids (the Pint-Sized Slasher, Spooky Scorched, costumed Lost, the Gleaming Depths Stalker...). The same entries as under EVENTS - selecting one here selects it there too."),
             DefaultStyle = new Style { GlowFill = true, GlowColor = "#FF7A00", BeamColor = "#FF7A00", BeamLength = 1400 },
         };
         foreach (var c in cats.Where(c => c.Section == "EVENTS"))
@@ -317,7 +338,7 @@ public static class EventCatalog
                 copies.Entries.Add(new Entry
                 {
                     Id = "eventenemy:" + e.Id["event:".Length..], Category = EventEnemies, Name = e.Name, Models = e.Models.ToList(),
-                    ItemNames = e.ItemNames.ToList(), Detail = $"{e.Detail} · event: {c.Name}", Harvestable = e.Harvestable,
+                    ItemNames = e.ItemNames.ToList(), Detail = Tf("{0} · event: {1}", e.Detail, Loc.Name(c.Name)), Harvestable = e.Harvestable,
                     BeamModels = e.BeamModels?.ToHashSet(), NoIcon = e.NoIcon, Spots = e.Spots,
                 });
         if (copies.Entries.Count == 0) return;

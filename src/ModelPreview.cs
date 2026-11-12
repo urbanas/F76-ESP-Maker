@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
@@ -98,11 +99,11 @@ static class ModelPreview
             try
             {
                 patched = NifPatch.Apply(data, opts).Data;
-                scene.Note = $"{src.Archive.FileName}'s version of this model can't be read - built from the game's own model (that mod's change is replaced).";
+                scene.Note = Tf("{0}'s version of this model can't be read - built from the game's own model (that mod's change is replaced).", src.Archive.FileName);
             }
-            catch (Exception ex) { scene.Note = "The mod can't change this model (" + ex.Message + ") - shown as in the game."; }
+            catch (Exception ex) { scene.Note = Tr("The mod can't change this model (") + ex.Message + Tr(") - shown as in the game."); }
         }
-        catch (Exception ex) { scene.Note = "The mod can't change this model (" + ex.Message + ") - shown as in the game."; }
+        catch (Exception ex) { scene.Note = Tr("The mod can't change this model (") + ex.Message + Tr(") - shown as in the game."); }
         var f = NifFile.Parse(patched);
         Rgba? iconTex = null;
         if (chosen != null && !use3D) { using var bmp = Icons.Draw(chosen, 128); iconTex = Bitmaps.ToRgba(bmp); }
@@ -1244,13 +1245,13 @@ sealed class ModelView : UserControl
         return b;
     }
     /// <summary>Camera menu: frame the tall beam too (only with a tall beam).</summary>
-    readonly ToolStripMenuItem whole = new("Fit the whole beam in the picture") { CheckOnClick = true };
+    readonly ToolStripMenuItem whole = new(Tr("Fit the whole beam in the picture")) { CheckOnClick = true };
     /// <summary>Preview only, a two-button switch: "Apply look" or the plain game model ("Original"), to compare (the mod doesn't change).</summary>
-    readonly CheckBox lookOn = Toggle("Apply look", new Padding(3, 3, 0, 3));
-    readonly CheckBox lookOff = Toggle("Original", new Padding(0, 3, 12, 3));
+    readonly CheckBox lookOn = Toggle(Tr("Apply look"), new Padding(3, 3, 0, 3));
+    readonly CheckBox lookOff = Toggle(Tr("Original"), new Padding(0, 3, 12, 3));
     /// <summary>The switch shown for <see cref="lookOn"/> at the top of the picture (user, 2026-11-09: the two buttons looked like Save).</summary>
     readonly ItemFinder.Toggle lookSwitch = new() { Checked = true, Margin = new Padding(6, 8, 2, 3) };
-    readonly Label lookSwitchText = new() { Text = "Show the look", AutoSize = true, Margin = new Padding(0, 7, 14, 3), Cursor = Cursors.Hand };
+    readonly Label lookSwitchText = new() { Text = Tr("Show the look"), AutoSize = true, Margin = new Padding(0, 7, 14, 3), Cursor = Cursors.Hand };
     /// <summary>The big window: walking, the keys box, the toolbar and the size line. The small view only turns and zooms.</summary>
     bool isBig;
     /// <summary>Things to put in the picture: a person, a house (sizes) and a shed around the item (through walls) -
@@ -1259,15 +1260,15 @@ sealed class ModelView : UserControl
     /// <summary>The big view's toolbar menus (Camera, Light, Colours) and the buttons that open them and show their setting.</summary>
     readonly ContextMenuStrip cameraMenu = new(), lightMenu = new(), visionMenu = new();
     Button? sceneButton, lightButton, visionButton;
-    static readonly string[] SkyNames = { "Studio", "Day", "Dusk", "Night", "Fog" };
-    static readonly string[] VisionNames = { "Normal", "Red-green (deuteranopia)", "Red-green (protanopia)", "Blue-yellow (tritanopia)" };
-    readonly ToolStripMenuItem addPerson = new("Person and floor grid (1.8 m)") { CheckOnClick = true };
-    readonly ToolStripMenuItem addHouse = new("A house around it - the item on its floor") { CheckOnClick = true };
-    readonly ToolStripMenuItem addShed = new("Shed around it, with a door and windows - test X-ray") { CheckOnClick = true };
+    static readonly string[] SkyNames = { Tr("Studio"), Tr("Day"), Tr("Dusk"), Tr("Night"), Tr("Fog") };
+    static readonly string[] VisionNames = { Tr("Normal"), Tr("Red-green (deuteranopia)"), Tr("Red-green (protanopia)"), Tr("Blue-yellow (tritanopia)") };
+    readonly ToolStripMenuItem addPerson = new(Tr("Person and floor grid (1.8 m)")) { CheckOnClick = true };
+    readonly ToolStripMenuItem addHouse = new(Tr("A house around it - the item on its floor")) { CheckOnClick = true };
+    readonly ToolStripMenuItem addShed = new(Tr("Shed around it, with a door and windows - test X-ray")) { CheckOnClick = true };
     /// <summary>One wall behind the item (as the view starts): turn round to see the look through it - on by default in the look pop-up.</summary>
-    readonly ToolStripMenuItem addWall = new("A wall behind it - turn the view to test X-ray") { CheckOnClick = true };
-    readonly ToolStripMenuItem addJunk = new("Scatter junk around it (rubble, grass, a few game items)") { CheckOnClick = true };
-    readonly ToolStripMenuItem hideLabels = new("Hide the name labels") { CheckOnClick = true };
+    readonly ToolStripMenuItem addWall = new(Tr("A wall behind it - turn the view to test X-ray")) { CheckOnClick = true };
+    readonly ToolStripMenuItem addJunk = new(Tr("Scatter junk around it (rubble, grass, a few game items)")) { CheckOnClick = true };
+    readonly ToolStripMenuItem hideLabels = new(Tr("Hide the name labels")) { CheckOnClick = true };
     bool AnyProps => addPerson.Checked || addHouse.Checked || addShed.Checked || addWall.Checked || addJunk.Checked || compares.Count > 0;
 
     /// <summary>A selected item with its look, for "Compare with other items".</summary>
@@ -1299,8 +1300,8 @@ sealed class ModelView : UserControl
     readonly RenderExtras extras = new();
     /// <summary>The camera of the last picture: the name labels use it.</summary>
     (float X, float Y, float Z) shotEye, shotLook;
-    readonly ToolStripMenuItem spinOn = new("Spin slowly around the item") { CheckOnClick = true };
-    readonly ToolStripMenuItem showKeys = new("Show the keys box (mouse and keys)") { CheckOnClick = true };
+    readonly ToolStripMenuItem spinOn = new(Tr("Spin slowly around the item")) { CheckOnClick = true };
+    readonly ToolStripMenuItem showKeys = new(Tr("Show the keys box (mouse and keys)")) { CheckOnClick = true };
     readonly System.Windows.Forms.Timer spin = new() { Interval = 33 };
     readonly System.Diagnostics.Stopwatch spinClock = new();
     // the look's animations (pulse, rainbow, spin, bob, flowing beam, hide / blink): redrawn while it has any; the clock
@@ -1323,7 +1324,7 @@ sealed class ModelView : UserControl
         s.Icon = "";
         return s;
     }
-    readonly Button bigger = new() { Text = "⤢ Bigger view", AutoSize = true };
+    readonly Button bigger = new() { Text = Tr("⤢ Bigger view"), AutoSize = true };
     /// <summary>The controls box at the top left: open in the big view, a small "? Controls" tag in the small one;
     /// a click on it (or Camera > Show the keys box) opens / folds it.</summary>
     bool legendOpen { get => showKeys.Checked; set => showKeys.Checked = value; }
@@ -1339,12 +1340,12 @@ sealed class ModelView : UserControl
     bool legendClick;
     (string Key, string What)[] Legend() => new[]
     {
-        ("Drag", free ? "Circle the item" : "Turn the item"),
-        ("Right-drag", "Look around"),
-        ("Wheel", free ? "Step forward / back" : "Zoom"),
-        ("W A S D / arrows", "Walk (Shift: faster)"),
-        ("Q / E", "Down / up"),
-        ("Double-click", "Back to the start"),
+        (Tr("Drag"), free ? Tr("Circle the item") : Tr("Turn the item")),
+        (Tr("Right-drag"), Tr("Look around")),
+        (Tr("Wheel"), free ? Tr("Step forward / back") : Tr("Zoom")),
+        (Tr("W A S D / arrows"), Tr("Walk (Shift: faster)")),
+        ("Q / E", Tr("Down / up")),
+        (Tr("Double-click"), Tr("Back to the start")),
     };
     /// <summary>You walked (keys) or stood back (10 / 30 / 100 m): a camera of your own at <see cref="eye"/>;
     /// yaw / pitch are where you look. Off: the camera turns around the item.</summary>
@@ -1496,41 +1497,41 @@ sealed class ModelView : UserControl
             int n = i;
             visionMenu.Items.Add(new ToolStripMenuItem(VisionNames[i], null, (_, _) => { extras.Vision = (Vision)n; Redraw(); canvas.Focus(); }) { Checked = i == 0 });
         }
-        lightMenu.Items[1].ToolTipText = "The sky by day, at dusk, at night or in fog: sky colour, light level and haze";
-        visionMenu.Items[0].ToolTipText = "See the picture as someone with colour blindness does - does your colour still stand out?";
+        lightMenu.Items[1].ToolTipText = Tr("The sky by day, at dusk, at night or in fog: sky colour, light level and haze");
+        visionMenu.Items[0].ToolTipText = Tr("See the picture as someone with colour blindness does - does your colour still stand out?");
         lightMenu.Opening += (_, _) => { for (int i = 0; i < lightMenu.Items.Count; i++) ((ToolStripMenuItem)lightMenu.Items[i]).Checked = i == (int)extras.Sky; };
         visionMenu.Opening += (_, _) => { for (int i = 0; i < visionMenu.Items.Count; i++) ((ToolStripMenuItem)visionMenu.Items[i]).Checked = i == (int)extras.Vision; };
         spinOn.CheckedChanged += (_, _) => { if (spinOn.Checked) { spinClock.Restart(); spin.Start(); } else spin.Stop(); canvas.Focus(); };
         showKeys.CheckedChanged += (_, _) => canvas.Invalidate();
-        whole.ToolTipText = "Move the camera back so the whole tall beam fits in the picture (only with a tall beam)";
+        whole.ToolTipText = Tr("Move the camera back so the whole tall beam fits in the picture (only with a tall beam)");
         cameraMenu.Items.AddRange(new ToolStripItem[]
         {
-            new ToolStripMenuItem("Reset - back to turning around the item", null, (_, _) => { ResetView(); canvas.Focus(); }) { ShortcutKeyDisplayString = "Double-click" },
+            new ToolStripMenuItem(Tr("Reset - back to turning around the item"), null, (_, _) => { ResetView(); canvas.Focus(); }) { ShortcutKeyDisplayString = Tr("Double-click") },
             new ToolStripSeparator(),
-            new ToolStripMenuItem("Stand back 10 m", null, (_, _) => { StandBack(700); canvas.Focus(); }) { ToolTipText = "Stand 10 m from the item, eyes at 1.6 m, facing it" },
-            new ToolStripMenuItem("Stand back 30 m", null, (_, _) => { StandBack(2100); canvas.Focus(); }) { ToolTipText = "Stand 30 m from the item, eyes at 1.6 m, facing it" },
-            new ToolStripMenuItem("Stand back 100 m", null, (_, _) => { StandBack(7000); canvas.Focus(); }) { ToolTipText = "Stand 100 m from the item, eyes at 1.6 m, facing it" },
+            new ToolStripMenuItem(Tr("Stand back 10 m"), null, (_, _) => { StandBack(700); canvas.Focus(); }) { ToolTipText = Tr("Stand 10 m from the item, eyes at 1.6 m, facing it") },
+            new ToolStripMenuItem(Tr("Stand back 30 m"), null, (_, _) => { StandBack(2100); canvas.Focus(); }) { ToolTipText = Tr("Stand 30 m from the item, eyes at 1.6 m, facing it") },
+            new ToolStripMenuItem(Tr("Stand back 100 m"), null, (_, _) => { StandBack(7000); canvas.Focus(); }) { ToolTipText = Tr("Stand 100 m from the item, eyes at 1.6 m, facing it") },
             new ToolStripSeparator(),
             spinOn, whole, showKeys,
         });
         spin.Tick += (_, _) => SpinStep();
         anim.Tick += (_, _) => { if (canvas.Visible && drag == null && !spin.Enabled && !walk.Enabled) Redraw(); }; // spinning / walking redraw anyway
         var tips = new ToolTip { AutoPopDelay = 20000 };
-        tips.SetToolTip(bigger, "Open the picture in a big window (Esc closes it)");
-        tips.SetToolTip(lookSwitch, "On: the item with your look (glow, beam, icon). Off: the original game model, to compare (preview only - the mod doesn't change)");
-        tips.SetToolTip(lookSwitchText, "On: the item with your look (glow, beam, icon). Off: the original game model, to compare (preview only - the mod doesn't change)");
-        tips.SetToolTip(lookOff, "Show the original game model, to compare (preview only - the mod doesn't change)");
+        tips.SetToolTip(bigger, Tr("Open the picture in a big window (Esc closes it)"));
+        tips.SetToolTip(lookSwitch, Tr("On: the item with your look (glow, beam, icon). Off: the original game model, to compare (preview only - the mod doesn't change)"));
+        tips.SetToolTip(lookSwitchText, Tr("On: the item with your look (glow, beam, icon). Off: the original game model, to compare (preview only - the mod doesn't change)"));
+        tips.SetToolTip(lookOff, Tr("Show the original game model, to compare (preview only - the mod doesn't change)"));
         Controls.Add(previewRow);
         parts.Columns.Add("Part", 220);
-        var header = new Label { Dock = DockStyle.Top, Height = 20, Text = "Parts - deselect to leave out" };
+        var header = new Label { Dock = DockStyle.Top, Height = 20, Text = Tr("Parts - deselect to leave out") };
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 32, WrapContents = false };
         Button B(string t, bool on) { var b = new Button { Text = t, AutoSize = true }; b.Click += (_, _) => SetAll(on); return b; }
         partLook.Click += (_, _) => EditPartLook();
-        buttons.Controls.AddRange(new Control[] { B("Select all", true), B("Deselect all", false), partLook });
+        buttons.Controls.AddRange(new Control[] { B(Tr("Select all"), true), B(Tr("Deselect all"), false), partLook });
         var partMenu = new ContextMenuStrip();
-        var ownItem = new ToolStripMenuItem("Own look for this part...", null, (_, _) => EditPartLook());
+        var ownItem = new ToolStripMenuItem(Tr("Own look for this part..."), null, (_, _) => EditPartLook());
         ownItem.Font = new Font(partMenu.Font, FontStyle.Bold);
-        var sameItem = new ToolStripMenuItem("Use the item's look", null, (_, _) => ClearPartLook());
+        var sameItem = new ToolStripMenuItem(Tr("Use the item's look"), null, (_, _) => ClearPartLook());
         partMenu.Items.AddRange(new ToolStripItem[] { ownItem, sameItem });
         partMenu.Opening += (_, e) =>
         {
@@ -1544,8 +1545,7 @@ sealed class ModelView : UserControl
         parts.ItemCheck += (_, e) => { if (partDoubleClick && !filling) e.NewValue = e.CurrentValue; };
         parts.MouseUp += (_, _) => partDoubleClick = false;
         parts.DoubleClick += (_, _) => { partDoubleClick = false; EditPartLook(); };
-        new ToolTip { AutoPopDelay = 20000 }.SetToolTip(partLook, "Give the selected part its own glow, beam and icon (also: double-click it).\n" +
-                                                                 "E.g. the Pint-Sized Slasher mask inside Spooky Scorched.");
+        new ToolTip { AutoPopDelay = 20000 }.SetToolTip(partLook, Tr("Give the selected part its own glow, beam and icon (also: double-click it).\nE.g. the Pint-Sized Slasher mask inside Spooky Scorched."));
         partsBox.Controls.Add(parts);
         partsBox.Controls.Add(header);
         partsBox.Controls.Add(buttons);
@@ -1564,8 +1564,8 @@ sealed class ModelView : UserControl
             FollowParts();
             var others = sharedWith(m);
             partsNote.Text = e.Item.Checked || others.Count == 0 || !ticked ? CountText()
-                : $"{e.Item.Text} is also part of {string.Join(", ", others.Take(3))}{(others.Count > 3 ? "..." : "")} - " +
-                  "if that is selected, the part still lights up (one model, one look).";
+                : Tf("{0} is also part of {1}{2} - ", e.Item.Text, string.Join(", ", others.Take(3)), (others.Count > 3 ? "..." : "")) +
+                  Tr("if that is selected, the part still lights up (one model, one look).");
         };
         canvas.Paint += PaintCanvas;
         canvas.Resize += (_, _) => Redraw();
@@ -1679,7 +1679,7 @@ sealed class ModelView : UserControl
             parts.Items.Add(Marked(new ListViewItem(ItemText(m))
             {
                 Tag = m, Checked = ticked && off?.Contains(m) != true, // unticked entry: nothing of it lights up
-                ToolTipText = Label(m) + "\n" + m + (others.Count > 0 ? "\nAlso part of: " + string.Join(", ", others) : ""),
+                ToolTipText = Label(m) + "\n" + m + (others.Count > 0 ? Tr("\nAlso part of: ") + string.Join(", ", others) : ""),
             }, m));
         }
         parts.EndUpdate();
@@ -1700,7 +1700,7 @@ sealed class ModelView : UserControl
     bool ticked = true;
     HashSet<string> savedOff = new();
     Dictionary<string, Style> partLooks = new();
-    readonly Button partLook = new() { Text = "Part look...", AutoSize = true };
+    readonly Button partLook = new() { Text = Tr("Part look..."), AutoSize = true };
 
     /// <summary>Parts given their own look in this window.</summary>
     public Dictionary<string, Style> PartLooks => partLooks;
@@ -1724,7 +1724,7 @@ sealed class ModelView : UserControl
             Id = entry.Id + "|" + m, Name = Label(m), Category = entry.Category, Models = new() { m },
             NoIcon = entry.NoIcon, Harvestable = entry.Harvestable,
         };
-        using var dlg = MainForm.CategoryLookDialog(game, "Own look for: " + Label(m), new() { single }, partLooks.GetValueOrDefault(m) ?? style,
+        using var dlg = MainForm.CategoryLookDialog(game, Tr("Own look for: ") + Label(m), new() { single }, partLooks.GetValueOrDefault(m) ?? style,
                                                     entry.NoIcon, keepOtherMods, Font, out var ed);
         if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
         partLooks[m] = ed.Value;
@@ -1810,13 +1810,13 @@ sealed class ModelView : UserControl
     string CountText()
     {
         if (!ticked)
-            return "Not selected - nothing of this lights up. Select a part (or the box at the top) to light it up.";
+            return Tr("Not selected - nothing of this lights up. Select a part (or the box at the top) to light it up.");
         int off = Items().Count(i => !i.Checked);
         bool anyShared = Items().Any(i => i.Text.EndsWith("*"));
         int own = partLooks.Count(kv => Items().Any(i => (string)i.Tag! == kv.Key));
-        return (off == 0 ? $"All {parts.Items.Count} parts light up." : $"{parts.Items.Count - off} of {parts.Items.Count} parts light up.") +
-               (own > 0 ? $" {own} with their own look (◆)." : "") +
-               (anyShared ? "\n* = also part of another entry" : "");
+        return (off == 0 ? Tf("All {0} parts light up.", parts.Items.Count) : Tf("{0} of {1} parts light up.", parts.Items.Count - off, parts.Items.Count)) +
+               (own > 0 ? Tf(" {0} with their own look (◆).", own) : "") +
+               (anyShared ? Tr("\n* = also part of another entry") : "");
     }
 
     void SetAll(bool on)
@@ -1862,7 +1862,7 @@ sealed class ModelView : UserControl
         var area = Screen.FromControl(this).WorkingArea;
         var f = new Form
         {
-            Text = "3D view - " + entry.Name, StartPosition = FormStartPosition.CenterScreen, Size = new Size(area.Width * 3 / 4, area.Height * 3 / 4),
+            Text = Tr("3D view - ") + entry.Shown, StartPosition = FormStartPosition.CenterScreen, Size = new Size(area.Width * 3 / 4, area.Height * 3 / 4),
             MinimizeBox = false, ShowIcon = false, ShowInTaskbar = false, KeyPreview = true, Font = owner?.Font ?? Font, BackColor = SystemColors.Control,
         };
         var view = new ModelView { Dock = DockStyle.Fill, ShowParts = false };
@@ -1877,7 +1877,7 @@ sealed class ModelView : UserControl
             var stand = new Label
             {
                 Dock = dock, Size = s.Size, TextAlign = ContentAlignment.MiddleCenter, ForeColor = SystemColors.GrayText, Padding = new Padding(16),
-                Text = "The look settings are in the 3D view window - close it to edit them here.",
+                Text = Tr("The look settings are in the 3D view window - close it to edit them here."),
             };
             var side = new Panel { Dock = DockStyle.Right, Width = Math.Max(360, s.Width) + 12, Padding = new Padding(8, 4, 4, 4) };
             home.Controls.Add(stand);
@@ -1916,7 +1916,7 @@ sealed class ModelView : UserControl
         (fixedTarget, message, frameAll) = (o.lastTarget, o.message, o.frameAll);
         BeamCheck();
         if (!same) (free, yaw, pitch, zoom) = (false, o.free ? StartYaw : o.yaw, o.free ? 0.35f : o.pitch, StartZoom);
-        if (FindForm() is { } f && o.entry != null) f.Text = "3D view - " + o.entry.Name;
+        if (FindForm() is { } f && o.entry != null) f.Text = Tr("3D view - ") + o.entry.Shown;
         MakeGuide();
         Animate();
         Redraw();
@@ -1970,13 +1970,13 @@ sealed class ModelView : UserControl
             tips.SetToolTip(b, tip);
             return b;
         }
-        sceneButton = Drop(addMenu, "Put things in the picture: a person for size, a house, walls around it, junk, or other items to compare");
-        lightButton = Drop(lightMenu, "The light: studio, or the sky by day, at dusk, at night or in fog");
-        visionButton = Drop(visionMenu, "See the picture as someone with colour blindness does - does your colour still stand out?");
-        var camera = Drop(cameraMenu, "Reset the view, stand back 10 / 30 / 100 m, spin, fit a tall beam, the keys box");
-        camera.Text = "Camera ▾";
+        sceneButton = Drop(addMenu, Tr("Put things in the picture: a person for size, a house, walls around it, junk, or other items to compare"));
+        lightButton = Drop(lightMenu, Tr("The light: studio, or the sky by day, at dusk, at night or in fog"));
+        visionButton = Drop(visionMenu, Tr("See the picture as someone with colour blindness does - does your colour still stand out?"));
+        var camera = Drop(cameraMenu, Tr("Reset the view, stand back 10 / 30 / 100 m, spin, fit a tall beam, the keys box"));
+        camera.Text = Tr("Camera ▾");
         camera.Margin = new Padding(12, 3, 3, 3);
-        var save = B("Save picture...", "Save the picture as it is now as a PNG file", SavePicture);
+        var save = B(Tr("Save picture..."), Tr("Save the picture as it is now as a PNG file"), SavePicture);
         save.Margin = new Padding(12, 3, 3, 3);
         previewRow.Dock = DockStyle.Top;
         previewRow.Padding = new Padding(4, 4, 4, 2);
@@ -1992,8 +1992,8 @@ sealed class ModelView : UserControl
     {
         if (sceneButton == null || lightButton == null || visionButton == null) return;
         int n = new[] { addPerson, addHouse, addShed, addJunk }.Count(i => i.Checked) + compares.Count;
-        string scene = n > 0 ? $"Scene ({n}) ▾" : "Scene ▾", light = $"Light: {SkyNames[(int)extras.Sky]} ▾",
-               vision = extras.Vision == Vision.Normal ? "Colours: Normal ▾" : $"Colours: {VisionNames[(int)extras.Vision]} ▾";
+        string scene = n > 0 ? Tf("Scene ({0}) ▾", n) : Tr("Scene ▾"), light = Tf("Light: {0} ▾", SkyNames[(int)extras.Sky]),
+               vision = extras.Vision == Vision.Normal ? Tr("Colours: Normal ▾") : Tf("Colours: {0} ▾", VisionNames[(int)extras.Vision]);
         if (sceneButton.Text != scene) sceneButton.Text = scene;
         if (lightButton.Text != light) lightButton.Text = light;
         if (visionButton.Text != vision) visionButton.Text = vision;
@@ -2008,7 +2008,7 @@ sealed class ModelView : UserControl
         {
             // only recolours a texture (an invisible enemy's shimmer): nothing to turn around
             scene = null;
-            message = "Nothing to show in 3D - this one recolours the shimmer of invisible enemies (see Details in the list).";
+            message = Tr("Nothing to show in 3D - this one recolours the shimmer of invisible enemies (see Details in the list).");
             whole.Enabled = false;
             Redraw();
             big?.Follow(this);
@@ -2022,7 +2022,7 @@ sealed class ModelView : UserControl
         if (plain || !lookOn.Checked) { st.Glow = st.Beam = st.Brighten = st.Label = st.Invisible = false; st.Icon = ""; } // as in the game
         if (!e.CanHide) st.Invisible = false; // creatures are never hidden
         bool beamHere = ownLook || e.BeamModels == null || e.BeamModels.Contains(model);
-        message = scene == null ? "Loading..." : message;
+        message = scene == null ? Tr("Loading...") : message;
         canvas.Invalidate();
         try
         {
@@ -2031,16 +2031,16 @@ sealed class ModelView : UserControl
             if (v != version) return;
             scene = s;
             shown = st; // the colours to draw it in: a part's own look, if it has one
-            message = !ticked ? "Not selected - shown as it is in the game. Select it to see the look."
-                    : !lookOn.Checked ? "The look is hidden here (preview only) - the plain game model."
-                    : ownLook ? $"◆ {Label(model)} has its own look (the settings on the left are the rest's) - \"Part look...\" changes it." + (s.Note.Length > 0 ? "\n" + s.Note : "")
+            message = !ticked ? Tr("Not selected - shown as it is in the game. Select it to see the look.")
+                    : !lookOn.Checked ? Tr("The look is hidden here (preview only) - the plain game model.")
+                    : ownLook ? Tf("◆ {0} has its own look (the settings on the left are the rest's) - \"Part look...\" changes it.", Label(model)) + (s.Note.Length > 0 ? "\n" + s.Note : "")
                     : s.Note;
         }
         catch (Exception ex)
         {
             if (v != version) return;
             scene = null;
-            message = "Can't show this model: " + ex.Message;
+            message = Tr("Can't show this model: ") + ex.Message;
         }
         // an arrow or an icon sits close above the item: always in the picture. Only a tall beam would shrink the item
         // to a dot - that one is in view on request
@@ -2345,7 +2345,7 @@ sealed class ModelView : UserControl
             var by = (x - s.Min.X, cy - (s.Min.Y + s.Max.Y) / 2, min.Z - s.Min.Z);
             var parts = s.Parts.Where(Own).Select(p => Moved(p, by, ground: s.Ground)).ToList();
             float w = s.Max.X - s.Min.X;
-            placed.Add((parts, item.Entry.Name, (x + w / 2, cy, s.Max.Z + by.Item3)));
+            placed.Add((parts, item.Entry.Shown, (x + w / 2, cy, s.Max.Z + by.Item3)));
             extras.Others.Add((parts, lookOn.Checked ? item.Look : Plain()));
             othersMax = (Math.Max(othersMax.X, x + w), Math.Max(othersMax.Y, cy + (s.Max.Y - s.Min.Y) / 2), Math.Max(othersMax.Z, s.Max.Z + by.Item3));
             othersMin = (othersMin.X, Math.Min(othersMin.Y, cy - (s.Max.Y - s.Min.Y) / 2), othersMin.Z);
@@ -2373,18 +2373,18 @@ sealed class ModelView : UserControl
     {
         while (addMenu.Items.Count > 4) addMenu.Items.RemoveAt(4);
         addMenu.Items.Add(new ToolStripSeparator());
-        var pick = new ToolStripMenuItem("Compare with other items...", null, (_, _) => { addMenu.Close(); BeginInvoke(PickOthers); });
+        var pick = new ToolStripMenuItem(Tr("Compare with other items..."), null, (_, _) => { addMenu.Close(); BeginInvoke(PickOthers); });
         pick.Enabled = TickedItems != null;
         addMenu.Items.Add(pick);
         foreach (var c in compares.ToList())
         {
-            var it = new ToolStripMenuItem("    ✕  " + c.Item.Entry.Name) { ToolTipText = "Remove it from the picture" };
+            var it = new ToolStripMenuItem("    ✕  " + c.Item.Entry.Shown) { ToolTipText = Tr("Remove it from the picture") };
             it.Click += (_, _) => { compares.Remove(c); addMenu.Items.Remove(it); MakeGuide(); Redraw(); };
             addMenu.Items.Add(it);
         }
         if (compares.Count > 0)
         {
-            addMenu.Items.Add(new ToolStripMenuItem("    Remove all", null, (_, _) => { compares.Clear(); addMenu.Close(); MakeGuide(); Redraw(); }));
+            addMenu.Items.Add(new ToolStripMenuItem(Tr("    Remove all"), null, (_, _) => { compares.Clear(); addMenu.Close(); MakeGuide(); Redraw(); }));
             addMenu.Items.Add(hideLabels);
         }
     }
@@ -2394,19 +2394,19 @@ sealed class ModelView : UserControl
     {
         if (TickedItems == null || game == null) return;
         var all = TickedItems().Where(c => c.Entry != entry).ToList();
-        if (all.Count == 0) { MessageBox.Show(FindForm(), "Select some other items first (tick them in the list) - then they can stand beside this one.", "Compare"); return; }
+        if (all.Count == 0) { MessageBox.Show(FindForm(), Tr("Select some other items first (tick them in the list) - then they can stand beside this one."), Tr("Compare")); return; }
         var on = compares.Select(c => c.Item.Entry.Id).ToHashSet();
         using var dlg = Ui.Dialog(new Form
         {
-            Text = "Compare with other items", StartPosition = FormStartPosition.CenterParent, Size = new Size(620, 560), MinimumSize = new Size(480, 360),
+            Text = Tr("Compare with other items"), StartPosition = FormStartPosition.CenterParent, Size = new Size(620, 560), MinimumSize = new Size(480, 360),
             Font = Font, ShowIcon = false, MinimizeBox = false, MaximizeBox = false, ShowInTaskbar = false,
         });
-        var search = new TextBox { PlaceholderText = "Search", Width = 200, Margin = new Padding(3, 5, 3, 3) };
+        var search = new TextBox { PlaceholderText = Tr("Search"), Width = 200, Margin = new Padding(3, 5, 3, 3) };
         var cat = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, Margin = new Padding(3, 5, 3, 3) };
         cat.Items.Add("All categories");
         cat.Items.AddRange(all.Select(c => c.Category).Distinct().OrderBy(c => c).Cast<object>().ToArray());
         cat.SelectedIndex = 0;
-        var oneEach = new Button { Text = "One of each look", AutoSize = true };
+        var oneEach = new Button { Text = Tr("One of each look"), AutoSize = true };
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(4) };
         top.Controls.AddRange(new Control[] { search, cat, oneEach });
         var list = new ListView { Dock = DockStyle.Fill, View = View.Details, CheckBoxes = true, FullRowSelect = true, HeaderStyle = ColumnHeaderStyle.Nonclickable };
@@ -2434,10 +2434,10 @@ sealed class ModelView : UserControl
         }
         var count = new Label { AutoSize = true, Padding = new Padding(0, 9, 12, 0) };
         var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 90, Height = 30 };
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Height = 30 };
+        var cancel = new Button { Text = Tr("Cancel"), DialogResult = DialogResult.Cancel, Width = 90, Height = 30 };
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 42, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(4) };
         buttons.Controls.AddRange(new Control[] { cancel, ok, count });
-        void Count() => count.Text = $"{on.Count} of at most {MaxCompare} picked";
+        void Count() => count.Text = Tf("{0} of at most {1} picked", on.Count, MaxCompare);
         bool refill = false;
         void Fill()
         {
@@ -2446,8 +2446,8 @@ sealed class ModelView : UserControl
             list.Items.Clear();
             string q = search.Text.Trim();
             foreach (var c in all.Where(c => (cat.SelectedIndex <= 0 || c.Category == (string)cat.SelectedItem!) &&
-                                             (q.Length == 0 || c.Entry.Name.Contains(q, StringComparison.OrdinalIgnoreCase))).OrderBy(c => c.Entry.Name))
-                list.Items.Add(new ListViewItem(new[] { c.Entry.Name, c.Category }) { Tag = c, Checked = on.Contains(c.Entry.Id), ImageKey = Dot(c.Look) });
+                                             (q.Length == 0 || c.Entry.SearchNames.Any(n => n.Contains(q, StringComparison.OrdinalIgnoreCase)))).OrderBy(c => c.Entry.Shown))
+                list.Items.Add(new ListViewItem(new[] { c.Entry.Shown, Loc.Name(c.Category) }) { Tag = c, Checked = on.Contains(c.Entry.Id), ImageKey = Dot(c.Look) });
             list.EndUpdate();
             refill = false;
             Count();
@@ -2455,7 +2455,7 @@ sealed class ModelView : UserControl
         list.ItemCheck += (_, e) =>
         {
             if (refill || list.Items[e.Index].Tag is not CompareItem c) return;
-            if (e.NewValue == CheckState.Checked && !on.Contains(c.Entry.Id) && on.Count >= MaxCompare) { e.NewValue = CheckState.Unchecked; count.Text = $"At most {MaxCompare} - untick one first"; return; }
+            if (e.NewValue == CheckState.Checked && !on.Contains(c.Entry.Id) && on.Count >= MaxCompare) { e.NewValue = CheckState.Unchecked; count.Text = Tf("At most {0} - untick one first", MaxCompare); return; }
             if (e.NewValue == CheckState.Checked) on.Add(c.Entry.Id); else on.Remove(c.Entry.Id);
             BeginInvoke(Count);
         };
@@ -2497,7 +2497,7 @@ sealed class ModelView : UserControl
         if (add.Count == 0) { MakeGuide(); Redraw(); return; }
         var (g, keep) = (game, keepOtherMods);
         var old = message;
-        message = $"Loading {add.Count} item(s)...";
+        message = Tf("Loading {0} item(s)...", add.Count);
         canvas.Invalidate();
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var got = await Task.Run(() =>
@@ -2509,7 +2509,7 @@ sealed class ModelView : UserControl
         });
         compares.AddRange(got);
         message = old;
-        if (got.Count < add.Count) message = $"{add.Count - got.Count} of the items can't be shown in 3D." + (old.Length > 0 ? "\n" + old : "");
+        if (got.Count < add.Count) message = Tf("{0} of the items can't be shown in 3D.", add.Count - got.Count) + (old.Length > 0 ? "\n" + old : "");
         System.Diagnostics.Debug.WriteLine($"compare: {got.Count} loaded in {clock.ElapsedMilliseconds} ms");
         MakeGuide();
         Redraw();
@@ -2573,14 +2573,14 @@ sealed class ModelView : UserControl
             using (var g = Graphics.FromImage(bmp)) { g.DrawImageUnscaled(frame, 0, 0); DrawLabels(g); }
             bmp.Save(dlg.FileName, ImageFormat.Png);
         }
-        catch (Exception ex) { MessageBox.Show(FindForm(), "Can't save the picture: " + ex.Message, "Save picture"); }
+        catch (Exception ex) { MessageBox.Show(FindForm(), Tr("Can't save the picture: ") + ex.Message, Tr("Save picture")); }
     }
 
     /// <summary>The names floating above the items when others stand beside this one.</summary>
     void DrawLabels(Graphics g)
     {
         if (placed.Count == 0 || hideLabels.Checked || scene == null || entry == null) return;
-        var all = placed.Select(p => (p.Name, p.Top)).Prepend((entry.Name, ((scene.Min.X + scene.Max.X) / 2, (scene.Min.Y + scene.Max.Y) / 2, scene.Max.Z)));
+        var all = placed.Select(p => (p.Name, p.Top)).Prepend((entry.Shown, ((scene.Min.X + scene.Max.X) / 2, (scene.Min.Y + scene.Max.Y) / 2, scene.Max.Z)));
         foreach (var (name, top) in all)
         {
             if (PreviewRenderer.ToScreen(shotEye, shotLook, 40, canvas.Width, canvas.Height, (top.Item1, top.Item2, top.Item3 + 6)) is not PointF at) continue;
@@ -2603,22 +2603,22 @@ sealed class ModelView : UserControl
     static string Len(float units)
     {
         float cm = units * 1.43f;
-        return cm >= 100 ? $"{cm / 100:0.#} m" : $"{Math.Max(1, cm):0} cm";
+        return cm >= 100 ? $"{cm / 100:0.#} m" : Tf("{0:0} cm", Math.Max(1, cm));
     }
 
     string SizeText()
     {
         if (scene == null) return "";
         var (a, b) = (scene.Min, scene.Max);
-        string t = $"Item {Len(b.X - a.X)} × {Len(b.Y - a.Y)}, {Len(b.Z - a.Z)} high" + (float.IsNaN(scene.Ground) ? "" : " above the ground (the rest is buried)");
-        if (shown.Beam && !shown.BeamArrow) t += $" · beam {Len(shown.BeamLength)}";
-        if (addPerson.Checked && guide != null) t += " · person 1.8 m";
-        if (addHouse.Checked && guide != null) t += " · house 8.4 m";
-        if (guide != null) t += $" · grid {Len(guide.Step)} squares";
+        string t = Tf("Item {0} × {1}, {2} high", Len(b.X - a.X), Len(b.Y - a.Y), Len(b.Z - a.Z)) + (float.IsNaN(scene.Ground) ? "" : Tr(" above the ground (the rest is buried)"));
+        if (shown.Beam && !shown.BeamArrow) t += Tf(" · beam {0}", Len(shown.BeamLength));
+        if (addPerson.Checked && guide != null) t += Tr(" · person 1.8 m");
+        if (addHouse.Checked && guide != null) t += Tr(" · house 8.4 m");
+        if (guide != null) t += Tf(" · grid {0} squares", Len(guide.Step));
         if (free)
         {
             var c = ItemCenter;
-            t += $" · you: {Len(MathF.Sqrt((eye.X - c.X) * (eye.X - c.X) + (eye.Y - c.Y) * (eye.Y - c.Y)))} away, eyes {Len(eye.Z - a.Z)} up";
+            t += Tf(" · you: {0} away, eyes {1} up", Len(MathF.Sqrt((eye.X - c.X) * (eye.X - c.X) + (eye.Y - c.Y) * (eye.Y - c.Y))), Len(eye.Z - a.Z));
         }
         return t;
     }
@@ -2668,7 +2668,7 @@ sealed class ModelView : UserControl
                 // animating: full quality, fewer pictures a second when one takes long (a big view)
                 if (anim.Enabled && s == 1) anim.Interval = Math.Clamp((int)(took.ElapsedMilliseconds * 1.5), 50, 400);
             }
-            catch (Exception ex) { message = "Can't draw this model: " + ex.Message; }
+            catch (Exception ex) { message = Tr("Can't draw this model: ") + ex.Message; }
         }
         if (frame != null && frame.Width == canvas.Width) g.DrawImageUnscaled(frame, 0, 0);
         else if (frame != null)
@@ -2707,7 +2707,7 @@ sealed class ModelView : UserControl
 
     /// <summary>The "View options" box is open (remembered while the app runs).</summary>
     static bool optionsOpen;
-    static readonly string[] VisionShort = { "Normal", "Deuteranopia", "Protanopia", "Tritanopia" };
+    static readonly string[] VisionShort = { Tr("Normal"), Tr("Deuteranopia"), Tr("Protanopia"), Tr("Tritanopia") };
 
     /// <summary>The toolbar on the picture, top right: Show the look (lit while on), Save, any extra button and "View
     /// options", which opens a box below with every camera / scene / light / colour setting as one-click buttons
@@ -2730,11 +2730,11 @@ sealed class ModelView : UserControl
         // the top row, right-aligned
         var top = new List<(string Text, bool Lit, string Tip, Action<Rectangle> Click)>
         {
-            ((lookOn.Checked ? "● " : "○ ") + "Show the look", lookOn.Checked, "On: the item with your look. Off: the original game model, to compare (preview only)", _ => lookOn.Checked = !lookOn.Checked),
-            ("Save picture...", false, "Save the picture as it is now as a PNG file", _ => SavePicture()),
+            ((lookOn.Checked ? "● " : "○ ") + Tr("Show the look"), lookOn.Checked, Tr("On: the item with your look. Off: the original game model, to compare (preview only)"), _ => lookOn.Checked = !lookOn.Checked),
+            (Tr("Save picture..."), false, Tr("Save the picture as it is now as a PNG file"), _ => SavePicture()),
         };
         foreach (var (text, click, tip) in extraTools) top.Add((text(), false, tip, _ => click()));
-        top.Add((optionsOpen ? "View options  ▴" : "View options  ▾", optionsOpen, "Camera, scene, light and colours", _ => optionsOpen = !optionsOpen));
+        top.Add((optionsOpen ? Tr("View options  ▴") : Tr("View options  ▾"), optionsOpen, Tr("Camera, scene, light and colours"), _ => optionsOpen = !optionsOpen));
         int left = legendBox == Rectangle.Empty ? 6 : legendBox.Right + 12, y = 6;
         int rowW = top.Sum(t => W(t.Text)) + gap * (top.Count - 1);
         if (canvas.Width - 6 - left < rowW) { left = 6; y = legendBox.Bottom + 6; } // no room beside the controls box: under it
@@ -2753,34 +2753,34 @@ sealed class ModelView : UserControl
         // the options box: a group name on the left, its buttons wrapping on the right
         var groups = new List<(string Name, List<(string Text, bool Lit, string Tip, Action<Rectangle> Click)> Items)>
         {
-            ("Camera", new()
+            (Tr("Camera"), new()
             {
-                ("Reset", false, "Back to turning around the item (or double-click the picture)", _ => ResetView()),
-                ("10 m", false, "Stand 10 m from the item, eyes at 1.6 m, facing it", _ => StandBack(700)),
-                ("30 m", false, "Stand 30 m from the item, eyes at 1.6 m, facing it", _ => StandBack(2100)),
-                ("100 m", false, "Stand 100 m from the item, eyes at 1.6 m, facing it", _ => StandBack(7000)),
-                ("Spin", spinOn.Checked, "Turn slowly around the item", _ => spinOn.Checked = !spinOn.Checked),
+                (Tr("Reset"), false, Tr("Back to turning around the item (or double-click the picture)"), _ => ResetView()),
+                ("10 m", false, Tr("Stand 10 m from the item, eyes at 1.6 m, facing it"), _ => StandBack(700)),
+                ("30 m", false, Tr("Stand 30 m from the item, eyes at 1.6 m, facing it"), _ => StandBack(2100)),
+                ("100 m", false, Tr("Stand 100 m from the item, eyes at 1.6 m, facing it"), _ => StandBack(7000)),
+                (Tr("Spin"), spinOn.Checked, Tr("Turn slowly around the item"), _ => spinOn.Checked = !spinOn.Checked),
             }),
-            ("Scene", new()
+            (Tr("Scene"), new()
             {
-                ("Person", addPerson.Checked, "A person and a floor grid, for size (1.8 m)", _ => addPerson.Checked = !addPerson.Checked),
-                ("House", addHouse.Checked, "Put the item inside a house, on its floor - how it glows inside a building", _ => addHouse.Checked = !addHouse.Checked),
-                ("Wall behind", addWall.Checked, "One wall behind the item - turn the view round to see your look through it (X-ray)", _ => addWall.Checked = !addWall.Checked),
-                ("Shed", addShed.Checked, "Walls all around it, with a door, windows and a roof - to test X-ray", _ => addShed.Checked = !addShed.Checked),
-                ("Junk", addJunk.Checked, "Rubble, grass and a few game items scattered around it", _ => addJunk.Checked = !addJunk.Checked),
-                ("Compare...", compares.Count > 0, "Stand other selected items beside it, each in its own look", _ => BeginInvoke(PickOthers)),
+                (Tr("Person"), addPerson.Checked, Tr("A person and a floor grid, for size (1.8 m)"), _ => addPerson.Checked = !addPerson.Checked),
+                (Tr("House"), addHouse.Checked, Tr("Put the item inside a house, on its floor - how it glows inside a building"), _ => addHouse.Checked = !addHouse.Checked),
+                (Tr("Wall behind"), addWall.Checked, Tr("One wall behind the item - turn the view round to see your look through it (X-ray)"), _ => addWall.Checked = !addWall.Checked),
+                (Tr("Shed"), addShed.Checked, Tr("Walls all around it, with a door, windows and a roof - to test X-ray"), _ => addShed.Checked = !addShed.Checked),
+                (Tr("Junk"), addJunk.Checked, Tr("Rubble, grass and a few game items scattered around it"), _ => addJunk.Checked = !addJunk.Checked),
+                (Tr("Compare..."), compares.Count > 0, Tr("Stand other selected items beside it, each in its own look"), _ => BeginInvoke(PickOthers)),
             }),
-            ("Light", SkyNames.Select((n, i) => (n, (int)extras.Sky == i, i == 0 ? "Even studio light" : "The sky " + n.ToLowerInvariant() + ": sky colour, light level and haze",
+            (Tr("Light"), SkyNames.Select((n, i) => (n, (int)extras.Sky == i, i == 0 ? Tr("Even studio light") : Tr("The sky ") + n.ToLowerInvariant() + Tr(": sky colour, light level and haze"),
                                                   (Action<Rectangle>)(_ => { extras.Sky = (Sky)i; Redraw(); UpdateBar(); }))).ToList()),
-            ("Colours", VisionShort.Select((n, i) => (n, (int)extras.Vision == i, i == 0 ? "Normal colour vision" : "See it as someone with " + VisionNames[i] + " does - does your colour still stand out?",
+            (Tr("Colours"), VisionShort.Select((n, i) => (n, (int)extras.Vision == i, i == 0 ? Tr("Normal colour vision") : Tr("See it as someone with ") + VisionNames[i] + Tr(" does - does your colour still stand out?"),
                                                      (Action<Rectangle>)(_ => { extras.Vision = (Vision)i; Redraw(); UpdateBar(); }))).ToList()),
         };
-        if (whole.Enabled) groups[0].Items.Add(("Whole beam", whole.Checked, "Move back so the whole tall beam fits in the picture", _ => whole.Checked = !whole.Checked));
+        if (whole.Enabled) groups[0].Items.Add((Tr("Whole beam"), whole.Checked, Tr("Move back so the whole tall beam fits in the picture"), _ => whole.Checked = !whole.Checked));
         if (compares.Count > 0)
         {
-            groups[1].Items.Add(("Hide labels", hideLabels.Checked, "Hide the compared items' name labels", _ => hideLabels.Checked = !hideLabels.Checked));
+            groups[1].Items.Add((Tr("Hide labels"), hideLabels.Checked, Tr("Hide the compared items' name labels"), _ => hideLabels.Checked = !hideLabels.Checked));
             foreach (var c in compares.ToList())
-                groups[1].Items.Add(("✕ " + c.Item.Entry.Name, false, "Remove it from the picture", _ => { compares.Remove(c); MakeGuide(); Redraw(); }));
+                groups[1].Items.Add(("✕ " + c.Item.Entry.Shown, false, Tr("Remove it from the picture"), _ => { compares.Remove(c); MakeGuide(); Redraw(); }));
         }
         using var bold = new Font(Font, FontStyle.Bold);
         int nameW = groups.Max(gr => TextRenderer.MeasureText(g, gr.Name, bold).Width) + 12;
@@ -2817,7 +2817,7 @@ sealed class ModelView : UserControl
     {
         using var bold = new Font(Font, FontStyle.Bold);
         const int pad = 8, gapCol = 14;
-        var title = legendOpen ? "Controls  ▴" : "? Controls";
+        var title = legendOpen ? Tr("Controls  ▴") : Tr("? Controls");
         var ts = TextRenderer.MeasureText(g, title, bold);
         int lineH = ts.Height + 3, w = ts.Width, h = ts.Height, keyW = 0;
         var rows = legendOpen ? Legend() : Array.Empty<(string Key, string What)>();

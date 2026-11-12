@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 namespace ItemFinder;
 
 public sealed class Settings
@@ -26,6 +27,8 @@ public sealed class Settings
     public bool Dark { get; set; }
     /// <summary>More > Compact rows: lower rows in the category list and the item list.</summary>
     public bool Compact { get; set; }
+    /// <summary>View > Language: a game language code (Loc.Languages) or "auto" = the language the game runs in.</summary>
+    public string Language { get; set; } = "auto";
 
     static string FilePath => AppPaths.File("settings.json");
 
@@ -43,6 +46,13 @@ static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        // the window's language first: every text is read through Loc.Tr from here on
+        try
+        {
+            var st = Settings.Load();
+            Loc.StartUi(Environment.GetEnvironmentVariable("ESPMAKER_LANG") ?? st.Language, GameData.FindGameFolder(st.GameFolder));
+        }
+        catch { }
 #if DEVTOOLS // the dev and test commands (not in the release build: publish with -p:DevTools=false)
         // the test commands rewrite the setup they run on: never on a user's real data (only a portable test copy)
         if (args.Length > 0 && args[0].StartsWith("--") && !AppPaths.Portable)
@@ -85,7 +95,7 @@ static class Program
             // dev: the tour window, one picture per step (for the mod page)
             ApplicationConfiguration.Initialize();
             Ui.Dark = args.Length == 3 && args[2] == "dark";
-            using var tour = new Tutorial(new Font("Segoe UI", 9f)) { StartPosition = FormStartPosition.CenterScreen };
+            using var tour = new Tutorial(new Font(Loc.UiFont, 9f)) { StartPosition = FormStartPosition.CenterScreen };
             tour.Shown += (_, _) => { tour.SavePages(args[1]); Environment.Exit(0); };
             Application.Run(tour);
             return;
@@ -141,12 +151,15 @@ static class Program
             Application.Run(form);
             return;
         }
-        if (args.Length == 1 && args[0] == "--list") { Environment.Exit(SelfTest.List()); return; }
+        if (args.Length == 2 && args[0] == "--names") { Environment.Exit(SelfTest.Names(args[1])); return; }
+        if (args.Length == 1 && args[0] == "--list"){ Environment.Exit(SelfTest.List()); return; }
         if (args.Length == 2 && args[0] == "--icons") { Environment.Exit(SelfTest.IconSheet(args[1])); return; }
         if (args.Length == 1 && args[0] == "--links") { Environment.Exit(SelfTest.Links()); return; }
         if (args.Length == 2 && args[0] == "--brightentest") { Environment.Exit(SelfTest.BrightenTest(args[1])); return; }
         if (args.Length is 1 or 2 && args[0] == "--stress") { Environment.Exit(SelfTest.Stress(args.Length == 2 ? args[1] : null)); return; }
         if (args.Length is 1 or 2 && args[0] == "--previewall") { Environment.Exit(SelfTest.PreviewAll(args.Length == 2 ? args[1] : null)); return; }
+        if (args.Length == 3 && args[0] == "--gameterms") { Environment.Exit(SelfTest.GameTerms(args[1], args[2])); return; }
+        if (args.Length == 2 && args[0] == "--uikeys") { Environment.Exit(SelfTest.UiKeys(args[1])); return; }
         if (args.Length == 2 && args[0] == "--installtest") { Environment.Exit(SelfTest.InstallTest(args[1])); return; }
         if (args.Length == 3 && args[0] == "--setuptest")
         {
@@ -180,8 +193,8 @@ static class Program
             // the full error in the data folder, for reporting
             var log = AppPaths.File("error.log");
             try { File.AppendAllText(log, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {e.Exception}{Environment.NewLine}{Environment.NewLine}"); } catch { }
-            MessageBox.Show($"Something went wrong: {e.Exception.Message}\n\nThe details are in {log} - please attach that file when you report it.",
-                            "ESP Maker", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(Tf("Something went wrong: {0}\n\nThe details are in {1} - please attach that file when you report it.", e.Exception.Message, log),
+                            Tr("ESP Maker"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         };
         // errors outside the window's thread (background work) end the app: at least log them
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>

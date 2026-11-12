@@ -11,7 +11,7 @@
     <Product>ESP Maker</Product>
     <RootNamespace>ItemFinder</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <Version>2.2.2</Version>
+    <Version>2.3</Version>
   </PropertyGroup>
 
   <!-- dev / test command-line modes (uitest, stress...) are left out of the release build: publish with -p:DevTools=false -->
@@ -24,6 +24,8 @@
     <EmbeddedResource Include="Models\*.dds" LogicalName="ItemFinder.Models.%(Filename)%(Extension)" />
     <!-- the tour's pictures (made by the dev command - -tutorial-shots src\Tutorial) -->
     <EmbeddedResource Include="Tutorial\*.png" LogicalName="ItemFinder.Tutorial.%(Filename)%(Extension)" />
+    <!-- the window's text in the game's other languages (English text -> translation; Loc.Tr) -->
+    <EmbeddedResource Include="Lang\*.json" LogicalName="ItemFinder.Lang.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

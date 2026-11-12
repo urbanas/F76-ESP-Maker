@@ -1,6 +1,30 @@
 ESP Maker - changes
 ===================
 
+2.3
+New: languages
+- The app now speaks all 13 of the game's languages: English, Deutsch, Français, Italiano,
+  Español, Español (Latinoamérica), Polski, Português (Brasil), Русский, 日本語, 한국어,
+  简体中文, 繁體中文. View -> Language; "Same as the game" follows the game's language setting.
+- Item, enemy and category names come from your game's own text, so they match what you see in
+  game. Search finds names in both your language and English.
+- Name labels above items are written in your language too (with the right font for Japanese,
+  Korean and Chinese).
+- Please note: with this many languages there may be some issues. The window text was translated
+  with AI help, not by native speakers, so some wording may be off or cut short. A few names
+  (some "Everything else" items, model part names) and the tour pictures stay English.
+  Reports of bad translations are very welcome.
+New: Mod manager
+- Options -> Mod manager, or the Mods button at the bottom of the left bar: every mod in your
+  Data folder and the ini. Tick to turn a mod on or off, drag or Up / Down to change the load
+  order (lower wins), see which mods change the same files, delete a mod.
+  Vortex links are marked; the ini is backed up before saving.
+New
+- Holiday Scorched (Events, seasonal): Scorched in Santa, Mrs. Claus, elf and snowflake
+  pant-suit outfits, plus the Holiday gifts and gift wrap when they lie on the ground.
+Fixed
+- Names with special characters (e.g. "¬") were garbled.
+
 2.2.2
 Changed
 - The 3D view opens straight in front of the item. Wall behind now stands behind it

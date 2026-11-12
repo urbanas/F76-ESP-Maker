@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -17,7 +18,7 @@ public sealed class GameData
     const string SteamExe = "Fallout76.exe", MicrosoftExe = "Project76_GamePass.exe";
     /// <summary>The Microsoft Store / Game Pass version (else Steam).</summary>
     public bool Microsoft => !File.Exists(Path.Combine(GameFolder, SteamExe)) && File.Exists(Path.Combine(GameFolder, MicrosoftExe));
-    public string Edition => Microsoft ? "Microsoft Store / Game Pass" : "Steam";
+    public string Edition => Microsoft ? Tr("Microsoft Store / Game Pass") : Tr("Steam");
     /// <summary>A folder with either version's exe.</summary>
     public static bool IsGameFolder(string folder) => File.Exists(Path.Combine(folder, SteamExe)) || File.Exists(Path.Combine(folder, MicrosoftExe));
     /// <summary>The custom ini the game reads (Fallout76Custom.ini / Project76Custom.ini).</summary>
@@ -114,7 +115,7 @@ public sealed class GameData
         {
             var path = Path.Combine(g.DataFolder, name);
             if (!File.Exists(path)) continue;
-            status($"Reading {name}...");
+            status(Tf("Reading {0}...", name));
             try
             {
                 // an ESP Maker build under any name: never start from its models (beams would stack up)
@@ -130,9 +131,9 @@ public sealed class GameData
                     if (isVanilla) g.vanilla.TryAdd(e.Name, e);
                 }
             }
-            catch (Exception ex) { status($"Skipped {name}: {ex.Message}"); }
+            catch (Exception ex) { status(Tf("Skipped {0}: {1}", name, ex.Message)); }
         }
-        status($"Ready - {g.index.Count:N0} game files indexed.");
+        status(Tf("Ready - {0:N0} game files indexed.", g.index.Count));
         return g;
     }
 
@@ -196,6 +197,39 @@ public sealed class GameData
         return File.ReadAllLines(IniPath, IniEncoding()).FirstOrDefault(ListLine.IsMatch) is string line ? ArchivesOn(line) : new();
     }
 
+    /// <summary>Every mod archive in Data (all .ba2 but the game's own "SeventySix - " files), by name.</summary>
+    public List<string> ModArchivesInData() =>
+        Directory.Exists(DataFolder)
+            ? Directory.GetFiles(DataFolder, "*.ba2").Select(Path.GetFileName).OfType<string>()
+                .Where(n => !n.StartsWith("SeventySix - ", StringComparison.OrdinalIgnoreCase)).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
+            : new();
+
+    /// <summary>Mod manager: the ini's list becomes exactly this order (every list line; one is added under [Archive]
+    /// if there is none). The ini as it was is kept as "....modmanager-backup" (one step back).</summary>
+    public void WriteArchiveList(IReadOnlyList<string> names, Action<string> log)
+    {
+        if (!File.Exists(IniPath))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(IniPath)!);
+            File.WriteAllLines(IniPath, new[] { "[Archive]", "sResourceDataDirsFinal=", "bInvalidateOlderFiles=1" });
+            log(Tf("Created {0}.", IniPath));
+        }
+        var encoding = IniEncoding();
+        var lines = File.ReadAllLines(IniPath, encoding).ToList();
+        var text = "sResourceArchive2List=" + string.Join(",", names);
+        var listLines = ListLines(lines);
+        foreach (int i in listLines) lines[i] = text;
+        if (listLines.Count == 0)
+        {
+            int arch = lines.FindIndex(l => l.Trim().Equals("[Archive]", StringComparison.OrdinalIgnoreCase));
+            if (arch < 0) { lines.Add("[Archive]"); arch = lines.Count - 1; }
+            lines.Insert(arch + 1, text);
+        }
+        File.Copy(IniPath, IniPath + ".modmanager-backup", true);
+        File.WriteAllLines(IniPath, lines, encoding);
+        log(Tf("Saved the mod list in {0} ({1} on).", IniName, names.Count));
+    }
+
     /// <summary>Removes the archives from Data and from the ini list.</summary>
     public void Uninstall(IReadOnlyList<string> names, Action<string> log)
     {
@@ -217,7 +251,7 @@ public sealed class GameData
         }
         if (!changed) return;
         File.WriteAllLines(IniPath, lines, encoding);
-        log($"Removed it from {IniName}.");
+        log(Tf("Removed it from {0}.", IniName));
     }
 
     /// <summary>Either version of the game is running (it locks its archives).</summary>
@@ -230,7 +264,7 @@ public sealed class GameData
         foreach (var f in builtFiles)
         {
             File.Copy(f, Path.Combine(DataFolder, Path.GetFileName(f)), true);
-            log($"Copied {Path.GetFileName(f)} to {DataFolder}");
+            log(Tf("Copied {0} to {1}", Path.GetFileName(f), DataFolder));
         }
         foreach (var s in staleNames)
         {
@@ -242,7 +276,7 @@ public sealed class GameData
         {
             Directory.CreateDirectory(Path.GetDirectoryName(IniPath)!);
             File.WriteAllLines(IniPath, new[] { "[Archive]", "sResourceDataDirsFinal=", "bInvalidateOlderFiles=1" }); // the usual mod setup
-            log($"Created {IniPath}.");
+            log(Tf("Created {0}.", IniPath));
         }
         var encoding = IniEncoding();
         var lines = File.ReadAllLines(IniPath, encoding).ToList();
@@ -264,6 +298,6 @@ public sealed class GameData
         var backup = IniPath + ".before-espmaker";
         if (!File.Exists(backup)) File.Copy(IniPath, backup);
         File.WriteAllLines(IniPath, lines, encoding);
-        log($"Updated {IniName} (archives listed last so they win).");
+        log(Tf("Updated {0} (archives listed last so they win).", IniName));
     }
 }

@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 using System.Text.RegularExpressions;
 
 namespace ItemFinder;
@@ -188,8 +189,7 @@ public static class Enemies
         var bosses = new Category
         {
             Name = Bosses,
-            Description = "Bosses that have a model of their own, so each can be picked alone. " +
-                          "Bosses that are just a bigger version of a normal creature share its model and are in that creature's entry.",
+            Description = Tr("Bosses that have a model of their own, so each can be picked alone. Bosses that are just a bigger version of a normal creature share its model and are in that creature's entry."),
             DefaultStyle = new Style { GlowFill = true, GlowColor = "#FF2020", BeamColor = "#FF2020", BeamLength = 2100 },
         };
         var bossModels = new HashSet<string>();
@@ -201,12 +201,12 @@ public static class Enemies
             var e = new Entry { Id = "boss:" + name.ToLowerInvariant(), Category = Bosses, Name = name, Models = files, ItemNames = new() { name } };
             e.BeamModels = files.Where(f => !NoBeam.IsMatch(Path.GetFileName(f))).Take(1).ToHashSet();
             if (e.BeamModels.Count == 0) e.BeamModels.Add(files[0]);
-            e.Detail = files.Count == 1 ? "own model" : $"{files.Count} models";
+            e.Detail = files.Count == 1 ? Tr("own model") : Tf("{0} models", files.Count);
             if (files.All(GuardianParts.ContainsKey))
             {
                 e.PartNames = new(GuardianParts);
                 e.LinkParts = true;
-                e.Detail = $"{files.Count} parts - shared parts are selected together in every robot that uses them";
+                e.Detail = Tf("{0} parts - shared parts are selected together in every robot that uses them", files.Count);
             }
             bosses.Entries.Add(e);
             bossModels.UnionWith(files.Where(f => !f.Contains(@"\robot\parts\"))); // shared robot parts stay with the robots too
@@ -274,12 +274,12 @@ public static class Enemies
             if (bosses.Entries.FirstOrDefault(b => Token(b.Name) == Token(name)) is Entry boss)
             {
                 boss.Models.AddRange(models.Where(m => !boss.Models.Contains(m) && !m.Contains(@"\supermutantbehemoth\characterassets\")));
-                boss.Detail = boss.Models.Count == 1 ? "own model" : $"{boss.Models.Count} models";
+                boss.Detail = boss.Models.Count == 1 ? Tr("own model") : Tf("{0} models", boss.Models.Count);
                 continue;
             }
             var e = new Entry { Id = $"enemy:{cat.ToLowerInvariant()}:{name.ToLowerInvariant()}", Category = cat, Name = name, Models = models, ItemNames = new() { name } };
             e.BeamModels = body.Count > 0 ? body : new HashSet<string> { models[0] };
-            e.Detail = models.Count == 1 ? "1 model" : $"{models.Count} models (body and outfits)";
+            e.Detail = models.Count == 1 ? Tr("1 model") : Tf("{0} models (body and outfits)", models.Count);
             cats[cat].Entries.Add(e);
             // everyday clothes made to fit them too (a Scorched in coveralls): human clothing, so players wearing it glow
             // too - a separate entry, off unless ticked
@@ -313,7 +313,7 @@ public static class Enemies
                 {
                     Id = $"enemy:{cat.ToLowerInvariant()}:{name.ToLowerInvariant()} clothes", Category = cat, Name = $"{name}: everyday clothes",
                     Models = clothes, ItemNames = new() { name }, NoIcon = true,
-                    Detail = $"{clothes.Count} models - human clothes made to fit them: players wearing these glow too",
+                    Detail = Tf("{0} models - human clothes made to fit them: players wearing these glow too", clothes.Count),
                 });
         }
 
@@ -326,7 +326,7 @@ public static class Enemies
             scorched.Models.Add(ScorchedFx);
             var heads = scorched.Models.Where(m => Regex.IsMatch(Path.GetFileName(m), @"^base(fe)?maleheadscorched\d*\.nif$", RegexOptions.IgnoreCase)).ToHashSet();
             scorched.BeamModels = heads.Count > 0 ? heads : new() { ScorchedFx };
-            scorched.Detail = $"{scorched.Models.Count} models (body, heads, outfits and the Scorched effect - beam on the head)";
+            scorched.Detail = Tf("{0} models (body, heads, outfits and the Scorched effect - beam on the head)", scorched.Models.Count);
         }
 
         // --- robots built from parts (the data doesn't tie the parts to robot races)
@@ -349,7 +349,7 @@ public static class Enemies
             }
             e.Models.AddRange(files.Where(f => !e.Models.Contains(f)));
             e.BeamModels = torso.Count > 0 ? torso : e.BeamModels is { Count: > 0 } ? e.BeamModels : new HashSet<string> { files[0] };
-            e.Detail = $"{e.Models.Count} parts";
+            e.Detail = Tf("{0} parts", e.Models.Count);
         }
         foreach (var (robot, parts) in SharedRobotParts)
         {
@@ -361,7 +361,7 @@ public static class Enemies
                 if (!r.Models.Contains(m)) r.Models.Add(m);
                 r.PartNames[m] = label;
             }
-            r.Detail = $"{r.Models.Count} parts";
+            r.Detail = Tf("{0} parts", r.Models.Count);
         }
 
         bosses.Section = "ENEMIES";
@@ -373,9 +373,7 @@ public static class Enemies
         var marked = new Category
         {
             Name = Marked,
-            Description = "The game attaches an aura effect to legendary enemies and to Burning Springs bounty targets. " +
-                          "The beam is added to that effect, so it follows the enemy - whatever kind it is. Glow has no effect here " +
-                          "(the aura has no solid parts); the game's own aura stays.",
+            Description = Tr("The game attaches an aura effect to legendary enemies and to Burning Springs bounty targets. The beam is added to that effect, so it follows the enemy - whatever kind it is. Glow has no effect here (the aura has no solid parts); the game's own aura stays."),
             DefaultStyle = new Style { Glow = false, Beam = true, GlowColor = "#FFD700", BeamColor = "#FFD700", BeamLength = 2100 },
         };
         foreach (var (name, models) in new (string, string[])[]
@@ -386,14 +384,13 @@ public static class Enemies
         {
             var files = models.Where(exists).ToList();
             if (files.Count > 0)
-                marked.Entries.Add(new Entry { Id = "marked:" + name.ToLowerInvariant(), Category = Marked, Name = name, Models = files, ItemNames = new() { name }, Detail = "beam on the aura effect" });
+                marked.Entries.Add(new Entry { Id = "marked:" + name.ToLowerInvariant(), Category = Marked, Name = name, Models = files, ItemNames = new() { name }, Detail = Tr("beam on the aura effect") });
         }
 
         var humans = new Category
         {
             Name = Humans, Section = "ENEMIES",
-            Description = "Human enemies are people like players, so they are found by what only they wear - their outfits " +
-                          "and (for the Lost) their faces. Where players can wear the same outfit, they glow too (noted per entry).",
+            Description = Tr("Human enemies are people like players, so they are found by what only they wear - their outfits and (for the Lost) their faces. Where players can wear the same outfit, they glow too (noted per entry)."),
             DefaultStyle = new Style { GlowFill = true, GlowColor = Palette.Humans.Hex, BeamColor = Palette.Humans.Hex, BeamLength = 1400 },
         };
         var allMeshes = gameFiles.Where(p => p.StartsWith(@"meshes\") && p.EndsWith(".nif")).Select(p => p[7..]).ToList();
@@ -409,7 +406,7 @@ public static class Enemies
                 Id = "human:" + name.ToLowerInvariant(), Category = Humans, Name = name, Models = files, ItemNames = new() { name },
                 BeamModels = body.Count > 0 ? body : new HashSet<string> { files[0] },
                 PartNames = files.ToDictionary(f => f, HumanPartName),
-                Detail = $"{files.Count} models - {note}",
+                Detail = Tf("{0} models - {1}", files.Count, note),
             });
         }
 

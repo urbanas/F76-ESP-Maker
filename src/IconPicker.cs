@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 using System.Drawing.Imaging;
 
 namespace ItemFinder;
@@ -62,8 +63,8 @@ public static class IconPicker
         (string, bool)? result = null;
         using var dlg = new Form
         {
-            Text = "Pick an icon", FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false,
-            StartPosition = FormStartPosition.CenterParent, Font = new Font("Segoe UI", 9f), AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Text = Tr("Pick an icon"), FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false,
+            StartPosition = FormStartPosition.CenterParent, Font = new Font(Loc.UiFont, 9f), AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(8),
         };
         var tips = new ToolTip();
@@ -77,17 +78,17 @@ public static class IconPicker
                 {
                     Width = 84, Height = 92, Text = name, Image = img, TextImageRelation = TextImageRelation.ImageAboveText,
                     FlatStyle = FlatStyle.Flat, Margin = new Padding(4), BackColor = Color.FromArgb(24, 28, 34), ForeColor = Color.Gainsboro,
-                    Font = new Font("Segoe UI", 8f),
+                    Font = new Font(Loc.UiFont, 8f),
                 };
                 b.FlatAppearance.BorderSize = now ? 3 : 1;
                 b.FlatAppearance.BorderColor = now ? Color.Orange : Color.FromArgb(70, 76, 86);
                 b.Click += (_, _) => { result = (id, threeD); dlg.Close(); };
-                tips.SetToolTip(b, models && id.Length > 0 ? name + " (3D model)" : threeD && id.Length > 0 ? name + " (3D shape)" : name);
+                tips.SetToolTip(b, models && id.Length > 0 ? name + Tr(" (3D model)") : threeD && id.Length > 0 ? name + Tr(" (3D shape)") : name);
                 return b;
             }
-            grid.Controls.Add(Choice("", "No icon", null));
-            if (models) foreach (var m in Models3D.All) grid.Controls.Add(Choice(m.Id, m.Name, Models3D.Tile(m, colour, 52)));
-            else foreach (var ic in Icons.All) grid.Controls.Add(Choice(ic.Id, ic.Name, threeD ? Tile3D(ic, colour, 52) : Tile(ic, colour, 52)));
+            grid.Controls.Add(Choice("", Tr("No icon"), null));
+            if (models) foreach (var m in Models3D.All) grid.Controls.Add(Choice(m.Id, Tr(m.Name), Models3D.Tile(m, colour, 52)));
+            else foreach (var ic in Icons.All) grid.Controls.Add(Choice(ic.Id, Tr(ic.Name), threeD ? Tile3D(ic, colour, 52) : Tile(ic, colour, 52)));
             return grid;
         }
         // the pages: joined buttons on top switch them (a TabControl's tabs can't take the dark theme)
@@ -106,12 +107,11 @@ public static class IconPicker
             return box;
         }
         // (the extruded "3D shapes" are gone - the 3D models replaced them; old setups keep theirs, see MainForm.MigrateSetup)
-        if (!only3D) Page("A flat picture that always turns to face you - easy to read from any side.");
-        Page((only3D ? "Creatures and worn outfits can only show 3D models: the game drops flat camera-facing icons from animated bodies. " : "") +
-             "A small textured model, like the Spooky Scorched pumpkin - turns with the item or creature. " +
-             "Models in their own colours ignore the look's colour; the white ones take it.", models: true);
+        if (!only3D) Page(Tr("A flat picture that always turns to face you - easy to read from any side."));
+        Page((only3D ? Tr("Creatures and worn outfits can only show 3D models: the game drops flat camera-facing icons from animated bodies. ") : "") +
+             Tr("A small textured model, like the Spooky Scorched pumpkin - turns with the item or creature. Models in their own colours ignore the look's colour; the white ones take it."), models: true);
         var holder = new Panel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
-        var tabs = new Seg(only3D ? new[] { "3D models" } : new[] { "Flat icons", "3D models" }) { Location = new Point(4, 2) };
+        var tabs = new Seg(only3D ? new[] { Tr("3D models") } : new[] { Tr("Flat icons"), Tr("3D models") }) { Location = new Point(4, 2) };
         void Show(int i) { tabs.Selected = i; for (int k = 0; k < pages.Count; k++) pages[k].Visible = k == i; }
         tabs.Picked += Show;
         holder.Controls.Add(tabs);

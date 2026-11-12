@@ -129,11 +129,11 @@ public static class Icons
     public static string LabelTexture(string key) => $@"textures\itemfinder\label_{key}.dds";
     public static string LabelMaterialTexture(string key) => $"itemfinder/label_{key}.dds";
 
-    /// <summary>The text a label shows: an entry name without its "Bobblehead: " style prefix.</summary>
+    /// <summary>The text a label shows: an (English) entry name without its "Bobblehead: " style prefix, in the app's language.</summary>
     public static string LabelText(string name)
     {
         int c = name.IndexOf(": ", StringComparison.Ordinal);
-        return (c > 0 && c < name.Length - 2 ? name[(c + 2)..] : name).Trim();
+        return Loc.Name((c > 0 && c < name.Length - 2 ? name[(c + 2)..] : name).Trim());
     }
 
     /// <summary>White text with a soft halo on transparent, 128 px tall, width a power of two (256..1024) that fits it;
@@ -142,7 +142,7 @@ public static class Icons
     {
         const int H = 128;
         using var path = new GraphicsPath();
-        using (var font = new Font("Segoe UI", 80, FontStyle.Bold, GraphicsUnit.Pixel))
+        using (var font = new Font(Loc.FontName, 80, FontStyle.Bold, GraphicsUnit.Pixel))
             path.AddString(text, font.FontFamily, (int)font.Style, font.Size, new PointF(0, 0), StringFormat.GenericTypographic);
         var b = path.GetBounds();
         float need = b.Width + 28;

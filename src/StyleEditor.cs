@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 using System.Drawing.Drawing2D;
 
 namespace ItemFinder;
@@ -10,11 +11,11 @@ public sealed class StyleEditor : UserControl
     /// <summary>Game units per centimetre (1 unit ≈ 1.43 cm).</summary>
     const float UnitsPerCm = 0.7f;
 
-    readonly CheckBox glow = new() { Text = "Glow (item shines)", AutoSize = true };
+    readonly CheckBox glow = new() { Text = Tr("Glow (item shines)"), AutoSize = true };
     readonly Button glowColor = new() { Width = 70, Height = 26, FlatStyle = FlatStyle.Flat };
     readonly NumericUpDown opacity = new() { Minimum = 5, Maximum = 100, Increment = 5, Width = 55 };
-    readonly CheckBox beam = new() { Text = "Marker above the item", AutoSize = true };
-    readonly ComboBox marker = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190, Items = { "Beam of light into the sky", "Arrow pointing down" } };
+    readonly CheckBox beam = new() { Text = Tr("Marker above the item"), AutoSize = true };
+    readonly ComboBox marker = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190, Items = { Tr("Beam of light into the sky"), Tr("Arrow pointing down") } };
     readonly Button beamColor = new() { Width = 70, Height = 26, FlatStyle = FlatStyle.Flat };
     readonly NumericUpDown length = new() { Minimum = 1, Maximum = 150, Width = 55 };
     readonly NumericUpDown width = new() { Minimum = 2, Maximum = 300, Increment = 2, Width = 55 };
@@ -23,13 +24,13 @@ public sealed class StyleEditor : UserControl
     readonly Button iconButton = new() { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(130, 26), Padding = new Padding(2), Margin = new Padding(3, 3, 3, 3), FlatStyle = FlatStyle.Flat, TextImageRelation = TextImageRelation.ImageBeforeText, ImageAlign = ContentAlignment.MiddleLeft, TextAlign = ContentAlignment.MiddleLeft };
     readonly NumericUpDown iconSize = new() { Minimum = 20, Maximum = 600, Increment = 10, Width = 55 };
     readonly NumericUpDown labelSize = new() { Minimum = 10, Maximum = 500, Increment = 10, Width = 55 };
-    readonly TextBox labelText = new() { Width = 170, PlaceholderText = "the item's name" };
-    readonly CheckBox labelCat = new() { Text = "Start with the category", AutoSize = true };
-    readonly CheckBox walls = new() { Text = "Visible through walls", AutoSize = true };
-    readonly CheckBox brighten = new() { Text = "Brighten its own colours", AutoSize = true };
+    readonly TextBox labelText = new() { Width = 170, PlaceholderText = Tr("the item's name") };
+    readonly CheckBox labelCat = new() { Text = Tr("Start with the category"), AutoSize = true };
+    readonly CheckBox walls = new() { Text = Tr("Visible through walls"), AutoSize = true };
+    readonly CheckBox brighten = new() { Text = Tr("Brighten its own colours"), AutoSize = true };
     readonly NumericUpDown brightStrength = new() { Minimum = 25, Maximum = 300, Increment = 25, Width = 55 };
-    readonly CheckBox fill = new() { Text = "Fill the whole item", AutoSize = true };
-    readonly CheckBox sameColor = new() { Text = "Same colour as the glow", AutoSize = true };
+    readonly CheckBox fill = new() { Text = Tr("Fill the whole item"), AutoSize = true };
+    readonly CheckBox sameColor = new() { Text = Tr("Same colour as the glow"), AutoSize = true };
     readonly Panel preview = new() { Width = 110, BackColor = Color.FromArgb(24, 28, 34) };
     readonly SwatchRow swatches = new() { Margin = new Padding(0, 0, 0, 2) };
     bool compact;
@@ -42,7 +43,7 @@ public sealed class StyleEditor : UserControl
     readonly List<FlowLayoutPanel> fxFlows = new();
     /// <summary>Joined buttons for a number box's usual values: Soft 15 / Medium 30 / Strong 60 ...</summary>
     readonly List<(Seg Seg, NumericUpDown Box, string[] Names, int[] Values)> steps = new();
-    readonly Seg itemSeg = new("Outline", "Fill", "Bright", "Off"), beamSeg = new("Beam", "Arrow", "Off"), topSeg = new("Icon", "Text", "Off");
+    readonly Seg itemSeg = new(Tr("Outline"), Tr("Fill"), Tr("Bright"), Tr("Off")), beamSeg = new(Tr("Beam"), Tr("Arrow"), Tr("Off")), topSeg = new(Tr("Icon"), Tr("Text"), Tr("Off"));
     readonly SwatchRow markerSwatches = new() { Margin = new Padding(0, 0, 0, 2), Small = true };
     readonly Label markerSame = new() { AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(3, 6, 0, 0) };
     readonly LinkLabel markerOwn = new() { AutoSize = true, Margin = new Padding(0, 6, 3, 0) };
@@ -145,12 +146,12 @@ public sealed class StyleEditor : UserControl
     sealed class FxRows
     {
         public readonly Func<Style, PartFx> Of;
-        public readonly Chip Walls = new("X-ray");
-        public readonly Chip Pulse = new("Pulse");
-        public readonly Chip Rainbow = new("Rainbow");
-        public readonly Chip Spin = new("Spin");
-        public readonly Chip Bob = new("Bob");
-        public readonly Chip Flow = new("Light runs up");
+        public readonly Chip Walls = new(Tr("X-ray"));
+        public readonly Chip Pulse = new(Tr("Pulse"));
+        public readonly Chip Rainbow = new(Tr("Rainbow"));
+        public readonly Chip Spin = new(Tr("Spin"));
+        public readonly Chip Bob = new(Tr("Bob"));
+        public readonly Chip Flow = new(Tr("Light runs up"));
         public readonly NumericUpDown Hide = new() { Minimum = 0, Maximum = 600, Increment = 5, Width = 50 };
         /// <summary>Every row (shown while its part is on).</summary>
         public readonly List<Control> Rows = new();
@@ -160,7 +161,7 @@ public sealed class StyleEditor : UserControl
     readonly List<FxRows> fxRows = new();
     Section itemSection = null!, beamSection = null!, topSection = null!;
     FxRows glowFx = null!, beamFx = null!, topFx = null!;
-    readonly CheckBox invisibleBox = new() { Text = "Invisible - only what you add shows", AutoSize = true };
+    readonly CheckBox invisibleBox = new() { Text = Tr("Invisible - only what you add shows"), AutoSize = true };
 
     void BuildCards()
     {
@@ -205,15 +206,15 @@ public sealed class StyleEditor : UserControl
                 b.Margin = new Padding(0, 2, 6, 2);
                 ticks.Controls.Add(b);
             }
-            tips.SetToolTip(x.Walls, "X-ray: seen through walls, rocks and the ground.");
-            tips.SetToolTip(x.Pulse, "Brighter and dimmer, every 2 seconds.");
-            tips.SetToolTip(x.Rainbow, "Colours run through the rainbow (instead of its own colour).");
-            tips.SetToolTip(x.Spin, "Turns round (3D icon or model only).");
-            tips.SetToolTip(x.Bob, "Floats up and down.");
-            tips.SetToolTip(x.Flow, "Bands of light run up the beam.");
+            tips.SetToolTip(x.Walls, Tr("X-ray: seen through walls, rocks and the ground."));
+            tips.SetToolTip(x.Pulse, Tr("Brighter and dimmer, every 2 seconds."));
+            tips.SetToolTip(x.Rainbow, Tr("Colours run through the rainbow (instead of its own colour)."));
+            tips.SetToolTip(x.Spin, Tr("Turns round (3D icon or model only)."));
+            tips.SetToolTip(x.Bob, Tr("Floats up and down."));
+            tips.SetToolTip(x.Flow, Tr("Bands of light run up the beam."));
             fxFlows.Add(ticks);
-            x.Rows.AddRange(Row(c, "Effects", ticks));
-            var hideRow = Row(c, "Hide after", Steps(x.Hide, new[] { "Never", "30 s", "1 min", "2 min" }, new[] { 0, 30, 60, 120 }), x.Hide, Unit("s"));
+            x.Rows.AddRange(Row(c, Tr("Effects"), ticks));
+            var hideRow = Row(c, Tr("Hide after"), Steps(x.Hide, new[] { Tr("Never"), "30 s", Tr("1 min"), Tr("2 min") }, new[] { 0, 30, 60, 120 }), x.Hide, Unit("s"));
             ((FlowLayoutPanel)hideRow[1]).WrapContents = true; // the seconds box goes under the buttons in a narrow column
             fxFlows.Add((FlowLayoutPanel)hideRow[1]);
             x.Rows.AddRange(hideRow);
@@ -237,12 +238,11 @@ public sealed class StyleEditor : UserControl
             fxRows.Add(x);
             return x;
         }
-        string[] strength = { "Soft", "Medium", "Strong" };
+        string[] strength = { Tr("Soft"), Tr("Medium"), Tr("Strong") };
         const string timerNote = "\nA hide timer starts when the game loads the item, so it starts again when you come back to the area.";
 
         // 1 the item: a glow (outline / fill), or its own colours lit (bright); invisible
-        itemSection = new Section("1   The item", "Outline / Fill: a coloured light on the item. Bright: its own colours light up, day and night (not through walls).\n" +
-                                                   "Invisible: the item disappears - only what you add shows; still there to pick up. Worn outfits vanish from whoever wears them, you too. Not on enemies." + timerNote);
+        itemSection = new Section(Tr("1   The item"), Tr("Outline / Fill: a coloured light on the item. Bright: its own colours light up, day and night (not through walls).\nInvisible: the item disappears - only what you add shows; still there to pick up. Worn outfits vanish from whoever wears them, you too. Not on enemies.") + timerNote);
         Wide(itemSection, itemSeg);
         itemSeg.Picked += i =>
         {
@@ -253,9 +253,9 @@ public sealed class StyleEditor : UserControl
             Commit();
         };
         swatches.Small = true;
-        glowRows.AddRange(Row(itemSection, "Colour", swatches));
-        glowRows.AddRange(Row(itemSection, "Strength", Steps(opacity, strength, new[] { 15, 30, 60 }), opacity, Unit("%")));
-        shineRows.AddRange(Row(itemSection, "Shine", Steps(brightStrength, strength, new[] { 50, 100, 200 }), brightStrength, Unit("%")));
+        glowRows.AddRange(Row(itemSection, Tr("Colour"), swatches));
+        glowRows.AddRange(Row(itemSection, Tr("Strength"), Steps(opacity, strength, new[] { 15, 30, 60 }), opacity, Unit("%")));
+        shineRows.AddRange(Row(itemSection, Tr("Shine"), Steps(brightStrength, strength, new[] { 50, 100, 200 }), brightStrength, Unit("%")));
         invisibleBox.CheckedChanged += (_, _) => { if (loading) return; style.Invisible = invisibleBox.Checked; UpdateLook(); Changed?.Invoke(this, EventArgs.Empty); };
         glowFx = Fx(itemSection, st => st.GlowFx);
         Wide(itemSection, invisibleBox); // last in the section (user, 2026-11-09)
@@ -274,7 +274,7 @@ public sealed class StyleEditor : UserControl
         };
 
         // 2 beam or arrow
-        beamSection = new Section("2   Beam / arrow", "Something above the item, so you see where it is from far away." + timerNote);
+        beamSection = new Section(Tr("2   Beam / arrow"), Tr("Something above the item, so you see where it is from far away.") + timerNote);
         Wide(beamSection, beamSeg);
         beamSeg.Picked += i =>
         {
@@ -285,11 +285,11 @@ public sealed class StyleEditor : UserControl
             loading = false;
             Commit();
         };
-        heightRow = Row(beamSection, "Height", Steps(length, new[] { "Short", "Medium", "Tall" }, new[] { 10, 20, 30 }), length, Unit("m"));
+        heightRow = Row(beamSection, Tr("Height"), Steps(length, new[] { Tr("Short"), Tr("Medium"), Tr("Tall") }, new[] { 10, 20, 30 }), length, Unit("m"));
         beamRows.AddRange(heightRow);
-        beamRows.AddRange(Row(beamSection, "Thickness", Steps(width, new[] { "Thin", "Normal", "Thick" }, new[] { 6, 10, 20 }), width, Unit("cm")));
-        beamRows.AddRange(Row(beamSection, "Strength", Steps(beamStrength, strength, new[] { 15, 30, 60 }), beamStrength, Unit("%")));
-        beamRows.AddRange(Row(beamSection, "Colour", markerSame, markerOwn));
+        beamRows.AddRange(Row(beamSection, Tr("Thickness"), Steps(width, new[] { Tr("Thin"), Tr("Normal"), Tr("Thick") }, new[] { 6, 10, 20 }), width, Unit("cm")));
+        beamRows.AddRange(Row(beamSection, Tr("Strength"), Steps(beamStrength, strength, new[] { 15, 30, 60 }), beamStrength, Unit("%")));
+        beamRows.AddRange(Row(beamSection, Tr("Colour"), markerSame, markerOwn));
         ownColourRow = Row(beamSection, "", markerSwatches);
         markerOwn.LinkClicked += (_, _) => sameColor.Checked = !sameColor.Checked;
         markerSwatches.Picked += c =>
@@ -307,32 +307,31 @@ public sealed class StyleEditor : UserControl
         beamFx = Fx(beamSection, st => st.BeamFx);
 
         // 3 icon or text (one at a time)
-        topSection = new Section("3   Icon / text", "A picture or 3D model, or a line of text (the item's name or your own), floating above the item and turning to face you.\n" +
-                                                      "Text is not shown on enemies. Spin and bob need a 3D icon or model on enemies; spin shows on 3D only." + timerNote);
+        topSection = new Section(Tr("3   Icon / text"), Tr("A picture or 3D model, or a line of text (the item's name or your own), floating above the item and turning to face you.\nText is not shown on enemies. Spin and bob need a 3D icon or model on enemies; spin shows on 3D only.") + timerNote);
         Wide(topSection, topSeg);
         topSeg.Picked += PickTop;
-        iconRows.AddRange(Row(topSection, "Picture", iconButton));
-        iconRows.AddRange(Row(topSection, "Size", Steps(iconSize, new[] { "S", "M", "L" }, new[] { 40, 70, 120 }), iconSize, Unit("cm")));
+        iconRows.AddRange(Row(topSection, Tr("Picture"), iconButton));
+        iconRows.AddRange(Row(topSection, Tr("Size"), Steps(iconSize, new[] { "S", "M", "L" }, new[] { 40, 70, 120 }), iconSize, Unit("cm")));
         labelText.Width = 160;
-        textRows.AddRange(Row(topSection, "Text", labelText));
-        tips.SetToolTip(labelText, "Leave empty to show each item's own name.\nText typed here shows on every item using this look (for one item only, give that item its own look).");
+        textRows.AddRange(Row(topSection, Tr("Text"), labelText));
+        tips.SetToolTip(labelText, Tr("Leave empty to show each item's own name.\nText typed here shows on every item using this look (for one item only, give that item its own look)."));
         labelText.TextChanged += (_, _) =>
         {
             if (loading || style.LabelText == labelText.Text) return;
             style.LabelText = labelText.Text;
             Changed?.Invoke(this, EventArgs.Empty);
         };
-        textRows.AddRange(Row(topSection, "Height", Steps(labelSize, new[] { "S", "M", "L" }, new[] { 100, 150, 250 }), labelSize, Unit("cm")));
+        textRows.AddRange(Row(topSection, Tr("Height"), Steps(labelSize, new[] { "S", "M", "L" }, new[] { 100, 150, 250 }), labelSize, Unit("cm")));
         textRows.AddRange(Row(topSection, "", labelCat));
         labelCat.CheckedChanged += (_, _) => { if (loading) return; style.LabelCategory = labelCat.Checked; Edited(); };
         topFx = Fx(topSection, st => st.Icon.Length > 0 ? st.IconFx : st.LabelFx);
 
         // presets: switch the parts on / off; colours and sizes stay
-        string[] names = { "Glow only", "Glow + beam", "Glow + beam + name" };
+        string[] names = { Tr("Glow only"), Tr("Glow + beam"), Tr("Glow + beam + name") };
         for (int i = 0; i < names.Length; i++)
         {
             var t = new Tile(i, names[i]) { Clickable = i < 3 };
-            tips.SetToolTip(t, i < 3 ? "Switches the parts on or off - your colours and sizes stay." : "Lit when the look is none of the presets.");
+            tips.SetToolTip(t, i < 3 ? Tr("Switches the parts on or off - your colours and sizes stay.") : Tr("Lit when the look is none of the presets."));
             t.Clicked += ApplyPreset;
             presetTiles.Add(t);
             board.Controls.Add(t);
@@ -391,9 +390,9 @@ public sealed class StyleEditor : UserControl
     /// <summary>Dev (UI test): picks a preset like a click.</summary>
     internal void TestPreset(int p) => ApplyPreset(p);
 
-    string LabelSummary() => !style.Label ? "Off" : (style.LabelCategory ? "Category · " : "") + (style.LabelText.Trim().Length > 0 ? $"\"{style.LabelText.Trim()}\"" : "Item's name") + $" · {labelSize.Value} cm" + FxSummary(style.LabelFx);
+    string LabelSummary() => !style.Label ? Tr("Off") : (style.LabelCategory ? Tr("Category · ") : "") + (style.LabelText.Trim().Length > 0 ? $"\"{style.LabelText.Trim()}\"" : Tr("Item's name")) + Tf(" · {0} cm", labelSize.Value) + FxSummary(style.LabelFx);
 
-    static string Time(int s) => s % 60 == 0 ? $"{s / 60} min" : $"{s} s";
+    static string Time(int s) => s % 60 == 0 ? Tf("{0} min", s / 60) : $"{s} s";
 
     /// <summary>" · pulse · hides 30 s" - a section's extras for its card's summary line.</summary>
     static string FxSummary(PartFx x, bool flow = true)
@@ -405,7 +404,7 @@ public sealed class StyleEditor : UserControl
         if (x.Spin) w.Add("spin");
         if (x.Bob) w.Add("bob");
         if (x.Flow && flow) w.Add("flowing");
-        if (x.HideAfter > 0) w.Add(x.BlinkOff > 0 ? $"blinks ({Time(x.HideAfter)} / {Time(x.BlinkOff)})" : $"hides after {Time(x.HideAfter)}");
+        if (x.HideAfter > 0) w.Add(x.BlinkOff > 0 ? Tf("blinks ({0} / {1})", Time(x.HideAfter), Time(x.BlinkOff)) : Tf("hides after {0}", Time(x.HideAfter)));
         return w.Count > 0 ? " · " + string.Join(" · ", w) : "";
     }
 
@@ -425,8 +424,8 @@ public sealed class StyleEditor : UserControl
         foreach (var c in iconRows) c.Visible = top == 0;
         foreach (var c in textRows) c.Visible = top == 1;
         bool own = !sameColor.Checked;
-        markerSame.Text = own ? "Its own colour ·" : "Same as the glow ·";
-        markerOwn.Text = own ? "same as the glow" : "use a different colour";
+        markerSame.Text = own ? Tr("Its own colour ·") : Tr("Same as the glow ·");
+        markerOwn.Text = own ? Tr("same as the glow") : Tr("use a different colour");
         foreach (var c in ownColourRow) c.Visible = own && mark < 2;
         markerSwatches.Current = Materials.Parse(style.BeamColor);
         markerSwatches.Invalidate();
@@ -567,7 +566,7 @@ public sealed class StyleEditor : UserControl
         if (wide)
         {
             // applies to glow, beam and icon alike: its own row across the top, not inside one group
-            walls.Text = "Visible through walls (glow, beam and icon)";
+            walls.Text = Tr("Visible through walls (glow, beam and icon)");
             walls.Margin = new Padding(3, 0, 3, 4);
             grid.Controls.Add(walls, 0, 0);
             grid.SetColumnSpan(walls, 3);
@@ -582,36 +581,35 @@ public sealed class StyleEditor : UserControl
         }
         Label L(string t) => new() { Text = t, AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(16, 6, 0, 0) };
         Row(glow);
-        Row(L("Colour"), glowColor);
-        Row(L("Strength %"), opacity);
+        Row(L(Tr("Colour")), glowColor);
+        Row(L(Tr("Strength %")), opacity);
         fill.Padding = new Padding(16, 0, 0, 0);
         Row(fill);
         new ToolTip { AutoPopDelay = 20000 }.SetToolTip(fill,
-            "Off: an outline - the item looks normal, its edges glow (also through walls).\nOn: the colour covers the whole item.");
+            Tr("Off: an outline - the item looks normal, its edges glow (also through walls).\nOn: the colour covers the whole item."));
         if (wide) current = Group(1);
         Row(beam);
         marker.Margin = new Padding(19, 3, 3, 3);
         Row(marker);
-        Row(L("Colour"), beamColor);
+        Row(L(Tr("Colour")), beamColor);
         sameColor.Padding = new Padding(16, 0, 0, 0);
         Row(sameColor);
-        Row(L("Length (m)"), length);
-        Row(L("Width (cm)"), width);
-        Row(L("Strength %"), beamStrength);
+        Row(L(Tr("Length (m)")), length);
+        Row(L(Tr("Width (cm)")), width);
+        Row(L(Tr("Strength %")), beamStrength);
         if (wide)
         {
             current = Group(2);
-            Row(new Label { Text = "Icon above the item", AutoSize = true, Padding = new Padding(0, 4, 0, 3) }); // lines up with the Glow / Beam boxes
+            Row(new Label { Text = Tr("Icon above the item"), AutoSize = true, Padding = new Padding(0, 4, 0, 3) }); // lines up with the Glow / Beam boxes
         }
         else Row(walls);
         iconButton.FlatAppearance.BorderColor = Color.FromArgb(160, 160, 160);
-        Row(L("Icon"), iconButton);
-        Row(L("Icon size (cm)"), iconSize);
+        Row(L(Tr("Icon")), iconButton);
+        Row(L(Tr("Icon size (cm)")), iconSize);
         Row(brighten);
-        Row(L("Strength %"), brightStrength);
+        Row(L(Tr("Strength %")), brightStrength);
         new ToolTip { AutoPopDelay = 20000 }.SetToolTip(brighten,
-            "The item's own colours shine, day and night. Nothing is added to the model and nothing shows through walls.\n" +
-            "It changes the game's material, so everything using that material brightens too.");
+            Tr("The item's own colours shine, day and night. Nothing is added to the model and nothing shows through walls.\nIt changes the game's material, so everything using that material brightens too."));
         if (!wide) Row(new Label { AutoSize = true }); // the last row takes the spare height - keeps the rows above even
         preview.Paint += PaintPreview;
         if (wide)
@@ -726,7 +724,7 @@ public sealed class StyleEditor : UserControl
         bool show3D = icons3D || style.Icon3D;
         var ic = Icons.Get(style.Icon);
         var model = Models3D.Get(style.Icon);
-        iconButton.Text = model != null ? model.Name + " (model)" : ic == null ? "No icon" : show3D ? ic.Name + " (3D)" : ic.Name;
+        iconButton.Text = model != null ? Tr(model.Name) + Tr(" (model)") : ic == null ? Tr("No icon") : show3D ? Tr(ic.Name) + " (3D)" : Tr(ic.Name);
         iconButton.Image?.Dispose();
         var ccol = Materials.Parse(style.Beam ? style.BeamColor : style.GlowColor);
         int tile = Math.Max(18, Font.Height); // as tall as the text

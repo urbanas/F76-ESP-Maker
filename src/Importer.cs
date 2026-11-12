@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 using System.Drawing;
 using System.Text;
 using System.Text.Json;
@@ -44,7 +45,7 @@ public static class Importer
         var mats = entries.Where(e => e.Name.EndsWith(".bgem")).ToDictionary(e => e.Name);
 
         var p = Project.Fresh();
-        p.ModName = own ? stem : stem + " edited"; // never the other mod's own file name
+        p.ModName = own ? stem : stem + Tr(" edited"); // never the other mod's own file name
         if (!own) p.ImportedFrom = archives.Select(a => a.FileName).ToList();
         var found = Select(p, cats, models.Keys.ToHashSet(), out var unknown);
         var read = new Dictionary<string, Mat?>();

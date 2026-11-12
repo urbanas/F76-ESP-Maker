@@ -12,6 +12,7 @@ public static class SelfTest
         var folder = GameData.FindGameFolder(Settings.Load().GameFolder) ?? throw new DirectoryNotFoundException("game not found");
         var game = GameData.Load(folder, new List<string>(), _ => { });
         var idx = GameIndex.Load(game, log);
+        Loc.LoadNames(game, idx, Settings.Load().Language);
         bool Exists(string m) => game.Find(@"meshes\" + m) != null;
         return (game, idx, EventCatalog.BuildAll(idx, Exists, game.AllPaths));
     }
@@ -272,6 +273,91 @@ public static class SelfTest
         };
         dlg.Shown += (_, _) => timer.Start();
         dlg.ShowDialog();
+    }
+
+    /// <summary>--names &lt;lang|all&gt;: how well entry names translate (per category: untranslated count + samples) and
+    /// broken characters; exit code = languages that failed to load or have broken text.</summary>
+    public static int Names(string which)
+    {
+        var (game, idx, cats) = Load(_ => { });
+        var sb = new StringBuilder();
+        var en = Loc.ReadStrings(game, "en");
+        sb.AppendLine($"en: {en.Count:N0} strings, {en.Values.Count(s => s.Any(ch => ch > 127)):N0} with non-ASCII characters: "
+            + string.Join(" | ", en.Values.Where(s => s.Any(ch => ch > 127) && s.Length < 40).Take(15)));
+        var codes = which == "all" ? Loc.Languages.Select(l => l.Code).Where(c => c != "en").ToArray() : new[] { which };
+        int fail = 0;
+        foreach (var code in codes)
+        {
+            Loc.LoadNames(game, idx, code);
+            var all = cats.SelectMany(c => c.Entries).ToList();
+            bool Miss(Entry e) => Loc.Name(e.Name) == e.Name && !Loc.Has(e.Name);
+            int miss = all.Count(Miss), bad = all.Count(e => Loc.Name(e.Name).Contains('�'));
+            string line = $"{code}: loaded={Loc.Lang} entries={all.Count} untranslated={miss} ({100.0 * miss / all.Count:F1}%) broken={bad}";
+            Console.WriteLine(line);
+            sb.AppendLine("== " + line);
+            if (Loc.Lang != code || bad > 0) fail++;
+            var sample = all.FirstOrDefault(e => e.Name.StartsWith("Bobblehead: ")) ?? all[0];
+            using (var lb = Icons.DrawLabel(Icons.LabelText(sample.Name))) lb.Save(Path.Combine(Dir, $"label-{code}.png"));
+            foreach (var c in cats)
+            {
+                var m = c.Entries.Where(Miss).ToList();
+                sb.AppendLine($"  {c.Name} -> {Loc.Name(c.Name)}: {c.Entries.Count - m.Count}/{c.Entries.Count}  e.g. "
+                    + string.Join(" | ", c.Entries.Take(3).Select(e => $"{e.Name} = {Loc.Name(e.Name)}"))
+                    + (m.Count > 0 ? "   MISSING: " + string.Join(" | ", m.Take(8).Select(e => e.Name)) : ""));
+            }
+        }
+        Loc.LoadNames(game, idx, "en");
+        File.WriteAllText(Path.Combine(Dir, $"names-{which}.txt"), sb.ToString());
+        return fail;
+    }
+
+    /// <summary>--uikeys &lt;file&gt;: the catalog's own texts (names, groups, sections, details, part names) that the game's
+    /// strings don't translate - the keys the Lang tables need besides the Tr/Tf texts in the code.</summary>
+    public static int UiKeys(string file)
+    {
+        var (game, idx, cats) = Load(_ => { });
+        Loc.LoadNames(game, idx, "de");
+        Loc.Missing = new();
+        foreach (var c in cats)
+        {
+            _ = c.Shown; _ = Loc.Name(c.Group); _ = Loc.Name(c.Section[..1] + c.Section[1..].ToLowerInvariant());
+            Loc.Missing.Add(c.Description);
+            // "Everything else" lists things by their editor ids - those stay as the game files name them
+            if (c.Section == Catalog.AllSection) continue;
+            foreach (var e in c.Entries.Concat(c.Entries.SelectMany(x => x.Group ?? new())))
+            {
+                _ = e.Shown; _ = Loc.Name(e.Detail);
+            }
+        }
+        foreach (var ic in Icons.All) Loc.Missing.Add(ic.Name);
+        foreach (var m in Models3D.All) Loc.Missing.Add(m.Name);
+        static bool EditorId(string k) => !k.Contains(' ') && k.Skip(1).Any(char.IsUpper);
+        var keys = Loc.Missing.Where(k => k.Length > 1 && k.Any(char.IsLetter) && !k.Any(char.IsDigit) && !k.Contains('_') && !EditorId(k))
+                              .OrderBy(k => k).ToList();
+        Loc.Missing = null;
+        File.WriteAllLines(file, keys);
+        Console.WriteLine($"{keys.Count} keys");
+        return 0;
+    }
+
+    /// <summary>--gameterms &lt;en.txt&gt; &lt;out dir&gt;: for each language, the keys (one per line, \n escaped) the game's own
+    /// strings translate exactly, as "line&lt;tab&gt;translation" - the Lang tables reuse the game's wording.</summary>
+    public static int GameTerms(string keysFile, string outDir)
+    {
+        var (game, idx, _) = Load(_ => { });
+        var keys = File.ReadAllLines(keysFile);
+        Directory.CreateDirectory(outDir);
+        foreach (var (code, _) in Loc.Languages.Where(l => l.Code != "en"))
+        {
+            Loc.LoadNames(game, idx, code);
+            var lines = new List<string>();
+            for (int i = 0; i < keys.Length; i++)
+                if (Loc.GameName(keys[i].Trim()) is string t && t.Trim().Length > 0 && !t.Contains('\n'))
+                    lines.Add($"{i + 1}\t{t}");
+            File.WriteAllLines(Path.Combine(outDir, code + ".txt"), lines);
+        }
+        Loc.LoadNames(game, idx, "en");
+        return 0;
     }
 
     /// <summary>--list: every category and entry with its models.</summary>
@@ -595,6 +681,18 @@ public static class SelfTest
             Reset();
             g.Uninstall(new[] { "Mine.ba2" }, quiet);
             Check(!File.Exists(ini), "uninstall with no ini: nothing made, no error");
+
+            log.Add("mod manager");
+            Reset("[General]\r\nsStartingConsoleCommand=x\r\n[Archive]\r\nsResourceArchive2List=A.ba2,B.ba2\r\nbInvalidateOlderFiles=1\r\n");
+            g.WriteArchiveList(new[] { "B.ba2", "C.ba2" }, quiet);
+            Check(List() == "sResourceArchive2List=B.ba2,C.ba2" && File.ReadAllText(ini).Contains("sStartingConsoleCommand=x") && File.ReadAllText(ini).Contains("bInvalidateOlderFiles=1"), "new order written, other lines kept");
+            Check(File.ReadAllText(ini + ".modmanager-backup").Contains("A.ba2,B.ba2"), "backup holds the old list");
+            g.WriteArchiveList(Array.Empty<string>(), quiet);
+            Check(List() == "sResourceArchive2List=", "all off: empty list");
+            Reset();
+            g.WriteArchiveList(new[] { "A.ba2" }, quiet);
+            Check(List() == "sResourceArchive2List=A.ba2", "no ini: made with the list");
+            Check(g.ModArchivesInData().All(n => !n.StartsWith("SeventySix - ")), "Data scan skips the game's own archives");
 
             log.Add("failures");
             Reset("[Archive]\r\nsResourceArchive2List=Other.ba2\r\n");

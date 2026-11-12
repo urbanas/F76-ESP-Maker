@@ -1,3 +1,4 @@
+using static ItemFinder.Loc;
 using System.Globalization;
 
 namespace ItemFinder;
@@ -43,8 +44,8 @@ public static class Builder
                 {
                     // "show nothing" still claims the models, so a linked twin in another category (e.g. the same
                     // bobblehead under Aid & food) doesn't light them up in its own colours
-                    foreach (var m in e.Models) done.TryAdd(@"meshes\" + m, $"{e.Name} in {cat.Name} (set to show nothing)");
-                    log($"  {e.Name}: glow and beam are both off - left as in the game");
+                    foreach (var m in e.Models) done.TryAdd(@"meshes\" + m, Tf("{0} in {1} (set to show nothing)", e.Shown, cat.Shown));
+                    log(Tf("  {0}: glow and beam are both off - left as in the game", e.Shown));
                     continue;
                 }
                 // what a look puts on a model (the entry's look, or a part's own)
@@ -90,7 +91,7 @@ public static class Builder
                         var img = Gradient(game, tex, st);
                         byte fmt = game.Find(tex) is { } orig && Dxgi.IsSrgb(orig.Format) ? Dxgi.B8G8R8A8Srgb : Dxgi.B8G8R8A8;
                         replaced.Add(new TextureOut(tex, img.Width, img.Height, fmt, Dxgi.MipsBgra(img)));
-                        log($"  {e.Name}: {tex} recoloured");
+                        log(Tf("  {0}: {1} recoloured", e.Shown, tex));
                     }
                 var models = project.ModelsOf(e);
                 // the beam / icon go on the main model - or the first part left when that one was unticked
@@ -106,23 +107,23 @@ public static class Builder
                     if (!ChangesModel(look))
                     {
                         // brighten only: a linked twin may still put its own glow on the model
-                        if (!look.Brighten) done.TryAdd(path, $"{e.Name} in {cat.Name} (set to show nothing)");
+                        if (!look.Brighten) done.TryAdd(path, Tf("{0} in {1} (set to show nothing)", e.Shown, cat.Shown));
                         continue;
                     }
                     bool mainModel = own != null || beamModels == null || beamModels.Contains(model);
                     var opts = Options(look, mainModel);
-                    if (done.TryGetValue(path, out var by)) { log($"  {e.Name}: {model} is also selected as {by} - that look is used"); continue; }
+                    if (done.TryGetValue(path, out var by)) { log(Tf("  {0}: {1} is also selected as {2} - that look is used", e.Shown, model, by)); continue; }
                     // a hidden worn outfit: the bare body / hands go in its place (the outfit model is the body under it too)
                     var srcPath = path;
                     if (e.HideAs(model, look) is string bare)
                     {
                         opts = opts with { Invisible = false };
-                        if (bare.Length > 0) { srcPath = @"meshes\" + bare; log($"  {e.Name}: {model} - shown as {bare}"); }
+                        if (bare.Length > 0) { srcPath = @"meshes\" + bare; log(Tf("  {0}: {1} - shown as {2}", e.Shown, model, bare)); }
                         else log($"  {e.Name}: {model} - kept visible (covers hair / head, which can't be shown instead)");
                     }
                     var winner = game.Find(srcPath);
                     var src = project.KeepOtherMods ? winner : game.FindOriginal(srcPath) ?? winner;
-                    if (src == null) { log($"  {e.Name}: {model} not found in the game files - skipped"); failed++; continue; }
+                    if (src == null) { log(Tf("  {0}: {1} not found in the game files - skipped", e.Shown, model)); failed++; continue; }
                     try
                     {
                         PatchResult r;
@@ -131,20 +132,20 @@ public static class Builder
                         catch (Exception ex) when (game.FindOriginal(srcPath) is { } orig && orig != src)
                         {
                             // the other mod's file is gone (removed while the app was open) or in a form this app can't change
-                            log($"  {e.Name}: couldn't use {model} from {src.Archive.FileName} ({ex.Message}) - using the original game model");
+                            log(Tf("  {0}: couldn't use {1} from {2} ({3}) - using the original game model", e.Shown, model, src.Archive.FileName, ex.Message));
                             r = NifPatch.Apply(orig.Archive.ReadFile(orig), opts);
                             fellBack = true;
                         }
                         if (winner != null && !winner.Archive.FileName.StartsWith("SeventySix - ", StringComparison.OrdinalIgnoreCase))
                             conflicts.Add(project.KeepOtherMods && !fellBack
-                                ? $"{e.Name}: {model} is also changed by {winner.Archive.FileName} - kept its changes and added the highlight on top"
+                                ? Tf("{0}: {1} is also changed by {2} - kept its changes and added the highlight on top", e.Shown, model, winner.Archive.FileName)
                                 : fellBack
-                                ? $"{e.Name}: {model} is also changed by {winner.Archive.FileName} - its version couldn't be read, so this starts from the original game model and replaces it"
-                                : $"{e.Name}: {model} is also changed by {winner.Archive.FileName} - started from the original game model instead, so this replaces that mod's version");
+                                ? Tf("{0}: {1} is also changed by {2} - its version couldn't be read, so this starts from the original game model and replaces it", e.Shown, model, winner.Archive.FileName)
+                                : Tf("{0}: {1} is also changed by {2} - started from the original game model instead, so this replaces that mod's version", e.Shown, model, winner.Archive.FileName));
                         files.Add((path, r.Data));
-                        done[path] = $"{e.Name} in {cat.Name}";
+                        done[path] = Tf("{0} in {1}", e.Shown, cat.Shown);
                         var parts = new List<string>();
-                        if (opts.GlowFor != null) parts.Add(r.GlowShapes > 0 ? $"glow on {r.GlowShapes} part(s)" : "no parts to glow");
+                        if (opts.GlowFor != null) parts.Add(r.GlowShapes > 0 ? Tf("glow on {0} part(s)", r.GlowShapes) : Tr("no parts to glow"));
                         if (r.Beam) parts.Add("beam");
                         if (r.Note.Length > 0) parts.Add(r.Note);
                         log($"  {e.Name}: {model} - {string.Join(", ", parts)}{(own != null ? " (own look)" : "")}");
@@ -152,7 +153,7 @@ public static class Builder
                     catch (Exception ex)
                     {
                         failed++;
-                        log($"  {e.Name}: {model} could not be changed ({ex.Message}) - skipped");
+                        log(Tf("  {0}: {1} could not be changed ({2}) - skipped", e.Shown, model, ex.Message));
                     }
                 }
             }
@@ -226,7 +227,7 @@ public static class Builder
         if (src == null) return;
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try { NifPatch.Apply(src.Archive.ReadFile(src), new PatchOptions(p => { used.Add(p.Material); return null; }, null, 0, 0, false)); }
-        catch (Exception ex) { log($"  {item}: couldn't read {path} ({ex.Message}) - not brightened"); return; }
+        catch (Exception ex) { log(Tf("  {0}: couldn't read {1} ({2}) - not brightened", item, path, ex.Message)); return; }
         foreach (var material in used)
         {
             int at = material.IndexOf(@"materials\", StringComparison.OrdinalIgnoreCase);
@@ -236,9 +237,9 @@ public static class Builder
             if ((entry != null ? Materials.Brighten(entry.Archive.ReadFile(entry), st.BrightenStrength / 100f) : null) is byte[] bright)
             {
                 brightened[key] = bright;
-                log($"  {item}: {key} brightened");
+                log(Tf("  {0}: {1} brightened", item, key));
             }
-            else log($"  {item}: {key} can't be brightened");
+            else log(Tf("  {0}: {1} can't be brightened", item, key));
         }
     }
 
