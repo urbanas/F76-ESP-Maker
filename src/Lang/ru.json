@@ -566,6 +566,7 @@
 "Stand other selected items beside it, each in its own look": "Поставить рядом другие выбранные предметы, каждый в своём оформлении",
 "Start empty...": "Начать с нуля...",
 "Start with the category": "Начать с категории",
+"Text above it too": "И текст над ним",
 "Started empty.": "Начато с нуля.",
 "Stash boxes": "Ящики-тайники",
 "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.": "Ящики-тайники и ящики с помощью, боеприпасами и хламом Fallout 1st в C.A.M.P., все варианты. Светится ящик каждого игрока, а не только ваш.",
@@ -972,5 +973,18 @@
 "selected": "выбраны",
 "snowflake pant suits": "комбинезоны со снежинками",
 "the Atlantic City gift-box clue lights up too": "подсказка с подарочной коробкой в Атлантик-Сити тоже светится",
-"unselected": "сняты"
+"unselected": "сняты",
+"Gift box": "Подарочная коробка",
+"Hiding Cappy": "Прячущийся Мистер Крышка",
+"Spin the Wheel": "Крути колесо",
+"Spin the Wheel: the hiding Cappy to find.": "Крути колесо: прячущийся Мистер Крышка, которого нужно найти.",
+"The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included).": "Шоумены из экспедиций в Атлантик-Сити - их находят по костюмам, которые они носят. Все, кто носит такие же костюмы, тоже светятся (и игроки).",
+"anyone wearing this outfit glows too": "все, кто носит этот костюм, тоже светятся",
+"the same entries as under ENEMIES > Showmen": "те же пункты, что в ВРАГИ > Шоумены",
+"{0} models - anyone wearing this outfit glows too": "Моделей: {0} - все, кто носит этот костюм, тоже светятся",
+"{0} outfits - the same entries as under ENEMIES > Showmen": "Костюмов: {0} - те же пункты, что в ВРАГИ > Шоумены",
+"Item copy": "Копия предмета",
+"Item copy: a copy of the item itself, in its own colours.": "Копия предмета: копия самого предмета в его собственных цветах.",
+"Same as the beam ·": "Как луч ·",
+"same as the beam": "как луч"
 }

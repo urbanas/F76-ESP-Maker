@@ -566,6 +566,7 @@
 "Stand other selected items beside it, each in its own look": "Poner otros objetos seleccionados al lado, cada uno con su estilo",
 "Start empty...": "Empezar vacío...",
 "Start with the category": "Empezar con la categoría",
+"Text above it too": "También texto encima",
 "Started empty.": "Se empezó vacío.",
 "Stash boxes": "Cajas de alijo",
 "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.": "Cajas de alijo y las cajas de ayuda, munición y chatarra de Fallout 1st en los C.A.M.P., todos los diseños. Se ilumina la caja de cada jugador, no solo la tuya.",
@@ -969,5 +970,18 @@
 "selected": "seleccionado",
 "snowflake pant suits": "monos de copo de nieve",
 "the Atlantic City gift-box clue lights up too": "la pista de la caja de regalo de Atlantic City también se ilumina",
-"unselected": "deseleccionado"
+"unselected": "deseleccionado",
+"Gift box": "Caja de regalo",
+"Hiding Cappy": "Tapita escondida",
+"Spin the Wheel": "Gira la rueda",
+"Spin the Wheel: the hiding Cappy to find.": "Gira la rueda: la Tapita escondida que hay que hallar.",
+"The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included).": "Los Espectaculares de las expediciones a Atlantic City, localizados por los trajes que llevan. Quien lleve los mismos trajes también brilla (jugadores incluidos).",
+"anyone wearing this outfit glows too": "quien lleve este traje también brilla",
+"the same entries as under ENEMIES > Showmen": "las mismas entradas que en ENEMIGOS > Espectaculares",
+"{0} models - anyone wearing this outfit glows too": "{0} modelos - quien lleve este traje también brilla",
+"{0} outfits - the same entries as under ENEMIES > Showmen": "{0} trajes - las mismas entradas que en ENEMIGOS > Espectaculares",
+"Item copy": "Copia del objeto",
+"Item copy: a copy of the item itself, in its own colours.": "Copia del objeto: una copia del propio objeto, en sus colores originales.",
+"Same as the beam ·": "Igual que el haz ·",
+"same as the beam": "igual que el haz"
 }

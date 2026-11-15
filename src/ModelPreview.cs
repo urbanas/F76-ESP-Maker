@@ -51,43 +51,58 @@ static class ModelPreview
     static readonly System.Text.RegularExpressions.Regex DismemberCap =
         new(@"(head|body|neck|torso|arm|leg|limb|tail|wing|eye|tentacle|jaw)_?\w{0,3}cap\d*(:\d+)?(_IFGlow)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     const string GlowTag = "itemfinder-preview-glow", BeamTag = "itemfinder-preview-beam", IconTag = "itemfinder-preview-icon", Icon3DTag = "itemfinder-preview-icon3d",
-                 ModelTag = "itemfinder-preview-model", LabelTag = "itemfinder-preview-label";
+                 ModelTag = "itemfinder-preview-model", LabelTag = "itemfinder-preview-label", CopyTag = "itemfinder-preview-copy";
     /// <summary>The label picture of the scene being loaded (previews load on several threads).</summary>
-    [ThreadStatic] static Rgba? labelTex;
+    [ThreadStatic] static Rgba? labelTex, copyTex;
     static readonly Dictionary<string, Rgba?> textures = new(StringComparer.OrdinalIgnoreCase);
     const int MaxTexture = 512;
 
     /// <summary>An entry's model as the build makes it: a hidden worn outfit part is its bare body / hands.</summary>
     public static PreviewScene LoadAs(GameData game, Entry e, string model, Style st, bool beamHere, bool keepOtherMods)
     {
-        if (e.HideAs(model, st) is not string bare) return Load(game, model, st, e.NoIcon, e.Harvestable, beamHere, keepOtherMods, e.Name);
-        var s = Load(game, bare.Length > 0 ? bare : model, st, e.NoIcon, e.Harvestable, beamHere, keepOtherMods, e.Name);
+        var mini = Models3D.MiniSource(game, e, model);
+        if (e.HideAs(model, st) is not string bare) return Load(game, model, st, e.NoIcon, e.Harvestable, beamHere, keepOtherMods, e.Name, mini);
+        var s = Load(game, bare.Length > 0 ? bare : model, st, e.NoIcon, e.Harvestable, beamHere, keepOtherMods, e.Name, mini);
         s.Bare = true;
         return s;
     }
 
+    [ThreadStatic] static bool shapeOnly;
+
+    /// <summary>A model's own drawn parts with their textures, nothing added (for a "Mini item" copy).</summary>
+    internal static PreviewScene LoadShape(GameData game, string model, bool keepOtherMods)
+    {
+        bool was = shapeOnly;
+        shapeOnly = true;
+        try { return Load(game, model, new Style { Glow = false, Beam = false }, true, false, false, keepOtherMods); }
+        finally { shapeOnly = was; }
+    }
+
     /// <param name="beamHere">The model carries the beam and icon (an entry's main model).</param>
     public static PreviewScene Load(GameData game, string model, Style st, bool noIcon, bool harvestable, bool beamHere, bool keepOtherMods,
-                                    string? name = null)
+                                    string? name = null, string? miniOf = null)
     {
+        // "Mini item": made first (it loads a scene of its own on this thread)
+        Mesh? miniMesh = beamHere && st.Copy ? Models3D.FromItem(game, miniOf ?? model, keepOtherMods) : null;
         // the name label: drawn like the build draws it (a flat camera-facing card with the text picture)
         labelTex = null;
         float labelRatio = 0;
-        if (beamHere && st.Label && !noIcon && !string.IsNullOrEmpty(name))
+        if (beamHere && st.Label && !string.IsNullOrEmpty(name))
             using (var lb = Icons.DrawLabel(st.LabelText.Trim().Length > 0 ? st.LabelText.Trim() : Icons.LabelText(name))) { labelTex = Bitmaps.ToRgba(lb); labelRatio = lb.Width / (float)lb.Height; }
         var path = @"meshes\" + model;
         var winner = game.Find(path);
         var src = (keepOtherMods ? winner : game.FindOriginal(path) ?? winner) ?? throw new FileNotFoundException("this model isn't in the game files");
         var data = src.Archive.ReadFile(src);
-        var chosen = Icons.Get(st.Icon);
+        var chosen = st.Has("icon") ? Icons.Get(st.Icon) : null;
         bool use3D = noIcon || st.Icon3D;
         var opts = new PatchOptions(st.Glow ? p => new GlowMat(GlowTag, p.Cutout ? p.Threshold : -1) : null,
-                                    beamHere && st.Beam ? (st.BeamArrow ? Icon3DTag : BeamTag) : null,
-                                    st.BeamArrow ? NifPatch.ArrowSize(st.BeamWidth) is var ar ? ar.Gap + ar.Height : 0 : st.BeamLength, st.BeamWidth, harvestable,
+                                    beamHere && st.Beam ? BeamTag : null, st.BeamLength, st.BeamWidth, harvestable,
                                     beamHere && !use3D && chosen != null ? IconTag : null, st.IconSize,
-                                    beamHere && chosen != null ? Icons.Mask(chosen) : null, Icon3DTag, st.BeamArrow, // solid where flat can't show
-                                    beamHere && Models3D.Get(st.Icon) is Model3D m3 ? Models3D.MeshOf(m3) : null, ModelTag,
-                                    labelTex != null ? LabelTag : null, st.LabelSize * labelRatio, st.LabelSize);
+                                    beamHere && chosen != null ? Icons.Mask(chosen) : null, Icon3DTag, // solid where flat can't show
+                                    beamHere && st.Has("icon") && Models3D.Get(st.Icon) is Model3D m3 ? Models3D.MeshOf(m3) : null, ModelTag,
+                                    labelTex != null ? LabelTag : null, st.LabelSize * labelRatio, st.LabelSize,
+                                    Stack: st.Stack, ArrowMaterial: beamHere && st.Arrow ? Icon3DTag : null, ArrowWidth: st.ArrowWidth,
+                                    Copy: miniMesh, CopyMaterial: CopyTag, CopySize: st.CopySize, IconScale: st.IconScale / 100f, CopyScale: st.CopyScale / 100f);
         var scene = new PreviewScene();
         byte[] patched = data;
         try { patched = NifPatch.Apply(data, opts).Data; }
@@ -107,7 +122,8 @@ static class ModelPreview
         var f = NifFile.Parse(patched);
         Rgba? iconTex = null;
         if (chosen != null && !use3D) { using var bmp = Icons.Draw(chosen, 128); iconTex = Bitmaps.ToRgba(bmp); }
-        if (Models3D.Get(st.Icon) is Model3D mt) iconTex = Models3D.TextureOf(mt); // the model's own texture
+        if (st.Has("icon") && Models3D.Get(st.Icon) is Model3D mt) iconTex = Models3D.TextureOf(mt); // the model's own texture
+        copyTex = miniMesh == null ? null : miniMesh.Texture ?? Models3D.TextureOf(Models3D.Self); // its own picture sheet
         var worlds = new Dictionary<int, Xf>();
         NodeWorlds(f, 0, Xf.Identity, worlds);
         Walk(f, 0, Xf.Identity, null, scene, game, iconTex, new HashSet<int>(), worlds);
@@ -371,9 +387,10 @@ static class ModelPreview
             BeamTag => PartKind.Beam,
             IconTag or LabelTag => PartKind.Icon,
             Icon3DTag => PartKind.Icon3D,
-            ModelTag => PartKind.Model,
+            ModelTag or CopyTag => PartKind.Model,
             _ => shaderType == "BSEffectShaderProperty" ? PartKind.Effect : blend && part.TestRef < 0 ? PartKind.Blend : PartKind.Solid,
         };
+        if (shapeOnly && part.Kind == PartKind.Effect) return null; // a mini copy: the drawn shape with its textures (its colours)
         if (part.Kind is PartKind.Solid or PartKind.Blend or PartKind.Effect)
         {
             part.Tex = MaterialTexture(game, material);
@@ -381,6 +398,7 @@ static class ModelPreview
             if (part.Kind == PartKind.Effect && part.Tex == null) return null; // a bare effect (particles, light cones)
         }
         else if (material == LabelTag) part.Tex = labelTex;
+        else if (material == CopyTag) part.Tex = copyTex;
         else if (part.Kind is PartKind.Icon or PartKind.Model) part.Tex = iconTex;
 
         bool full = (attrs & 0x400) != 0;
@@ -731,20 +749,45 @@ static class PreviewRenderer
     }
 
     /// <summary>The look's colours and strengths, worked out once per picture.</summary>
-    sealed record Paint(Color Glow, Color Beam, Color IconCol, Color ModelCol, float GlowK, float FillA, float OutlineA, float BeamA, float Shine, bool Fill, bool GlowX, bool BeamX, bool IconX, bool Arrow, bool Invisible = false, float Face = 0.18f)
+    sealed record Paint(Color Glow, Color Beam, Color IconCol, Color ModelCol, float GlowK, float FillA, float OutlineA, float BeamA, float Shine, bool Fill, bool GlowX, bool BeamX, bool IconX, bool Invisible = false, float Face = 0.18f, float TopA = 1f)
     {
+        // the other layers (look stack): arrow, name, item copy - each its own colour, X-ray and strength
+        public Color ArrowCol, LabelCol;
+        public bool ArrowX, LabelX, CopyX;
+        public float LabelA = 1f, CopyA = 1f;
+
         public static Paint Of(Style st)
         {
-            var iconCol = Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor);
+            var iconCol = Materials.Parse(st.IconColour);
             float gs = Math.Clamp(st.GlowOpacity / 100f, 0.05f, 1f);
+            static float A(int pct) => Math.Clamp(pct, 10, 300) / 100f; // weaker = more see-through, stronger = brighter
             return new(Materials.Parse(st.GlowColor), Materials.Parse(st.BeamColor), iconCol,
                        Models3D.Get(st.Icon) is { Tinted: false } ? Color.White : iconCol, // own colours, or the look's
                        gs * 0.36f,
                        Math.Min(1f, 0.28f * gs / 0.3f), Materials.OutlineAlpha(gs), // fill = 0.28 at 30 %; an outline is stronger at the edges
                        Math.Min(1f, 0.75f * st.BeamStrength / 100f) * (st.BeamStrength > 100 ? st.BeamStrength / 100f : 1f),
                        st.Brighten ? Math.Clamp(st.BrightenStrength, 25, 300) / 100f : 0, // the colour texture as a glow map
-                       st.GlowFill, st.GlowFx.Walls, st.BeamFx.Walls, st.IconFx.Walls, st.BeamArrow, st.Invisible, Materials.OutlineFace(gs));
+                       st.GlowFill, st.GlowFx.Walls, st.BeamFx.Walls, st.IconFx.Walls, st.Invisible, Materials.OutlineFace(gs),
+                       A(st.IconStrength))
+            {
+                ArrowCol = Materials.Parse(st.ArrowColour), LabelCol = Materials.Parse(st.LabelColour),
+                ArrowX = st.ArrowFx.Walls, LabelX = st.LabelFx.Walls, CopyX = st.CopyFx.Walls,
+                LabelA = A(st.LabelStrength), CopyA = A(st.CopyStrength),
+            };
         }
+
+        /// <summary>A drawn layer part's colour, strength and X-ray.</summary>
+        public (Color Col, float A, bool X) Of(PartKind kind, PreviewPart p) => kind switch
+        {
+            PartKind.Glow => (Glow, GlowK, GlowX),
+            PartKind.Beam => (Beam, BeamA, BeamX),
+            PartKind.Icon3D when IsArrow(p) => (ArrowCol, 1f, ArrowX),
+            PartKind.Model when IsCopy(p) => (Color.White, CopyA, CopyX),
+            PartKind.Icon when IsLabel(p) => (LabelCol, LabelA, LabelX),
+            PartKind.Model => (ModelCol, TopA, IconX),
+            PartKind.Icon or PartKind.Icon3D => (IconCol, TopA, IconX),
+            _ => (IconCol, 1f, false),
+        };
     }
 
     /// <summary>Colour blindness (Machado et al. 2009, full strength), on linear colour.</summary>
@@ -813,6 +856,8 @@ static class PreviewRenderer
                 foreach (var p0 in parts.Where(p => p.Kind == kind))
                 {
                     var p = p0;
+                    // animated models (creatures, worn outfits): the build can't add spin / bob there (NifPatch), so none here
+                    bool still = parts.Any(q => q.Skinned);
                     float bright = 1, flowT = -1;
                     Color? rainbow = null;
                     if (time >= 0 && SectionOf(lk, p0) is { } fx)
@@ -822,19 +867,23 @@ static class PreviewRenderer
                         if (fx.Pulse) bright = 0.625f + 0.375f * MathF.Cos(time * MathF.PI); // a breath every 2 s, as built
                         if (fx.Rainbow) rainbow = RainbowAt(time);
                         if (fx.Flow && p0.Kind == PartKind.Beam) flowT = time;
-                        bool spinOk = fx.Spin && (p0.Kind == PartKind.Model || p0.Kind == PartKind.Icon3D && !IsArrow(p0));
-                        bool bobOk = fx.Bob && p0.Kind is PartKind.Icon or PartKind.Icon3D or PartKind.Model;
+                        bool spinOk = !still && fx.Spin && (p0.Kind == PartKind.Model || p0.Kind == PartKind.Icon3D && !IsArrow(p0));
+                        bool bobOk = !still && fx.Bob && p0.Kind is PartKind.Icon or PartKind.Icon3D or PartKind.Model;
                         p = Moved(p0, spinOk ? time / 4 * 2 * MathF.PI : 0, bobOk ? MathF.Sin(time * MathF.PI) : 0, shown);
                     }
                     // an invisible look: the item's own parts aren't drawn (the build hides them; the scene keeps them for size and picking)
                     if (pt.Invisible && !(scene.Bare && ReferenceEquals(parts, scene.Parts)) && kind is PartKind.Solid or PartKind.Effect or PartKind.Blend) continue;
-                    bool xray = kind switch { PartKind.Glow => pt.GlowX, PartKind.Beam => pt.BeamX, PartKind.Icon3D => pt.Arrow ? pt.BeamX : pt.IconX, PartKind.Icon or PartKind.Model => pt.IconX, _ => false };
-                    var col = kind switch { PartKind.Beam => pt.Beam, PartKind.Glow => pt.Glow, PartKind.Model => pt.ModelCol, _ => pt.IconCol };
+                    var (col, layerA, xray) = kind is PartKind.Solid or PartKind.Effect or PartKind.Blend ? (pt.IconCol, 1f, false) : pt.Of(kind, p0);
                     if (rainbow is Color rc) col = rc;
                     bool fill = pt.Fill || p.Filled;
-                    Draw(p, cam, color, depth, hit, light, col, kind switch { PartKind.Glow => pt.GlowK, PartKind.Beam => pt.BeamA, _ => 1f }, xray, pt,
+                    Draw(p, cam, color, depth, hit, light, col, layerA, xray, pt,
                          fill ? pt.FillA : pt.OutlineA, !fill, bright, flowT);
                 }
+        // Bright / Off + X-ray: a copy of the item's own parts that shows through walls (Builder.XrayFor)
+        foreach (var (parts, pt, lk) in looks)
+            if (lk.ShowsOwnXray && !pt.Invisible)
+                foreach (var p in parts.Where(p => p.Kind is PartKind.Solid or PartKind.Blend))
+                    Draw(p, cam, color, depth, null, light, Color.White, 1f, true, pt, ghost: lk.XrayScale);
         }
 
         if (x != null && VisionMatrix.TryGetValue(x.Vision, out var m))
@@ -941,16 +990,18 @@ static class PreviewRenderer
         return l > 1e-9f ? (a.X / l, a.Y / l, a.Z / l) : (0, 0, 1);
     }
 
-    static bool IsArrow(PreviewPart p) => p.Name.StartsWith("ItemFinderBeam", StringComparison.Ordinal);
+    static bool IsArrow(PreviewPart p) => p.Name.StartsWith("ESPMakerArrow", StringComparison.Ordinal);
+    static bool IsCopy(PreviewPart p) => p.Name.StartsWith("ESPMakerCopy", StringComparison.Ordinal);
+    static bool IsLabel(PreviewPart p) => p.Name.StartsWith("ESPMakerLabel", StringComparison.Ordinal);
 
     /// <summary>The look section a drawn part belongs to (null: the item's own parts).</summary>
     static PartFx? SectionOf(Style st, PreviewPart p) => p.Kind switch
     {
         PartKind.Glow => st.GlowFx,
         PartKind.Beam => st.BeamFx,
-        PartKind.Icon3D => IsArrow(p) ? st.BeamFx : st.IconFx,
-        PartKind.Model => st.IconFx,
-        PartKind.Icon => p.Name.StartsWith("ESPMakerLabel", StringComparison.Ordinal) ? st.LabelFx : st.IconFx,
+        PartKind.Icon3D => IsArrow(p) ? st.ArrowFx : st.IconFx,
+        PartKind.Model => IsCopy(p) ? st.CopyFx : st.IconFx,
+        PartKind.Icon => IsLabel(p) ? st.LabelFx : st.IconFx,
         _ => null,
     };
 
@@ -1024,8 +1075,10 @@ static class PreviewRenderer
     /// <param name="bright">Pulse / fade: the added light's share (not the item's own parts).</param>
     /// <param name="flowT">Flowing beam: the animation time (bands of light run up, one per 2 m in 1.5 s); below 0 = none.</param>
     static void Draw(PreviewPart p, Cam c, float[] color, float[] depth, PreviewPart?[]? hit, (float X, float Y, float Z) light, Color col, float strength, bool xray,
-                     Paint pt, float glowA = 0, bool outline = false, float bright = 1, float flowT = -1)
+                     Paint pt, float glowA = 0, bool outline = false, float bright = 1, float flowT = -1, float ghost = 0)
     {
+        // ghost: the Bright look's X-ray copy (Builder.XrayFor) - its own texture as added light, through everything
+        if (ghost > 0) xray = true;
         float shine = pt.Shine;
         var sun = c.Sky.Sun;
         var fogC = c.Sky.Horizon;
@@ -1130,6 +1183,12 @@ static class PreviewRenderer
                         case PartKind.Solid:
                         case PartKind.Blend:
                         {
+                            if (ghost > 0)
+                            {
+                                float k = ghost * ta * clear; // as built: the copy's colour scale (Style.XrayScale)
+                                color[ci] += tr * vr * k; color[ci + 1] += tg * vg * k; color[ci + 2] += tb * vb * k;
+                                break;
+                            }
                             float nx = fn.X, ny = fn.Y, nz = fn.Z;
                             if (p.N != null)
                             {
@@ -1187,25 +1246,27 @@ static class PreviewRenderer
                             color[ci] += cr * k; color[ci + 1] += cg * k; color[ci + 2] += cb * k;
                             break;
                         }
+                        // the layer's strength as Materials.Icon / Icon3D / Model build it: below 100 % more see-through
+                        // (alpha), above 100 % brighter (colour scale) - user, 2026-11-15: the preview ignored it
                         case PartKind.Icon:
                         {
-                            float k = ta * 1.15f * clear;
-                            color[ci] += (cr * 1.1f - color[ci]) * Math.Min(1, k); color[ci + 1] += (cg * 1.1f - color[ci + 1]) * Math.Min(1, k); color[ci + 2] += (cb * 1.1f - color[ci + 2]) * Math.Min(1, k);
+                            float k = Math.Min(1, ta * 1.15f * clear * Math.Min(1, strength)), up = 1.1f * Math.Max(1, strength);
+                            color[ci] += (cr * up - color[ci]) * k; color[ci + 1] += (cg * up - color[ci + 1]) * k; color[ci + 2] += (cb * up - color[ci + 2]) * k;
                             break;
                         }
                         case PartKind.Icon3D:
                         {
-                            float k = 0.9f * clear;
+                            float k = 0.9f * clear * strength;
                             color[ci] += cr * vr * k; color[ci + 1] += cg * vg * k; color[ci + 2] += cb * vb * k;
                             break;
                         }
                         case PartKind.Model:
                         {
                             // the material: texture x vertex colour x colour x 1.3, blended at 0.75
-                            float k = 0.75f * ta * clear;
-                            color[ci] += (Math.Min(1, tr * vr * cr * 1.3f) - color[ci]) * k;
-                            color[ci + 1] += (Math.Min(1, tg * vg * cg * 1.3f) - color[ci + 1]) * k;
-                            color[ci + 2] += (Math.Min(1, tb * vb * cb * 1.3f) - color[ci + 2]) * k;
+                            float k = Math.Min(1, 0.75f * ta * clear * strength), up = 1.3f * Math.Max(1, strength);
+                            color[ci] += (Math.Min(up, tr * vr * cr * up) - color[ci]) * k;
+                            color[ci + 1] += (Math.Min(up, tg * vg * cg * up) - color[ci + 1]) * k;
+                            color[ci + 2] += (Math.Min(up, tb * vb * cb * up) - color[ci + 2]) * k;
                             break;
                         }
                     }
@@ -2044,7 +2105,7 @@ sealed class ModelView : UserControl
         }
         // an arrow or an icon sits close above the item: always in the picture. Only a tall beam would shrink the item
         // to a dot - that one is in view on request
-        frameAll = !(st.Beam && !st.BeamArrow);
+        frameAll = !st.Beam;
         BeamCheck();
         MakeGuide();
         Animate();
@@ -2055,7 +2116,7 @@ sealed class ModelView : UserControl
     /// <summary>"Fit the whole beam" only in the big view (the small one is too small for it) and only with a tall beam.</summary>
     void BeamCheck()
     {
-        whole.Enabled = isBig && scene != null && shown.Beam && !shown.BeamArrow;
+        whole.Enabled = isBig && scene != null && shown.Beam;
         camView = whole.Enabled && whole.Checked ? CamView.Whole : CamView.Item;
     }
 
@@ -2611,7 +2672,7 @@ sealed class ModelView : UserControl
         if (scene == null) return "";
         var (a, b) = (scene.Min, scene.Max);
         string t = Tf("Item {0} × {1}, {2} high", Len(b.X - a.X), Len(b.Y - a.Y), Len(b.Z - a.Z)) + (float.IsNaN(scene.Ground) ? "" : Tr(" above the ground (the rest is buried)"));
-        if (shown.Beam && !shown.BeamArrow) t += Tf(" · beam {0}", Len(shown.BeamLength));
+        if (shown.Beam) t += Tf(" · beam {0}", Len(shown.BeamLength));
         if (addPerson.Checked && guide != null) t += Tr(" · person 1.8 m");
         if (addHouse.Checked && guide != null) t += Tr(" · house 8.4 m");
         if (guide != null) t += Tf(" · grid {0} squares", Len(guide.Step));
@@ -2748,6 +2809,31 @@ sealed class ModelView : UserControl
         }
         y += h;
         barBottom = y;
+        // the scene as icons down the right edge, always in view (user, 2026-11-15: in View options nobody saw the wall
+        // was on; a text row scattered the buttons); lit = in the picture, the tooltip names it
+        {
+            var icons = new List<(SceneIcon Icon, bool Lit, string Tip, Action Click)>
+            {
+                (SceneIcon.Person, addPerson.Checked, Tr("Person") + " - " + Tr("A person and a floor grid, for size (1.8 m)"), () => addPerson.Checked = !addPerson.Checked),
+                (SceneIcon.House, addHouse.Checked, Tr("House") + " - " + Tr("Put the item inside a house, on its floor - how it glows inside a building"), () => addHouse.Checked = !addHouse.Checked),
+                (SceneIcon.Wall, addWall.Checked, Tr("Wall behind") + " - " + Tr("One wall behind the item - turn the view round to see your look through it (X-ray)"), () => addWall.Checked = !addWall.Checked),
+                (SceneIcon.Shed, addShed.Checked, Tr("Shed") + " - " + Tr("Walls all around it, with a door, windows and a roof - to test X-ray"), () => addShed.Checked = !addShed.Checked),
+                (SceneIcon.Junk, addJunk.Checked, Tr("Junk") + " - " + Tr("Rubble, grass and a few game items scattered around it"), () => addJunk.Checked = !addJunk.Checked),
+                (SceneIcon.Compare, compares.Count > 0, Tr("Compare...") + " - " + Tr("Stand other selected items beside it, each in its own look"), () => BeginInvoke(PickOthers)),
+            };
+            int s = h + 12, iy = y + gap + 4, ix = canvas.Width - 6 - s;
+            foreach (var (icon, lit, tip, click) in icons)
+            {
+                var r = new Rectangle(ix, iy, s, s);
+                bool hover = r == barHover;
+                using (var band = new SolidBrush(Color.FromArgb(hover ? 235 : 200, hover ? 44 : 20, hover ? 48 : 22, hover ? 56 : 26))) g.FillRectangle(band, r);
+                var c = lit ? Color.FromArgb(240, 200, 120) : Color.Gainsboro;
+                using (var edge = new Pen(lit ? c : Color.FromArgb(70, 255, 255, 255), lit ? 2 : 1)) g.DrawRectangle(edge, r);
+                DrawSceneIcon(g, icon, Rectangle.Inflate(r, -7, -7), c);
+                barHits.Add((r, tip, _ => click()));
+                iy += s + gap;
+            }
+        }
         if (!optionsOpen) return;
 
         // the options box: a group name on the left, its buttons wrapping on the right
@@ -2761,15 +2847,6 @@ sealed class ModelView : UserControl
                 ("100 m", false, Tr("Stand 100 m from the item, eyes at 1.6 m, facing it"), _ => StandBack(7000)),
                 (Tr("Spin"), spinOn.Checked, Tr("Turn slowly around the item"), _ => spinOn.Checked = !spinOn.Checked),
             }),
-            (Tr("Scene"), new()
-            {
-                (Tr("Person"), addPerson.Checked, Tr("A person and a floor grid, for size (1.8 m)"), _ => addPerson.Checked = !addPerson.Checked),
-                (Tr("House"), addHouse.Checked, Tr("Put the item inside a house, on its floor - how it glows inside a building"), _ => addHouse.Checked = !addHouse.Checked),
-                (Tr("Wall behind"), addWall.Checked, Tr("One wall behind the item - turn the view round to see your look through it (X-ray)"), _ => addWall.Checked = !addWall.Checked),
-                (Tr("Shed"), addShed.Checked, Tr("Walls all around it, with a door, windows and a roof - to test X-ray"), _ => addShed.Checked = !addShed.Checked),
-                (Tr("Junk"), addJunk.Checked, Tr("Rubble, grass and a few game items scattered around it"), _ => addJunk.Checked = !addJunk.Checked),
-                (Tr("Compare..."), compares.Count > 0, Tr("Stand other selected items beside it, each in its own look"), _ => BeginInvoke(PickOthers)),
-            }),
             (Tr("Light"), SkyNames.Select((n, i) => (n, (int)extras.Sky == i, i == 0 ? Tr("Even studio light") : Tr("The sky ") + n.ToLowerInvariant() + Tr(": sky colour, light level and haze"),
                                                   (Action<Rectangle>)(_ => { extras.Sky = (Sky)i; Redraw(); UpdateBar(); }))).ToList()),
             (Tr("Colours"), VisionShort.Select((n, i) => (n, (int)extras.Vision == i, i == 0 ? Tr("Normal colour vision") : Tr("See it as someone with ") + VisionNames[i] + Tr(" does - does your colour still stand out?"),
@@ -2778,9 +2855,11 @@ sealed class ModelView : UserControl
         if (whole.Enabled) groups[0].Items.Add((Tr("Whole beam"), whole.Checked, Tr("Move back so the whole tall beam fits in the picture"), _ => whole.Checked = !whole.Checked));
         if (compares.Count > 0)
         {
-            groups[1].Items.Add((Tr("Hide labels"), hideLabels.Checked, Tr("Hide the compared items' name labels"), _ => hideLabels.Checked = !hideLabels.Checked));
+            var cmp = new List<(string Text, bool Lit, string Tip, Action<Rectangle> Click)>
+                { (Tr("Hide labels"), hideLabels.Checked, Tr("Hide the compared items' name labels"), _ => hideLabels.Checked = !hideLabels.Checked) };
             foreach (var c in compares.ToList())
-                groups[1].Items.Add(("✕ " + c.Item.Entry.Shown, false, Tr("Remove it from the picture"), _ => { compares.Remove(c); MakeGuide(); Redraw(); }));
+                cmp.Add(("✕ " + c.Item.Entry.Shown, false, Tr("Remove it from the picture"), _ => { compares.Remove(c); MakeGuide(); Redraw(); }));
+            groups.Insert(1, (Tr("Compare..."), cmp));
         }
         using var bold = new Font(Font, FontStyle.Bold);
         int nameW = groups.Max(gr => TextRenderer.MeasureText(g, gr.Name, bold).Width) + 12;
@@ -2788,7 +2867,9 @@ sealed class ModelView : UserControl
         // lay it out first (for the box's height), then draw
         var spots = new List<(Rectangle R, string Text, bool Lit, string Tip, Action<Rectangle> Click)>();
         var names = new List<(string Name, int Y)>();
-        int bx = canvas.Width - 6 - boxW, by = y + gap, cy = by + pad;
+        boxW = Math.Min(boxW, canvas.Width - 12 - (h + 12 + gap)); // left of the scene icons
+        inner = boxW - 2 * pad - nameW;
+        int bx = canvas.Width - 6 - (h + 12 + gap) - boxW, by = y + gap, cy = by + pad;
         foreach (var (name, items) in groups)
         {
             names.Add((name, cy));
@@ -2810,6 +2891,63 @@ sealed class ModelView : UserControl
             TextRenderer.DrawText(g, name, bold, new Rectangle(bx + pad, ny, nameW, h), Color.FromArgb(240, 200, 120), TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
         foreach (var s in spots) Chip(s.R, s.Text, s.Lit, s.Tip, s.Click);
         barBottom = box.Bottom;
+    }
+
+    enum SceneIcon { Person, House, Wall, Shed, Junk, Compare }
+
+    /// <summary>A scene button's picture, drawn with lines in <paramref name="r"/> (no font glyphs: they differ per PC).</summary>
+    static void DrawSceneIcon(Graphics g, SceneIcon icon, Rectangle r, Color c)
+    {
+        var old = g.SmoothingMode;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        using var p = new Pen(c, 1.7f) { LineJoin = System.Drawing.Drawing2D.LineJoin.Round, StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
+        using var b = new SolidBrush(c);
+        float x = r.X, y = r.Y, w = r.Width, h = r.Height;
+        PointF P(float fx, float fy) => new(x + fx * w, y + fy * h);
+        switch (icon)
+        {
+            case SceneIcon.Person:
+                g.FillEllipse(b, x + w * 0.38f, y, w * 0.24f, h * 0.24f);
+                g.DrawLine(p, P(0.5f, 0.3f), P(0.5f, 0.65f));
+                g.DrawLine(p, P(0.25f, 0.42f), P(0.75f, 0.42f));
+                g.DrawLine(p, P(0.5f, 0.65f), P(0.32f, 1f));
+                g.DrawLine(p, P(0.5f, 0.65f), P(0.68f, 1f));
+                break;
+            case SceneIcon.House:
+                g.DrawLines(p, new[] { P(0.05f, 0.5f), P(0.5f, 0.08f), P(0.95f, 0.5f) });
+                g.DrawLines(p, new[] { P(0.18f, 0.4f), P(0.18f, 1f), P(0.82f, 1f), P(0.82f, 0.4f) });
+                g.DrawRectangle(p, x + w * 0.42f, y + h * 0.68f, w * 0.16f, h * 0.32f);
+                break;
+            case SceneIcon.Wall:
+                g.DrawRectangle(p, x, y + h * 0.1f, w, h * 0.8f);
+                for (int i = 1; i < 4; i++) g.DrawLine(p, P(0, 0.1f + i * 0.2f), P(1, 0.1f + i * 0.2f));
+                for (int i = 0; i < 4; i++)
+                {
+                    float o = i % 2 == 0 ? 0.33f : 0.16f;
+                    for (float fx = o; fx < 1; fx += 0.34f) g.DrawLine(p, P(fx, 0.1f + i * 0.2f), P(fx, 0.3f + i * 0.2f));
+                }
+                break;
+            case SceneIcon.Shed:
+                g.DrawRectangle(p, x, y + h * 0.2f, w, h * 0.8f);
+                g.DrawLine(p, P(-0.05f, 0.2f), P(1.05f, 0.2f));
+                g.DrawRectangle(p, x + w * 0.12f, y + h * 0.5f, w * 0.3f, h * 0.5f);
+                g.DrawRectangle(p, x + w * 0.58f, y + h * 0.4f, w * 0.26f, h * 0.22f);
+                break;
+            case SceneIcon.Junk:
+                g.DrawPolygon(p, new[] { P(0.05f, 1f), P(0.25f, 0.6f), P(0.45f, 1f) });
+                g.DrawEllipse(p, x + w * 0.55f, y + h * 0.66f, w * 0.32f, h * 0.32f);
+                g.DrawRectangle(p, x + w * 0.3f, y + h * 0.2f, w * 0.3f, h * 0.24f);
+                g.DrawLine(p, P(0.8f, 0.1f), P(0.8f, 0.45f));
+                g.DrawLine(p, P(0.7f, 0.25f), P(0.8f, 0.45f));
+                g.DrawLine(p, P(0.92f, 0.22f), P(0.8f, 0.45f));
+                break;
+            case SceneIcon.Compare:
+                g.DrawRectangle(p, x, y + h * 0.45f, w * 0.26f, h * 0.55f);
+                g.DrawRectangle(p, x + w * 0.37f, y, w * 0.26f, h);
+                g.DrawRectangle(p, x + w * 0.74f, y + h * 0.25f, w * 0.26f, h * 0.75f);
+                break;
+        }
+        g.SmoothingMode = old;
     }
 
     /// <summary>The controls box (a legend): keys in bold on the left, what they do on the right; folded, just its title.</summary>

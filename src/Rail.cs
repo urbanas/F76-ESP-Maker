@@ -455,7 +455,7 @@ sealed class PresetTiles : Control
     /// <summary>The same little scene for any look (the item list's Look column).</summary>
     public static void DrawStyle(Graphics g, Style st, Rectangle r) =>
         DrawScene(g, r, Materials.Parse(st.Glow ? st.GlowColor : st.BeamColor), fill: st.Glow && st.GlowFill, outline: st.Glow && !st.GlowFill,
-                  beam: st.Beam && !st.BeamArrow, arrow: st.Beam && st.BeamArrow, own: st.Brighten,
+                  beam: st.Beam, arrow: st.Arrow, own: st.Brighten,
                   tall: st.Beam && st.BeamLength >= 2000, strong: st.GlowFill && st.GlowOpacity >= 70);
 
     static void DrawScene(Graphics g, Rectangle r, Color c, bool fill, bool outline, bool beam, bool arrow, bool own, bool tall, bool strong)
@@ -727,13 +727,22 @@ sealed class Chip : Control
         set { if (on == value) return; on = value; Invalidate(); CheckedChanged?.Invoke(this, EventArgs.Empty); }
     }
 
+    bool locked;
+    /// <summary>Greyed and not clickable, but still shows its tooltip (a disabled control shows none) - for "can't be
+    /// used here, and why".</summary>
+    public bool Locked
+    {
+        get => locked;
+        set { if (locked == value) return; locked = value; Cursor = value ? Cursors.Default : Cursors.Hand; TabStop = !value; Invalidate(); }
+    }
+
     void Fit() => Size = new Size(TextRenderer.MeasureText(Text, Font).Width + 22, Font.Height + 10);
     protected override void OnFontChanged(EventArgs e) { Fit(); base.OnFontChanged(e); }
     protected override void OnTextChanged(EventArgs e) { Fit(); base.OnTextChanged(e); }
     protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
     protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
-    protected override void OnMouseClick(MouseEventArgs e) { Focus(); Checked = !on; base.OnMouseClick(e); }
-    protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Space) Checked = !on; base.OnKeyDown(e); }
+    protected override void OnMouseClick(MouseEventArgs e) { if (!locked) { Focus(); Checked = !on; } base.OnMouseClick(e); }
+    protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Space && !locked) Checked = !on; base.OnKeyDown(e); }
     protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
     protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
 
@@ -747,6 +756,13 @@ sealed class Chip : Control
         pill.AddArc(0.5f, 0.5f, h, h, 90, 180);
         pill.AddArc(w - h + 0.5f, 0.5f, h, h, 270, 180);
         pill.CloseFigure();
+        if (locked)
+        {
+            using (var b = new SolidBrush(Ui.Window)) g.FillPath(b, pill);
+            using (var p = new Pen(Ui.Line) { DashStyle = DashStyle.Dot }) g.DrawPath(p, pill);
+            TextRenderer.DrawText(g, Text, Font, ClientRectangle, Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            return;
+        }
         using (var b = new SolidBrush(on ? Ui.LitBack : hover ? Ui.Hover : Ui.Window)) g.FillPath(b, pill);
         using (var p = new Pen(on || Focused ? Ui.Accent : Ui.Line, on ? 1.5f : 1f)) g.DrawPath(p, pill);
         TextRenderer.DrawText(g, Text, Font, ClientRectangle, on ? Ui.LitText : Ui.Fg,

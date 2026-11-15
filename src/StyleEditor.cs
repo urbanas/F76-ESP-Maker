@@ -3,55 +3,74 @@ using System.Drawing.Drawing2D;
 
 namespace ItemFinder;
 
-/// <summary>Edits one <see cref="Style"/>: glow and beam on/off, colours, opacity, beam length and
-/// thickness, see-through walls; with a small picture of the result.</summary>
+/// <summary>Edits one <see cref="Style"/> (the look pop-up): presets on top, then The item | the layers above it (a stack in
+/// any order: beam, arrow, icon, item copy, text - user 2026-11-15) | the picked layer's settings. Stacked when narrow.</summary>
 public sealed class StyleEditor : UserControl
 {
     public const float UnitsPerMetre = 70f;
     /// <summary>Game units per centimetre (1 unit ≈ 1.43 cm).</summary>
     const float UnitsPerCm = 0.7f;
 
-    readonly CheckBox glow = new() { Text = Tr("Glow (item shines)"), AutoSize = true };
-    readonly Button glowColor = new() { Width = 70, Height = 26, FlatStyle = FlatStyle.Flat };
+    // value holders: the step buttons write them, Commit reads them into the look
     readonly NumericUpDown opacity = new() { Minimum = 5, Maximum = 100, Increment = 5, Width = 55 };
-    readonly CheckBox beam = new() { Text = Tr("Marker above the item"), AutoSize = true };
-    readonly ComboBox marker = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190, Items = { Tr("Beam of light into the sky"), Tr("Arrow pointing down") } };
-    readonly Button beamColor = new() { Width = 70, Height = 26, FlatStyle = FlatStyle.Flat };
     readonly NumericUpDown length = new() { Minimum = 1, Maximum = 150, Width = 55 };
     readonly NumericUpDown width = new() { Minimum = 2, Maximum = 300, Increment = 2, Width = 55 };
     readonly NumericUpDown beamStrength = new() { Minimum = 1, Maximum = 300, Increment = 5, Width = 55 };
+    readonly NumericUpDown arrowWidth = new() { Minimum = 2, Maximum = 300, Increment = 2, Width = 55 };
     // grows with the text (larger Windows text scaling) instead of cutting the picture off
     readonly Button iconButton = new() { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(130, 26), Padding = new Padding(2), Margin = new Padding(3, 3, 3, 3), FlatStyle = FlatStyle.Flat, TextImageRelation = TextImageRelation.ImageBeforeText, ImageAlign = ContentAlignment.MiddleLeft, TextAlign = ContentAlignment.MiddleLeft };
-    readonly NumericUpDown iconSize = new() { Minimum = 20, Maximum = 600, Increment = 10, Width = 55 };
+    readonly NumericUpDown iconStrength = new() { Minimum = 10, Maximum = 300, Increment = 10, Width = 55 };
+    readonly NumericUpDown labelStrength = new() { Minimum = 10, Maximum = 300, Increment = 10, Width = 55 };
+    readonly NumericUpDown copyStrength = new() { Minimum = 10, Maximum = 300, Increment = 10, Width = 55 };
+    readonly NumericUpDown iconSize = new() { Minimum = 10, Maximum = 500, Increment = 10, Width = 55 }; // % of the item's size
+    readonly NumericUpDown copySize = new() { Minimum = 10, Maximum = 500, Increment = 10, Width = 55 }; // % of the item's size
     readonly NumericUpDown labelSize = new() { Minimum = 10, Maximum = 500, Increment = 10, Width = 55 };
     readonly TextBox labelText = new() { Width = 170, PlaceholderText = Tr("the item's name") };
     readonly CheckBox labelCat = new() { Text = Tr("Start with the category"), AutoSize = true };
-    readonly CheckBox walls = new() { Text = Tr("Visible through walls"), AutoSize = true };
-    readonly CheckBox brighten = new() { Text = Tr("Brighten its own colours"), AutoSize = true };
     readonly NumericUpDown brightStrength = new() { Minimum = 25, Maximum = 300, Increment = 25, Width = 55 };
-    readonly CheckBox fill = new() { Text = Tr("Fill the whole item"), AutoSize = true };
-    readonly CheckBox sameColor = new() { Text = Tr("Same colour as the glow"), AutoSize = true };
-    readonly Panel preview = new() { Width = 110, BackColor = Color.FromArgb(24, 28, 34) };
+    readonly NumericUpDown xrayStrength = new() { Minimum = 25, Maximum = 300, Increment = 25, Width = 55 }; // Off + X-ray
+    readonly List<Control> xrayRows = new();
+    /// <summary>The beam has the glow's colour (state only, not shown).</summary>
+    readonly CheckBox sameColor = new();
     readonly SwatchRow swatches = new() { Margin = new Padding(0, 0, 0, 2) };
     bool compact;
 
-    // Compact (the look pop-up): presets on top, then three sections side by side - The item | Beam / arrow | Icon / text
-    // (stacked when narrow, e.g. the part look dialog). They drive the grid's controls (the grid itself stays hidden).
-    readonly Panel board = new() { Dock = DockStyle.Fill, Visible = false };
-    readonly List<Section> sections = new();
+    readonly Panel board = new() { Dock = DockStyle.Fill };
     readonly List<Tile> presetTiles = new();
     readonly List<FlowLayoutPanel> fxFlows = new();
     /// <summary>Joined buttons for a number box's usual values: Soft 15 / Medium 30 / Strong 60 ...</summary>
     readonly List<(Seg Seg, NumericUpDown Box, string[] Names, int[] Values)> steps = new();
-    readonly Seg itemSeg = new(Tr("Outline"), Tr("Fill"), Tr("Bright"), Tr("Off")), beamSeg = new(Tr("Beam"), Tr("Arrow"), Tr("Off")), topSeg = new(Tr("Icon"), Tr("Text"), Tr("Off"));
+    readonly Seg itemSeg = new(Tr("Outline"), Tr("Fill"), Tr("Bright"), Tr("Off"));
     readonly SwatchRow markerSwatches = new() { Margin = new Padding(0, 0, 0, 2), Small = true };
     readonly Label markerSame = new() { AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(3, 6, 0, 0) };
     readonly LinkLabel markerOwn = new() { AutoSize = true, Margin = new Padding(0, 6, 3, 0) };
-    Control[] heightRow = Array.Empty<Control>(), ownColourRow = Array.Empty<Control>();
-    readonly List<Control> glowRows = new(), shineRows = new(), beamRows = new(), iconRows = new(), textRows = new();
-    /// <summary>The icon before Text / Off was picked: Icon brings it back.</summary>
+    Control[] ownColourRow = Array.Empty<Control>();
+    readonly List<Control> glowRows = new(), shineRows = new();
+    /// <summary>The icon before the icon layer was removed: adding it again brings it back.</summary>
     string lastIcon = "";
     int arrangedWidth;
+
+    // the layers above the item: the list (top = highest) and the picked layer
+    readonly FlowLayoutPanel layerList = new() { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
+    readonly DashedButton addButton = new(Tr("+ Add on top")) { Margin = new Padding(0, 2, 0, 6) };
+    readonly ContextMenuStrip addMenu = new();
+    readonly Label startLabel = new() { AutoSize = true, Text = Tr("Start from"), ForeColor = Color.DimGray };
+    readonly Label skyLabel = new() { AutoSize = false, Text = Tr("▲ higher up"), ForeColor = Color.DimGray, TextAlign = ContentAlignment.MiddleCenter, Margin = new Padding(0, 0, 0, 2) };
+    readonly Label stackHint = new() { AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(0, 6, 0, 0),
+                                       Text = Tr("The item is always the bottom row - it can't move, but it can be Off or Invisible.\nDrag a row (or Alt+Up / Alt+Down) to move it, Delete removes it.") };
+    string? listed;
+    /// <summary>The picked row: a layer kind, or "" = the item.</summary>
+    string picked = "";
+    readonly Dictionary<string, Section> layerSections = new();
+    Section itemSection = null!, layersSection = null!;
+
+    /// <summary>The settings' width in the pop-up: the layer list and the picked row's settings side by side.</summary>
+    public static int WantedWidth(Font f) => f.Height * 25; // one column: list on top, the picked row's settings under it (user: more room for the 3D view)
+
+    static string KindName(string kind) => kind switch
+    {
+        "beam" => Tr("Beam"), "arrow" => Tr("Arrow"), "icon" => Tr("Icon"), "copy" => Tr("Item copy"), "text" => Tr("Text"), _ => Tr("The item"),
+    };
 
     /// <summary>One section of the look: a bold title (its hint as a tooltip) and its settings under it, framed.</summary>
     sealed class Section : Panel
@@ -75,6 +94,8 @@ public sealed class StyleEditor : UserControl
         protected override void OnFontChanged(EventArgs e) { title.Font = new Font(Font.FontFamily, Font.Size + 1.5f, FontStyle.Bold); base.OnFontChanged(e); }
         protected override void OnPaint(PaintEventArgs e) { using var p = new Pen(Ui.Line); e.Graphics.DrawRectangle(p, 0, 0, Width - 1, Height - 1); }
 
+        public string Title { set => title.Text = value; }
+
         /// <summary>The height its content needs at this width.</summary>
         public int Wanted(int width) => title.Height + Body.GetPreferredSize(new Size(width - 2, 0)).Height + 2;
     }
@@ -93,7 +114,7 @@ public sealed class StyleEditor : UserControl
             Index = index;
             Text = text;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-            Cursor = index < 3 ? Cursors.Hand : Cursors.Default;
+            Cursor = Cursors.Hand;
         }
 
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -105,42 +126,277 @@ public sealed class StyleEditor : UserControl
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(Parent?.BackColor ?? Ui.Panel);
+            // a pill ("Start from" chips, as in the look-stack mock-up)
             var r = new Rectangle(1, 1, Width - 3, Height - 3);
-            using (var bg = new SolidBrush(selected ? Ui.AccentSoft : hover && Clickable ? Ui.Hover : Ui.Window)) g.FillRectangle(bg, r);
-            using (var pen = new Pen(selected ? Ui.Accent : Ui.Line, selected ? 2f : 1f)) g.DrawRectangle(pen, r);
-            int textH = Font.Height + 8;
-            Picture(g, new Rectangle(r.Left, r.Top + 6, r.Width, r.Height - textH - 6));
-            TextRenderer.DrawText(g, Text, Font, new Rectangle(r.Left + 2, r.Bottom - textH, r.Width - 4, textH), selected ? Ui.Accent : Clickable ? Ui.Fg : Ui.Muted,
+            using var path = new GraphicsPath();
+            int d = r.Height;
+            path.AddArc(r.Left, r.Top, d, d, 90, 180);
+            path.AddArc(r.Right - d, r.Top, d, d, 270, 180);
+            path.CloseFigure();
+            using (var bg = new SolidBrush(selected ? Ui.AccentSoft : hover ? Ui.Hover : Ui.Window)) g.FillPath(bg, path);
+            using (var pen = new Pen(selected ? Ui.Accent : Ui.Line, 1f)) g.DrawPath(pen, path);
+            TextRenderer.DrawText(g, Text, Font, r, selected ? Ui.Accent : Ui.Fg,
                                   TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
         }
 
-        /// <summary>The item as a glowing box; a beam over it (Glow + beam); a name bar on top (+ name); Custom: a star.</summary>
-        void Picture(Graphics g, Rectangle p)
+        public int WantedWidth => TextRenderer.MeasureText(Text, Font).Width + Font.Height * 2;
+
+    }
+
+    /// <summary>"+ Add on top": a dashed full-width button over the layer list.</summary>
+    sealed class DashedButton : Control
+    {
+        bool hover;
+        public DashedButton(string text)
         {
-            var c = Ui.Accent;
-            float cx = p.Left + p.Width / 2f, s = Math.Min(p.Height, 44);
-            if (Index == 3)
-            {
-                float cy = p.Top + p.Height / 2f;
-                var pts = Enumerable.Range(0, 10).Select(i =>
-                {
-                    double a = -Math.PI / 2 + i * Math.PI / 5;
-                    float rr = i % 2 == 0 ? s * 0.42f : s * 0.18f;
-                    return new PointF(cx + (float)(Math.Cos(a) * rr), cy + (float)(Math.Sin(a) * rr));
-                }).ToArray();
-                using var b = new SolidBrush(selected ? c : Ui.Muted);
-                g.FillPolygon(b, pts);
-                return;
-            }
-            var box = new RectangleF(cx - s * 0.32f, p.Bottom - s * 0.4f, s * 0.64f, s * 0.36f);
-            using (var halo = new Pen(Color.FromArgb(80, c), 6)) g.DrawRectangle(halo, box.X, box.Y, box.Width, box.Height);
-            using (var fill = new SolidBrush(Ui.Line)) g.FillRectangle(fill, box);
-            using (var edge = new Pen(c, 2)) g.DrawRectangle(edge, box.X, box.Y, box.Width, box.Height);
-            float top = p.Top + (Index == 2 ? 11 : 0);
-            if (Index >= 1) using (var beam = new SolidBrush(Color.FromArgb(170, c))) g.FillRectangle(beam, cx - 2.5f, top, 5, box.Top - 4 - top);
-            if (Index == 2) using (var bar = new SolidBrush(Ui.Fg)) g.FillRectangle(bar, cx - s * 0.55f, p.Top, s * 1.1f, 6);
+            Text = text;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+            Cursor = Cursors.Hand;
+        }
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode is Keys.Enter or Keys.Space) OnClick(e); base.OnKeyDown(e); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Parent?.BackColor ?? Ui.Window);
+            using var pen = new Pen(hover || Focused ? Ui.Accent : Ui.Muted) { DashStyle = DashStyle.Dash };
+            g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+            TextRenderer.DrawText(g, Text, Font, ClientRectangle, hover || Focused ? Ui.Accent : Ui.Fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
         }
     }
+
+    /// <summary>A row of the "+ Add on top" drop-down: colour dot (two halves for the item copy), the layer's name in bold
+    /// and what it is underneath, lit under the mouse.</summary>
+    sealed class AddRow : Control
+    {
+        readonly string what, kind;
+        bool hover;
+        public AddRow(string name, string what, string kind)
+        {
+            Text = name; this.what = what; this.kind = kind;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+            Cursor = Cursors.Hand;
+        }
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(hover ? Ui.Hover : Ui.Window);
+            if (hover) using (var p = new Pen(Ui.Accent)) g.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
+            int d = Font.Height + 8, x = 10;
+            KindIcon(g, kind, new Rectangle(x, (Height - d) / 2, d, d), hover ? Ui.Accent : Ui.Fg);
+            x += d + 12;
+            using var bold = new Font(Font, FontStyle.Bold);
+            int top = (Height - 2 * Font.Height - 2) / 2;
+            TextRenderer.DrawText(g, Text, bold, new Point(x, top), Ui.Fg, TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(g, what, Font, new Rectangle(x, top + Font.Height + 2, Width - x - 6, Font.Height + 1), Ui.Muted, TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+        }
+    }
+
+    /// <summary>A layer kind's line picture: beam = a tall ray with light around it, arrow = pointing down onto a line,
+    /// icon = a framed picture, text = "Aa", copy = a small shape over a big one.</summary>
+    static void KindIcon(Graphics g, string kind, Rectangle r, Color c)
+    {
+        using var p = new Pen(c, 1.8f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        float x = r.X, y = r.Y, w = r.Width, h = r.Height;
+        PointF P(float fx, float fy) => new(x + fx * w, y + fy * h);
+        switch (kind)
+        {
+            case "beam":
+                g.DrawLine(p, P(0.5f, 0.05f), P(0.5f, 0.95f));
+                using (var thin = new Pen(Color.FromArgb(120, c), 1.2f))
+                {
+                    g.DrawLine(thin, P(0.32f, 0.2f), P(0.32f, 0.95f));
+                    g.DrawLine(thin, P(0.68f, 0.2f), P(0.68f, 0.95f));
+                }
+                g.DrawLine(p, P(0.15f, 0.95f), P(0.85f, 0.95f));
+                break;
+            case "arrow":
+                g.DrawLine(p, P(0.5f, 0.05f), P(0.5f, 0.7f));
+                g.DrawLines(p, new[] { P(0.25f, 0.45f), P(0.5f, 0.72f), P(0.75f, 0.45f) });
+                g.DrawLine(p, P(0.15f, 0.95f), P(0.85f, 0.95f));
+                break;
+            case "icon":
+                g.DrawRectangle(p, x + w * 0.08f, y + h * 0.15f, w * 0.84f, h * 0.7f);
+                g.DrawEllipse(p, x + w * 0.24f, y + h * 0.28f, w * 0.16f, h * 0.16f);
+                g.DrawLines(p, new[] { P(0.08f, 0.8f), P(0.38f, 0.52f), P(0.58f, 0.7f), P(0.72f, 0.58f), P(0.92f, 0.76f) });
+                break;
+            case "text":
+                using (var f = new Font(FontFamily.GenericSansSerif, h * 0.5f, FontStyle.Bold, GraphicsUnit.Pixel))
+                    TextRenderer.DrawText(g, "Aa", f, r, c, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                g.DrawLine(p, P(0.15f, 0.88f), P(0.85f, 0.88f));
+                break;
+            default: // item copy
+                g.DrawRectangle(p, x + w * 0.1f, y + h * 0.45f, w * 0.5f, h * 0.48f);
+                using (var dash = new Pen(c, 1.4f) { DashStyle = DashStyle.Dot })
+                    g.DrawRectangle(dash, x + w * 0.5f, y + h * 0.08f, w * 0.38f, h * 0.36f);
+                break;
+        }
+    }
+
+    /// <summary>The ground under the item's row (hatched strip).</summary>
+    sealed class Ground : Control
+    {
+        public Ground() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); Height = 6; Margin = new Padding(2, 0, 2, 4); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.Clear(Parent?.BackColor ?? Ui.Window);
+            using var b = new HatchBrush(HatchStyle.WideDownwardDiagonal, Ui.Muted, Ui.Line);
+            e.Graphics.FillRectangle(b, ClientRectangle);
+        }
+    }
+
+    /// <summary>One row of the layer list: drag handle, colour dot, name + summary, ▲ ▼ ✕. The item's row at the bottom
+    /// (Kind "") only shows where the stack starts.</summary>
+    sealed class LayerRow : Control
+    {
+        public readonly string Kind;
+        public string Summary = "";
+        public Color Dot;
+        public bool Picked, CanUp, CanDown;
+        public event Action<string>? Clicked, Removed, Up, Down;
+        public event Action<string, string>? Dropped;
+        Point? press;
+        int hoverButton = -1;
+
+        public LayerRow(string kind)
+        {
+            Kind = kind;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+            Margin = new Padding(0, 0, 0, kind.Length > 0 ? 4 : 2);
+            AllowDrop = kind.Length > 0;
+            Cursor = Cursors.Hand;
+        }
+
+        protected override void OnFontChanged(EventArgs e) { Height = Font.Height * 2 + 14; base.OnFontChanged(e); }
+
+        int B => Height - 14; // button size
+        Rectangle Button(int i) => new(Width - 6 - (3 - i) * (B + 2), (Height - B) / 2, B, B);
+        int ButtonAt(Point p) => Kind.Length == 0 ? -1 : Enumerable.Range(0, 3).FirstOrDefault(i => Button(i).Contains(p), -1);
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Parent?.BackColor ?? Ui.Window);
+            var r = new Rectangle(0, 0, Width - 1, Height - 1);
+            bool item = Kind.Length == 0;
+            using (var bg = new SolidBrush(Picked ? Ui.AccentSoft : item ? Ui.Panel : Ui.Window)) g.FillRectangle(bg, r);
+            using (var pen = new Pen(Picked ? Ui.Accent : Ui.Line, Picked ? 2f : 1f)) g.DrawRectangle(pen, r);
+            int x = 6;
+            TextRenderer.DrawText(g, item ? "⊥" : "⠿", Font, new Rectangle(x, 0, 14, Height), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix);
+            x += 18;
+            int d = Font.Height - 2;
+            var dot = new Rectangle(x, (Height - d) / 2, d, d);
+            if (Kind == "copy")
+            {
+                using var a = new SolidBrush(Color.FromArgb(160, 120, 80)); using var b = new SolidBrush(Color.FromArgb(90, 122, 60));
+                g.FillPie(a, dot, 90, 180); g.FillPie(b, dot, 270, 180);
+            }
+            else using (var b = new SolidBrush(Dot)) g.FillEllipse(b, dot);
+            x += d + 8;
+            int textW = (item ? Width - 6 : Button(0).Left - 4) - x;
+            using var bold = new Font(Font, FontStyle.Bold);
+            TextRenderer.DrawText(g, KindName(Kind), bold, new Rectangle(x, 6, textW, Font.Height + 1), Ui.Fg, TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+            TextRenderer.DrawText(g, Summary, Font, new Rectangle(x, 6 + Font.Height + 1, textW, Font.Height + 1), Ui.Muted, TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+            if (item) return;
+            string[] marks = { "▲", "▼", "✕" };
+            bool[] on = { CanUp, CanDown, true };
+            for (int i = 0; i < 3; i++)
+            {
+                var br = Button(i);
+                if (hoverButton == i && on[i]) using (var hb = new SolidBrush(Ui.Hover)) g.FillRectangle(hb, br);
+                TextRenderer.DrawText(g, marks[i], Font, br, on[i] ? Ui.Fg : Ui.Line, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix);
+            }
+            if (Focused) ControlPaint.DrawFocusRectangle(g, new Rectangle(3, 3, Width - 7, Height - 7));
+            if (dragging == this) using (var veil = new SolidBrush(Color.FromArgb(150, Parent?.BackColor ?? Ui.Window))) g.FillRectangle(veil, r);
+            if (dropEdge != 0)
+            {
+                // a thick bar with an arrow head at the left, on the edge where the layer will land
+                int y = dropEdge < 0 ? 0 : Height - 4;
+                using var bar = new SolidBrush(Ui.Accent);
+                g.FillRectangle(bar, 0, y, Width, 4);
+                int cy = y + 2;
+                g.FillPolygon(bar, new[] { new Point(0, cy - 6), new Point(8, cy), new Point(0, cy + 6) });
+            }
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left && ButtonAt(e.Location) < 0) press = e.Location; base.OnMouseDown(e); }
+        protected override void OnMouseUp(MouseEventArgs e) { press = null; base.OnMouseUp(e); }
+        protected override void OnMouseLeave(EventArgs e) { hoverButton = -1; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            int hb = ButtonAt(e.Location);
+            if (hb != hoverButton) { hoverButton = hb; Invalidate(); }
+            if (press is Point p && Kind.Length > 0 && (Math.Abs(e.X - p.X) > 4 || Math.Abs(e.Y - p.Y) > 4))
+            {
+                press = null;
+                dragging = this;
+                Invalidate();
+                try { DoDragDrop(Kind, DragDropEffects.Move); }
+                finally { dragging = null; if (!IsDisposed) Invalidate(); }
+            }
+            base.OnMouseMove(e);
+        }
+        protected override void OnMouseClick(MouseEventArgs e)
+        {
+            Focus();
+            switch (ButtonAt(e.Location))
+            {
+                case 0: if (CanUp) Up?.Invoke(Kind); break;
+                case 1: if (CanDown) Down?.Invoke(Kind); break;
+                case 2: Removed?.Invoke(Kind); break;
+                default: Clicked?.Invoke(Kind); break;
+            }
+            base.OnMouseClick(e);
+        }
+        protected override void OnDragOver(DragEventArgs e)
+        {
+            bool ok = e.Data?.GetData(typeof(string)) is string k && k != Kind;
+            e.Effect = ok ? DragDropEffects.Move : DragDropEffects.None;
+            // the dragged layer takes this row's place: above it when it comes from below, else below it (user, 2026-11-15:
+            // no sign where it would land)
+            int edge = ok && dragging != null ? (dragging.Top > Top ? -1 : 1) : 0;
+            if (edge != dropEdge) { dropEdge = edge; Invalidate(); }
+            base.OnDragOver(e);
+        }
+        protected override void OnDragLeave(EventArgs e) { if (dropEdge != 0) { dropEdge = 0; Invalidate(); } base.OnDragLeave(e); }
+        protected override void OnDragDrop(DragEventArgs e) { dropEdge = 0; Invalidate(); if (e.Data?.GetData(typeof(string)) is string k && k != Kind) Dropped?.Invoke(k, Kind); base.OnDragDrop(e); }
+        /// <summary>The row being dragged (dimmed), and where a drop on this row would put it: -1 above, 1 below.</summary>
+        static LayerRow? dragging;
+        int dropEdge;
+        protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+        protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+        protected override bool IsInputKey(Keys k) => k is (Keys.Alt | Keys.Up) or (Keys.Alt | Keys.Down) or Keys.Delete || base.IsInputKey(k);
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (e.KeyCode is Keys.Enter or Keys.Space) { Clicked?.Invoke(Kind); e.Handled = true; }
+            else if (Kind.Length > 0)
+            {
+                if (e.Alt && e.KeyCode == Keys.Up && CanUp) { Up?.Invoke(Kind); e.Handled = true; }
+                else if (e.Alt && e.KeyCode == Keys.Down && CanDown) { Down?.Invoke(Kind); e.Handled = true; }
+                else if (e.KeyCode == Keys.Delete) { Removed?.Invoke(Kind); e.Handled = true; }
+            }
+            base.OnKeyDown(e);
+        }
+    }
+
+    /// <summary>A layer's colour: the item's (glow) colour, or its own ("" = the item's).</summary>
+    sealed class OwnColour
+    {
+        public readonly Label Same = new() { AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(3, 6, 0, 0) };
+        public readonly LinkLabel Own = new() { AutoSize = true, Margin = new Padding(0, 6, 3, 0) };
+        public readonly SwatchRow Swatches = new() { Margin = new Padding(0, 0, 0, 2), Small = true };
+        public Control[] SwatchRowCtl = Array.Empty<Control>();
+        public readonly Func<Style, string?> Get;
+        public readonly Action<Style, string> Set;
+        public readonly Func<Style, string> Resolved;
+        public OwnColour(Func<Style, string?> get, Action<Style, string> set, Func<Style, string> resolved) { Get = get; Set = set; Resolved = resolved; }
+    }
+    readonly List<OwnColour> ownColours = new();
 
     /// <summary>A section's extras: through walls, motion, hide timer - bound to one <see cref="PartFx"/> of the look.</summary>
     sealed class FxRows
@@ -155,12 +411,13 @@ public sealed class StyleEditor : UserControl
         public readonly NumericUpDown Hide = new() { Minimum = 0, Maximum = 600, Increment = 5, Width = 50 };
         /// <summary>Every row (shown while its part is on).</summary>
         public readonly List<Control> Rows = new();
+        /// <summary>The Hide after row's buttons + seconds box (disabled on creatures).</summary>
+        public FlowLayoutPanel? HideFlow;
         public Chip[] Boxes => new[] { Walls, Pulse, Rainbow, Spin, Bob, Flow };
         public FxRows(Func<Style, PartFx> of) => Of = of;
     }
     readonly List<FxRows> fxRows = new();
-    Section itemSection = null!, beamSection = null!, topSection = null!;
-    FxRows glowFx = null!, beamFx = null!, topFx = null!;
+    FxRows glowFx = null!, beamFx = null!, arrowFx = null!, iconFx = null!, copyFx = null!, labelFx = null!;
     readonly CheckBox invisibleBox = new() { Text = Tr("Invisible - only what you add shows"), AutoSize = true };
 
     void BuildCards()
@@ -195,7 +452,7 @@ public sealed class StyleEditor : UserControl
             return new[] { x };
         }
         void Edited() { RefreshCards(); Changed?.Invoke(this, EventArgs.Empty); }
-        var tips = new ToolTip { AutoPopDelay = 20000 };
+        var tips = fxTips;
         // the extras of a section: ticks (through walls and the motions that fit - RefreshCards shows those), then the hide timer
         FxRows Fx(Section c, Func<Style, PartFx> of)
         {
@@ -217,11 +474,14 @@ public sealed class StyleEditor : UserControl
             var hideRow = Row(c, Tr("Hide after"), Steps(x.Hide, new[] { Tr("Never"), "30 s", Tr("1 min"), Tr("2 min") }, new[] { 0, 30, 60, 120 }), x.Hide, Unit("s"));
             ((FlowLayoutPanel)hideRow[1]).WrapContents = true; // the seconds box goes under the buttons in a narrow column
             fxFlows.Add((FlowLayoutPanel)hideRow[1]);
+            x.HideFlow = (FlowLayoutPanel)hideRow[1];
             x.Rows.AddRange(hideRow);
             foreach (var b in x.Boxes)
                 b.CheckedChanged += (_, _) =>
                 {
                     if (loading) return;
+                    // item look Off: the chip is its own X-ray (Style.OwnXray), GlowFx.Walls stays as it is
+                    if (x == glowFx && !style.Glow && !style.Brighten) { style.OwnXray = x.Walls.Checked; Edited(); return; }
                     var fx = x.Of(style);
                     fx.Walls = x.Walls.Checked; fx.Pulse = x.Pulse.Checked; fx.Rainbow = x.Rainbow.Checked;
                     fx.Spin = x.Spin.Checked; fx.Bob = x.Bob.Checked; fx.Flow = x.Flow.Checked;
@@ -238,18 +498,43 @@ public sealed class StyleEditor : UserControl
             fxRows.Add(x);
             return x;
         }
+        // a layer's own colour: "Same as the item · use a different colour", the dots when it has its own
+        void Colour(Section s, Func<Style, string?> get, Action<Style, string> set, Func<Style, string> resolved)
+        {
+            var oc = new OwnColour(get, set, resolved);
+            Row(s, Tr("Colour"), oc.Same, oc.Own);
+            oc.SwatchRowCtl = Row(s, "", oc.Swatches);
+            oc.Own.LinkClicked += (_, _) =>
+            {
+                set(style, string.IsNullOrEmpty(get(style)) ? resolved(style) : "");
+                UpdateLook();
+                Changed?.Invoke(this, EventArgs.Empty);
+            };
+            oc.Swatches.Picked += c =>
+            {
+                if (c is not Color colour)
+                {
+                    using var dlg = new ColorDialog { FullOpen = true, Color = Materials.Parse(resolved(style)) };
+                    if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                    colour = dlg.Color;
+                }
+                set(style, Materials.Hex(colour));
+                UpdateLook();
+                Changed?.Invoke(this, EventArgs.Empty);
+            };
+            ownColours.Add(oc);
+        }
         string[] strength = { Tr("Soft"), Tr("Medium"), Tr("Strong") };
+        string[] thickness = { Tr("Thin"), Tr("Normal"), Tr("Thick") };
         const string timerNote = "\nA hide timer starts when the game loads the item, so it starts again when you come back to the area.";
 
         // 1 the item: a glow (outline / fill), or its own colours lit (bright); invisible
-        itemSection = new Section(Tr("1   The item"), Tr("Outline / Fill: a coloured light on the item. Bright: its own colours light up, day and night (not through walls).\nInvisible: the item disappears - only what you add shows; still there to pick up. Worn outfits vanish from whoever wears them, you too. Not on enemies.") + timerNote);
+        itemSection = new Section(Tr("The item"), Tr("Outline / Fill: a coloured light on the item. Bright: its own colours light up, day and night (not through walls).\nInvisible: the item disappears - only what you add shows; still there to pick up. Worn outfits vanish from whoever wears them, you too. Not on enemies.") + timerNote);
         Wide(itemSection, itemSeg);
         itemSeg.Picked += i =>
         {
             if (loading) return;
-            loading = true;
-            glow.Checked = i < 2; fill.Checked = i == 1; brighten.Checked = i == 2;
-            loading = false;
+            style.Glow = i < 2; style.GlowFill = i == 1; style.Brighten = i == 2;
             Commit();
         };
         swatches.Small = true;
@@ -258,6 +543,8 @@ public sealed class StyleEditor : UserControl
         shineRows.AddRange(Row(itemSection, Tr("Shine"), Steps(brightStrength, strength, new[] { 50, 100, 200 }), brightStrength, Unit("%")));
         invisibleBox.CheckedChanged += (_, _) => { if (loading) return; style.Invisible = invisibleBox.Checked; UpdateLook(); Changed?.Invoke(this, EventArgs.Empty); };
         glowFx = Fx(itemSection, st => st.GlowFx);
+        xrayRows.AddRange(Row(itemSection, Tr("Strength"), Steps(xrayStrength, strength, new[] { 50, 100, 200 }), xrayStrength, Unit("%")));
+        xrayStrength.ValueChanged += (_, _) => { if (loading) return; style.XrayStrength = (int)xrayStrength.Value; Edited(); };
         Wide(itemSection, invisibleBox); // last in the section (user, 2026-11-09)
         swatches.Picked += c =>
         {
@@ -273,25 +560,55 @@ public sealed class StyleEditor : UserControl
             Changed?.Invoke(this, EventArgs.Empty);
         };
 
-        // 2 beam or arrow
-        beamSection = new Section(Tr("2   Beam / arrow"), Tr("Something above the item, so you see where it is from far away.") + timerNote);
-        Wide(beamSection, beamSeg);
-        beamSeg.Picked += i =>
+        // the layers above the item, top of the list = highest; the item is the bottom row
+        layersSection = new Section(Tr("Layers"), Tr("Add a beam, an arrow, an icon, a copy of the item or a line of text - any of them, in any order.\nThe top of the list is the highest above the item: each layer sits on the one under it.\nDrag a row (or ▲ ▼, Alt+Up / Alt+Down) to move it; ✕ or Delete removes it. Click a row for its settings."));
+        addButton.Height = Font.Height + 14;
+        skyLabel.Height = Font.Height + 2;
+        Wide(layersSection, addButton);
+        Wide(layersSection, skyLabel);
+        Wide(layersSection, layerList);
+        Wide(layersSection, stackHint);
+        addButton.Click += (_, _) =>
         {
-            if (loading) return;
-            loading = true;
-            beam.Checked = i < 2;
-            if (i < 2) marker.SelectedIndex = i;
-            loading = false;
-            Commit();
+            // as wide as the button, roomy rows: the layer's colour dot, its name and what it is (user, 2026-11-15: the
+            // plain menu looked very small)
+            // a drop-down as wide as the button with rows like the layer list's: colour dot, name, what it is underneath
+            var on = style.Stack;
+            var kinds = Style.Kinds.Where(k => !on.Contains(k)).ToList();
+            var panel = new Panel { BackColor = Ui.Window, Width = addButton.Width, Padding = new Padding(4) };
+            int y = 4;
+            var drop = new ToolStripDropDown { Padding = Padding.Empty, BackColor = Ui.Line };
+            foreach (var k in kinds)
+            {
+                string kind = k;
+                var row = new AddRow(KindName(kind), kind switch
+                {
+                    "beam" => Tr("A column of light above it"), "arrow" => Tr("Points down at it"), "icon" => Tr("A picture or 3D model"),
+                    "text" => Tr("Its name or your own words"), "copy" => Tr("A copy of the item's own shape"), _ => "",
+                }, kind) { Font = Font, Bounds = new Rectangle(4, y, panel.Width - 8, Font.Height * 2 + 14) };
+                row.Click += (_, _) => { drop.Close(); AddLayer(kind); };
+                panel.Controls.Add(row);
+                y += row.Height + 2;
+            }
+            if (kinds.Count == 0)
+            {
+                panel.Controls.Add(new Label { Text = Tr("Everything is added"), ForeColor = Ui.Muted, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
+                                               Bounds = new Rectangle(4, y, panel.Width - 8, Font.Height + 12) });
+                y += Font.Height + 14;
+            }
+            panel.Height = y + 2;
+            drop.Items.Add(new ToolStripControlHost(panel) { Padding = Padding.Empty, Margin = new Padding(1), AutoSize = false, Size = panel.Size });
+            drop.Closed += (_, _) => BeginInvoke(() => drop.Dispose());
+            drop.Show(addButton, new Point(0, addButton.Height));
         };
-        heightRow = Row(beamSection, Tr("Height"), Steps(length, new[] { Tr("Short"), Tr("Medium"), Tr("Tall") }, new[] { 10, 20, 30 }), length, Unit("m"));
-        beamRows.AddRange(heightRow);
-        beamRows.AddRange(Row(beamSection, Tr("Thickness"), Steps(width, new[] { Tr("Thin"), Tr("Normal"), Tr("Thick") }, new[] { 6, 10, 20 }), width, Unit("cm")));
-        beamRows.AddRange(Row(beamSection, Tr("Strength"), Steps(beamStrength, strength, new[] { 15, 30, 60 }), beamStrength, Unit("%")));
-        beamRows.AddRange(Row(beamSection, Tr("Colour"), markerSame, markerOwn));
+        // the picked layer's settings
+        var beamSection = layerSections["beam"] = new Section(Tr("Beam"), Tr("A light pillar into the sky, so you see where the item is from far away.") + timerNote);
+        Row(beamSection, Tr("Height"), Steps(length, new[] { Tr("Short"), Tr("Medium"), Tr("Tall") }, new[] { 10, 20, 30 }), length, Unit("m"));
+        Row(beamSection, Tr("Thickness"), Steps(width, thickness, new[] { 6, 10, 20 }), width, Unit("cm"));
+        Row(beamSection, Tr("Strength"), Steps(beamStrength, strength, new[] { 15, 30, 60 }), beamStrength, Unit("%"));
+        Row(beamSection, Tr("Colour"), markerSame, markerOwn);
         ownColourRow = Row(beamSection, "", markerSwatches);
-        markerOwn.LinkClicked += (_, _) => sameColor.Checked = !sameColor.Checked;
+        markerOwn.LinkClicked += (_, _) => { sameColor.Checked = !sameColor.Checked; Commit(); };
         markerSwatches.Picked += c =>
         {
             if (c is not Color colour)
@@ -306,83 +623,182 @@ public sealed class StyleEditor : UserControl
         };
         beamFx = Fx(beamSection, st => st.BeamFx);
 
-        // 3 icon or text (one at a time)
-        topSection = new Section(Tr("3   Icon / text"), Tr("A picture or 3D model, or a line of text (the item's name or your own), floating above the item and turning to face you.\nText is not shown on enemies. Spin and bob need a 3D icon or model on enemies; spin shows on 3D only.") + timerNote);
-        Wide(topSection, topSeg);
-        topSeg.Picked += PickTop;
-        iconRows.AddRange(Row(topSection, Tr("Picture"), iconButton));
-        iconRows.AddRange(Row(topSection, Tr("Size"), Steps(iconSize, new[] { "S", "M", "L" }, new[] { 40, 70, 120 }), iconSize, Unit("cm")));
+        var arrowSection = layerSections["arrow"] = new Section(Tr("Arrow"), Tr("A solid arrow pointing down at what is under it.") + timerNote);
+        Row(arrowSection, Tr("Thickness"), Steps(arrowWidth, thickness, new[] { 6, 10, 20 }), arrowWidth, Unit("cm"));
+        Colour(arrowSection, st => st.ArrowColor, (st, c) => st.ArrowColor = c, st => st.ArrowColour);
+        arrowFx = Fx(arrowSection, st => st.ArrowFx);
+
+        var iconSection = layerSections["icon"] = new Section(Tr("Icon"), Tr("A picture or 3D model floating above the item, turning to face you.\nSpin and bob need a 3D icon or model on enemies; spin shows on 3D only.") + timerNote);
+        Row(iconSection, Tr("Picture"), iconButton);
+        Row(iconSection, Tr("Size"), Steps(iconSize, new[] { "S", "M", "L" }, new[] { 50, 100, 200 }), iconSize, Unit(Tr("% of the item")));
+        Row(iconSection, Tr("Strength"), Steps(iconStrength, strength, new[] { 50, 100, 200 }), iconStrength, Unit("%"));
+        Colour(iconSection, st => st.IconColor, (st, c) => st.IconColor = c, st => st.IconColour);
+        iconFx = Fx(iconSection, st => st.IconFx);
+
+        var copySection = layerSections["copy"] = new Section(Tr("Item copy"), Tr("Item copy: a copy of the item itself, in its own colours.") + timerNote);
+        Row(copySection, Tr("Size"), Steps(copySize, new[] { "S", "M", "L" }, new[] { 50, 100, 200 }), copySize, Unit(Tr("% of the item")));
+        Row(copySection, Tr("Strength"), Steps(copyStrength, strength, new[] { 50, 100, 200 }), copyStrength, Unit("%"));
+        copyFx = Fx(copySection, st => st.CopyFx);
+
+        var textSection = layerSections["text"] = new Section(Tr("Text"), Tr("A line of text (the item's name or your own) floating above the item and turning to face you.\nOn creatures it can't turn: it faces the way the creature faces.") + timerNote);
         labelText.Width = 160;
-        textRows.AddRange(Row(topSection, Tr("Text"), labelText));
+        Row(textSection, Tr("Text"), labelText);
         tips.SetToolTip(labelText, Tr("Leave empty to show each item's own name.\nText typed here shows on every item using this look (for one item only, give that item its own look)."));
         labelText.TextChanged += (_, _) =>
         {
             if (loading || style.LabelText == labelText.Text) return;
             style.LabelText = labelText.Text;
+            RefreshRows();
             Changed?.Invoke(this, EventArgs.Empty);
         };
-        textRows.AddRange(Row(topSection, Tr("Height"), Steps(labelSize, new[] { "S", "M", "L" }, new[] { 100, 150, 250 }), labelSize, Unit("cm")));
-        textRows.AddRange(Row(topSection, "", labelCat));
+        Row(textSection, Tr("Height"), Steps(labelSize, new[] { "S", "M", "L" }, new[] { 100, 150, 250 }), labelSize, Unit("cm"));
+        Row(textSection, "", labelCat);
         labelCat.CheckedChanged += (_, _) => { if (loading) return; style.LabelCategory = labelCat.Checked; Edited(); };
-        topFx = Fx(topSection, st => st.Icon.Length > 0 ? st.IconFx : st.LabelFx);
+        Row(textSection, Tr("Strength"), Steps(labelStrength, strength, new[] { 50, 100, 200 }), labelStrength, Unit("%"));
+        Colour(textSection, st => st.LabelColor, (st, c) => st.LabelColor = c, st => st.LabelColour);
+        labelFx = Fx(textSection, st => st.LabelFx);
 
         // presets: switch the parts on / off; colours and sizes stay
         string[] names = { Tr("Glow only"), Tr("Glow + beam"), Tr("Glow + beam + name") };
         for (int i = 0; i < names.Length; i++)
         {
-            var t = new Tile(i, names[i]) { Clickable = i < 3 };
-            tips.SetToolTip(t, i < 3 ? Tr("Switches the parts on or off - your colours and sizes stay.") : Tr("Lit when the look is none of the presets."));
+            var t = new Tile(i, names[i]);
+            tips.SetToolTip(t, Tr("Switches the parts on or off - your colours and sizes stay."));
             t.Clicked += ApplyPreset;
             presetTiles.Add(t);
             board.Controls.Add(t);
         }
-        sections.AddRange(new[] { itemSection, beamSection, topSection });
-        foreach (var s in sections) board.Controls.Add(s);
+        board.Controls.Add(startLabel);
+        foreach (var s in new[] { itemSection, layersSection }.Concat(layerSections.Values)) board.Controls.Add(s);
         Controls.Add(board);
         board.BringToFront(); // docked last: fills what the header leaves
     }
 
-    /// <summary>Icon / Text / Off - one at a time. Icon brings back the last icon, or opens the picker.</summary>
-    void PickTop(int i)
+    void Edit(Action change)
     {
-        if (loading) return;
-        if (i == 0)
-        {
-            if (style.Icon.Length == 0)
-            {
-                bool label = style.Label;
-                style.Label = false;
-                if (lastIcon.Length > 0) style.Icon = lastIcon;
-                else
-                {
-                    PickIcon(); // tells Changed itself when one is picked
-                    if (style.Icon.Length == 0) style.Label = label; // cancelled
-                    UpdateLook();
-                    return;
-                }
-            }
-        }
-        else
-        {
-            if (style.Icon.Length > 0) lastIcon = style.Icon;
-            style.Icon = "";
-            style.Label = i == 1;
-        }
+        change();
         UpdateLook();
         Changed?.Invoke(this, EventArgs.Empty);
+        FocusPicked();
+    }
+
+    /// <summary>A layer on top of the stack; the icon brings back the last one, or opens the picker.</summary>
+    void AddLayer(string kind)
+    {
+        if (kind == "icon" && style.Icon.Length == 0)
+        {
+            if (lastIcon.Length > 0) style.Icon = lastIcon;
+            else if (!ChooseIcon() || style.Icon.Length == 0) return;
+        }
+        picked = kind;
+        Edit(() => style.Set(kind, true));
+    }
+
+    void RemoveLayer(string kind)
+    {
+        var order = style.Stack.ToList();
+        int i = order.IndexOf(kind);
+        Edit(() =>
+        {
+            if (kind == "icon") { lastIcon = style.Icon; style.Icon = ""; }
+            style.Set(kind, false);
+            var left = style.Stack;
+            picked = left.Length == 0 ? "" : left[Math.Clamp(i, 0, left.Length - 1)];
+        });
+    }
+
+    /// <param name="by">+1 = one higher (up the list), -1 = one lower.</param>
+    void MoveLayer(string kind, int by)
+    {
+        var order = style.Stack.ToList();
+        int i = order.IndexOf(kind), j = i + by;
+        if (i < 0 || j < 0 || j >= order.Count) return;
+        (order[i], order[j]) = (order[j], order[i]);
+        picked = kind;
+        Edit(() => style.Layers = order);
+    }
+
+    /// <summary>Dragged onto another row: takes that row's place.</summary>
+    void DropLayer(string kind, string onto)
+    {
+        var order = style.Stack.ToList();
+        int to = order.IndexOf(onto);
+        if (to < 0 || !order.Remove(kind)) return;
+        order.Insert(Math.Clamp(to, 0, order.Count), kind);
+        picked = kind;
+        Edit(() => style.Layers = order);
+    }
+
+    void FocusPicked()
+    {
+        if (layerList.Controls.OfType<LayerRow>().FirstOrDefault(r => r.Kind == picked) is { } row) row.Focus();
+    }
+
+    string Summary(string kind) => kind switch
+    {
+        "beam" => Tf("{0} m", length.Value) + (sameColor.Checked ? "" : Tr(" · own colour")) + FxSummary(style.BeamFx),
+        "arrow" => Tf("{0} cm", arrowWidth.Value) + FxSummary(style.ArrowFx),
+        "icon" => iconButton.Text + FxSummary(style.IconFx),
+        "copy" => Tf("{0} % of the item", copySize.Value) + FxSummary(style.CopyFx),
+        "text" => LabelSummary(),
+        _ => style.Glow ? (style.GlowFill ? Tr("Fill") : Tr("Outline")) : style.Brighten ? Tr("Bright") : Tr("Off"),
+    };
+
+    Color DotOf(string kind) => Materials.Parse(kind switch
+    {
+        "beam" => style.BeamColor, "arrow" => style.ArrowColour, "icon" => style.IconColour, "text" => style.LabelColour, _ => style.GlowColor,
+    });
+
+    /// <summary>The layer list as the look has it (rebuilt when the layers change, else just repainted).</summary>
+    void RefreshRows()
+    {
+        var stack = style.Stack;
+        string key = string.Join(",", stack);
+        if (key != listed)
+        {
+            listed = key;
+            layerList.SuspendLayout();
+            foreach (Control c in layerList.Controls.Cast<Control>().ToList()) c.Dispose();
+            layerList.Controls.Clear();
+            foreach (var k in stack.Reverse().Append(""))
+            {
+                var row = new LayerRow(k) { Font = Font };
+                row.Clicked += kind => { picked = kind; RefreshCards(); };
+                row.Removed += RemoveLayer;
+                row.Up += kind => MoveLayer(kind, +1);
+                row.Down += kind => MoveLayer(kind, -1);
+                row.Dropped += DropLayer;
+                layerList.Controls.Add(row);
+            }
+            layerList.Controls.Add(new Ground());
+            layerList.ResumeLayout();
+        }
+        foreach (var row in layerList.Controls.OfType<LayerRow>())
+        {
+            int i = Array.IndexOf(stack, row.Kind);
+            row.Picked = row.Kind == picked;
+            row.CanUp = i >= 0 && i < stack.Length - 1;
+            row.CanDown = i > 0;
+            row.Dot = row.Kind.Length == 0 && !style.Glow ? Ui.Line : DotOf(row.Kind);
+            row.Summary = Summary(row.Kind);
+            row.Invalidate();
+        }
     }
 
     /// <summary>The preset the look matches: 0 glow only, 1 glow + beam, 2 glow + beam + name, 3 none (custom).</summary>
-    int PresetOf() => !style.Glow || style.Icon.Length > 0 ? 3 : (style.Beam, style.Label) switch { (false, false) => 0, (true, false) => 1, (true, true) => 2, _ => 3 };
+    int PresetOf() => !style.Glow ? 3 : string.Join(",", style.Stack) switch { "" => 0, "beam" => 1, "beam,text" => 2, _ => 3 };
 
     void ApplyPreset(int p)
     {
         var st = style.Clone();
         if (!st.Glow) { st.Glow = true; st.Brighten = false; }
-        st.Beam = p >= 1;
         if (st.Icon.Length > 0) lastIcon = st.Icon;
         st.Icon = "";
+        st.Arrow = st.Copy = false;
+        st.Beam = p >= 1;
         st.Label = p == 2;
+        st.Layers = p == 0 ? new() : p == 1 ? new() { "beam" } : new() { "beam", "text" };
+        picked = "";
         Value = st;
         Changed?.Invoke(this, EventArgs.Empty);
     }
@@ -390,80 +806,101 @@ public sealed class StyleEditor : UserControl
     /// <summary>Dev (UI test): picks a preset like a click.</summary>
     internal void TestPreset(int p) => ApplyPreset(p);
 
-    string LabelSummary() => !style.Label ? Tr("Off") : (style.LabelCategory ? Tr("Category · ") : "") + (style.LabelText.Trim().Length > 0 ? $"\"{style.LabelText.Trim()}\"" : Tr("Item's name")) + Tf(" · {0} cm", labelSize.Value) + FxSummary(style.LabelFx);
+    string LabelSummary() => (style.LabelCategory ? Tr("Category · ") : "") + (style.LabelText.Trim().Length > 0 ? $"\"{style.LabelText.Trim()}\"" : Tr("Item's name")) + Tf(" · {0} cm", labelSize.Value) + FxSummary(style.LabelFx);
 
     static string Time(int s) => s % 60 == 0 ? Tf("{0} min", s / 60) : $"{s} s";
 
-    /// <summary>" · pulse · hides 30 s" - a section's extras for its card's summary line.</summary>
+    /// <summary>" · pulse · hides 30 s" - a section's extras for its row's summary line.</summary>
     static string FxSummary(PartFx x, bool flow = true)
     {
         var w = new List<string>();
-        if (!x.Walls) w.Add("not through walls");
-        if (x.Pulse) w.Add("pulse");
-        if (x.Rainbow) w.Add("rainbow");
-        if (x.Spin) w.Add("spin");
-        if (x.Bob) w.Add("bob");
-        if (x.Flow && flow) w.Add("flowing");
-        if (x.HideAfter > 0) w.Add(x.BlinkOff > 0 ? Tf("blinks ({0} / {1})", Time(x.HideAfter), Time(x.BlinkOff)) : Tf("hides after {0}", Time(x.HideAfter)));
+        if (x.Walls) w.Add(Tr("X-ray"));
+        if (x.Pulse) w.Add(Tr("Pulse"));
+        if (x.Rainbow) w.Add(Tr("Rainbow"));
+        if (x.Spin) w.Add(Tr("Spin"));
+        if (x.Bob) w.Add(Tr("Bob"));
+        if (x.Flow && flow) w.Add(Tr("Light runs up"));
+        if (x.HideAfter > 0) w.Add(Tf("hides after {0}", Time(x.HideAfter)));
         return w.Count > 0 ? " · " + string.Join(" · ", w) : "";
     }
 
-    /// <summary>The sections show the look: lit choices, the rows that fit, the matching preset.</summary>
+    /// <summary>The section of the picked layer (the empty one without layers).</summary>
+    Section PickedSection => layerSections.TryGetValue(picked, out var s) ? s : itemSection;
+
+    /// <summary>The sections show the look: lit choices, the rows that fit, the layer list, the matching preset.</summary>
     void RefreshCards()
     {
         int item = style.Glow ? (style.GlowFill ? 1 : 0) : style.Brighten ? 2 : 3;
-        int mark = !style.Beam ? 2 : style.BeamArrow ? 1 : 0;
-        int top = style.Icon.Length > 0 ? 0 : style.Label ? 1 : 2;
         itemSeg.Selected = item;
-        beamSeg.Selected = mark;
-        topSeg.Selected = top;
+        var stack = style.Stack;
+        if (picked.Length > 0 && !stack.Contains(picked)) picked = stack.LastOrDefault() ?? "";
+        layersSection.Title = Tr("Layers") + "   " + Tf("{0} of {1}", stack.Length, Style.Kinds.Length);
+        if (layerSections.TryGetValue(picked, out var ps)) ps.Title = KindName(picked) + "   ·   " + Tf("layer {0} from the item", Array.IndexOf(stack, picked) + 1);
         foreach (var c in glowRows) c.Visible = item < 2;
         foreach (var c in shineRows) c.Visible = item == 2;
-        foreach (var c in beamRows) c.Visible = mark < 2;
-        foreach (var c in heightRow) c.Visible = mark == 0; // an arrow has its own size
-        foreach (var c in iconRows) c.Visible = top == 0;
-        foreach (var c in textRows) c.Visible = top == 1;
         bool own = !sameColor.Checked;
-        markerSame.Text = own ? Tr("Its own colour ·") : Tr("Same as the glow ·");
-        markerOwn.Text = own ? Tr("same as the glow") : Tr("use a different colour");
-        foreach (var c in ownColourRow) c.Visible = own && mark < 2;
+        markerSame.Text = own ? Tr("Its own colour ·") : Tr("Same as the item ·");
+        markerOwn.Text = own ? Tr("same as the item") : Tr("use a different colour");
+        foreach (var c in ownColourRow) c.Visible = own;
         markerSwatches.Current = Materials.Parse(style.BeamColor);
         markerSwatches.Invalidate();
+        foreach (var oc in ownColours)
+        {
+            bool mine = !string.IsNullOrEmpty(oc.Get(style));
+            oc.Same.Text = mine ? Tr("Its own colour ·") : Tr("Same as the item ·");
+            oc.Own.Text = mine ? Tr("same as the item") : Tr("use a different colour");
+            foreach (var c in oc.SwatchRowCtl) c.Visible = mine;
+            oc.Swatches.Current = Materials.Parse(oc.Resolved(style));
+            oc.Swatches.Invalidate();
+        }
         bool was = loading;
         loading = true; // setting the switches must not write back
         foreach (var x in fxRows)
         {
             var fx = x.Of(style);
-            bool on = x == glowFx ? item < 2 : x == beamFx ? mark < 2 : top < 2;
-            x.Walls.Checked = fx.Walls; x.Pulse.Checked = fx.Pulse; x.Rainbow.Checked = fx.Rainbow;
+            x.Walls.Checked = x == glowFx && item == 3 ? style.OwnXray : fx.Walls; x.Pulse.Checked = fx.Pulse; x.Rainbow.Checked = fx.Rainbow;
             x.Spin.Checked = fx.Spin; x.Bob.Checked = fx.Bob; x.Flow.Checked = fx.Flow;
             x.Hide.Value = Math.Clamp(fx.HideAfter, (int)x.Hide.Minimum, (int)x.Hide.Maximum);
-            foreach (var c in x.Rows) c.Visible = on;
+            foreach (var c in x.Rows) c.Visible = true;
+            // the motions that fit: flow on a beam, bob on an arrow / icon / copy / text, spin on an icon / copy
+            x.Spin.Visible = x == iconFx || x == copyFx;
+            x.Bob.Visible = x != glowFx && x != beamFx;
+            // creatures / worn outfits (animated models): the game can't move or time added parts there (in game,
+            // 2026-11-15) - greyed, the tooltip says why (user: not hidden)
+            x.Spin.Locked = x.Bob.Locked = icons3D;
+            fxTips.SetToolTip(x.Spin, icons3D ? AnimatedWhy : Tr("Turns round (3D icon or model only)."));
+            fxTips.SetToolTip(x.Bob, icons3D ? AnimatedWhy : Tr("Floats up and down."));
+            if (x.HideFlow != null)
+            {
+                foreach (Control k in x.HideFlow.Controls) k.Enabled = !icons3D;
+                fxTips.SetToolTip(x.HideFlow, icons3D ? AnimatedWhy : "");
+                if (x.Rows.FirstOrDefault(r => r is Label l && l.Text == Tr("Hide after")) is { } lab) fxTips.SetToolTip(lab, icons3D ? AnimatedWhy : "");
+            }
+            x.Flow.Visible = x == beamFx;
         }
-        // the motions that fit: flow on a beam, bob on an arrow / icon / text, spin on an icon
-        glowFx.Spin.Visible = glowFx.Bob.Visible = glowFx.Flow.Visible = false;
-        beamFx.Spin.Visible = false;
-        beamFx.Flow.Visible = mark == 0;
-        beamFx.Bob.Visible = mark == 1;
-        topFx.Spin.Visible = top == 0;
-        topFx.Flow.Visible = false;
+        // Bright / Off: only X-ray (a copy in its own colours, Builder.XrayFor); pulse / rainbow / timer not for it yet
+        glowFx.Pulse.Visible = glowFx.Rainbow.Visible = item < 2;
+        if (item >= 2) foreach (var c in glowFx.Rows.Skip(2)) c.Visible = false;
+        foreach (var c in xrayRows) c.Visible = item == 3 && style.OwnXray && !style.Invisible;
+        xrayStrength.Value = Math.Clamp(style.XrayStrength, 25, 300);
         foreach (var (seg, box, _, values) in steps) seg.Selected = Array.IndexOf(values, (int)box.Value);
         invisibleBox.Checked = style.Invisible;
         labelCat.Checked = style.LabelCategory;
         int p = PresetOf(); // the preset the look matches is lit (none when it matches none)
         foreach (var t in presetTiles) t.Selected = t.Index == p;
         loading = was;
+        RefreshRows();
         ShowMore();
     }
 
-    /// <summary>The look as presets + three sections (The item, Beam / arrow, Icon / text) - the look pop-up.</summary>
+    /// <summary>The look pop-up's layout (the only one since the look stack).</summary>
     public bool Compact
     {
         get => compact;
         set
         {
             compact = value;
-            if (value && sections.Count == 0) { BuildCards(); UpdateLook(); }
+            if (presetTiles.Count == 0) { BuildCards(); UpdateLook(); }
             ShowMore();
         }
     }
@@ -471,41 +908,62 @@ public sealed class StyleEditor : UserControl
     /// <summary>Height of the quick header (dev: the tour's pictures).</summary>
     internal int HeaderHeight => Height;
 
+    /// <summary>Dev (the tour's pictures): the "Start from" presets and the Layers box.</summary>
+    internal IEnumerable<Control> PresetControls => presetTiles;
+    internal Control LayersBox => layersSection;
+    internal void DevPreset(int i) => ApplyPreset(i);
+
     /// <summary>The sections' rows changed (a part switched on / off): the height changed.</summary>
     public event EventHandler? HeightChanged;
 
     protected override void OnSizeChanged(EventArgs e)
     {
         base.OnSizeChanged(e);
-        if (compact && Width != arrangedWidth) ShowMore(); // wider / narrower: the sections are laid out again
+        if (Width != arrangedWidth) ShowMore(); // wider / narrower: the sections are laid out again
     }
 
-    /// <summary>Lays out the presets and the sections: three side by side when there is room, else one under the other.</summary>
+    /// <summary>Lays out "Start from" chips on top, then the layer list | the picked row's settings side by side when there
+    /// is room (as in the look-stack mock-up), else one under the other.</summary>
     void ShowMore()
     {
-        grid.Visible = !compact;
-        board.Visible = compact;
-        if (compact && sections.Count > 0)
+        if (presetTiles.Count > 0)
         {
             int w = Math.Max(200, Width), gap = 8;
             arrangedWidth = Width;
-            bool wide = w >= 720;
-            int cols = wide ? sections.Count : 1, colW = (w - gap * (cols - 1)) / cols;
-            int tileH = Font.Height * 2 + 46, tw = (w - gap * (presetTiles.Count - 1)) / presetTiles.Count;
-            for (int i = 0; i < presetTiles.Count; i++) presetTiles[i].Bounds = new Rectangle(i * (tw + gap), 0, tw, tileH);
-            int y = tileH + gap;
-            foreach (var f in fxFlows) f.MaximumSize = new Size(Math.Max(120, colW - 110), 0);
+            bool wide = w >= Font.Height * 30;
+            var settings = PickedSection;
+            foreach (var s in layerSections.Values.Append(itemSection)) s.Visible = s == settings;
+            var shown = new[] { layersSection, settings };
+            int listW = wide ? Math.Min(Font.Height * 20, (w - gap) * 45 / 100) : w, setW = wide ? w - listW - gap : w;
+            // the chips: "Start from  (Glow only) (Glow + beam) (Glow + beam + name)", wrapping when narrow
+            int chipH = Font.Height + 12, x = startLabel.Width + 10, y = 0;
+            startLabel.Location = new Point(0, (chipH - startLabel.Height) / 2);
+            foreach (var t in presetTiles)
+            {
+                int tw = t.WantedWidth;
+                if (x + tw > w && x > startLabel.Width + 10) { x = startLabel.Width + 10; y += chipH + 4; }
+                t.Bounds = new Rectangle(x, y, tw, chipH);
+                x += tw + 6;
+            }
+            y += chipH + gap;
+            foreach (var f in fxFlows) f.MaximumSize = new Size(Math.Max(120, setW - 110), 0);
+            int rowW = Math.Max(160, listW - 18);
+            addButton.Width = skyLabel.Width = rowW;
+            stackHint.MaximumSize = new Size(rowW, 0);
+            foreach (Control row in layerList.Controls)
+                row.Size = row is Ground ? new Size(rowW - 4, 6) : new Size(rowW, Font.Height * 2 + 14);
             if (wide)
             {
-                int h = sections.Max(s => s.Wanted(colW));
-                for (int i = 0; i < sections.Count; i++) sections[i].Bounds = new Rectangle(i * (colW + gap), y, colW, h);
+                int h = Math.Max(layersSection.Wanted(listW), settings.Wanted(setW));
+                layersSection.Bounds = new Rectangle(0, y, listW, h);
+                settings.Bounds = new Rectangle(listW + gap, y, setW, h);
                 y += h;
             }
             else
-                foreach (var s in sections)
+                foreach (var (s, sw) in new[] { (layersSection, listW), (settings, setW) })
                 {
-                    int h = s.Wanted(colW);
-                    s.Bounds = new Rectangle(0, y, colW, h);
+                    int h = s.Wanted(sw);
+                    s.Bounds = new Rectangle(0, y, sw, h);
                     y += h + gap;
                 }
             if (Height != y + 4) Height = y + 4;
@@ -517,18 +975,13 @@ public sealed class StyleEditor : UserControl
 
     public event EventHandler? Changed;
 
-    readonly TableLayoutPanel grid;
-
     /// <summary>Grows to fit every row (larger Windows text scaling makes the rows taller than the default height).</summary>
     /// <returns>How much taller it got.</returns>
-    public int FitHeight()
-    {
-        if (compact) { int before = Height; ShowMore(); return Math.Max(0, Height - before); }
-        int need = grid.GetPreferredSize(new Size(grid.Width, 0)).Height + 6;
-        int grow = Math.Max(0, need - Height);
-        Height += grow;
-        return grow;
-    }
+    public int FitHeight() { int before = Height; ShowMore(); return Math.Max(0, Height - before); }
+
+    /// <summary>The cards' tooltips (the effects' change on creatures).</summary>
+    readonly ToolTip fxTips = new() { AutoPopDelay = 20000 };
+    static readonly string AnimatedWhy = Tr("Not on creatures or worn outfits: the game animates them itself and won't move or time anything added to them.");
 
     bool icons3D;
     /// <summary>Creatures: the icon is built as a 3D shape (a flat camera-facing one is dropped by animated models),
@@ -539,108 +992,16 @@ public sealed class StyleEditor : UserControl
         set { icons3D = value; UpdateLook(); }
     }
 
-    /// <summary>The small side sketch (item, wall, beam, icon); off where a real preview is shown next to it.</summary>
-    public bool Sketch
-    {
-        get => preview.Visible;
-        set => preview.Visible = value;
-    }
+    /// <summary>Left from the old small sketch; the pop-up shows the real 3D preview.</summary>
+    public bool Sketch { get => false; set { } }
 
-    public StyleEditor() : this(false) { }
-
-    /// <param name="wide">Three groups side by side (Glow | Beam | Icon and walls) - the strip above the item list on the
-    /// main window; otherwise one column (the look windows).</param>
-    public StyleEditor(bool wide)
+    public StyleEditor()
     {
-        grid = new TableLayoutPanel { ColumnCount = wide ? 4 : 2, Dock = DockStyle.Fill, Padding = new Padding(0) };
-        for (int i = 0; i < grid.ColumnCount; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var current = grid;
-        TableLayoutPanel Group(int col)
-        {
-            var g = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = new Padding(0, 0, 12, 0) };
-            g.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            g.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            grid.Controls.Add(g, col, 1); // row 0: "through walls", which is for all three
-            return g;
-        }
-        if (wide)
-        {
-            // applies to glow, beam and icon alike: its own row across the top, not inside one group
-            walls.Text = Tr("Visible through walls (glow, beam and icon)");
-            walls.Margin = new Padding(3, 0, 3, 4);
-            grid.Controls.Add(walls, 0, 0);
-            grid.SetColumnSpan(walls, 3);
-            current = Group(0);
-        }
-        void Row(Control a, Control? b = null)
-        {
-            int r = current.RowCount++;
-            current.Controls.Add(a, 0, r);
-            if (b != null) current.Controls.Add(b, 1, r);
-            else current.SetColumnSpan(a, 2);
-        }
-        Label L(string t) => new() { Text = t, AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(16, 6, 0, 0) };
-        Row(glow);
-        Row(L(Tr("Colour")), glowColor);
-        Row(L(Tr("Strength %")), opacity);
-        fill.Padding = new Padding(16, 0, 0, 0);
-        Row(fill);
-        new ToolTip { AutoPopDelay = 20000 }.SetToolTip(fill,
-            Tr("Off: an outline - the item looks normal, its edges glow (also through walls).\nOn: the colour covers the whole item."));
-        if (wide) current = Group(1);
-        Row(beam);
-        marker.Margin = new Padding(19, 3, 3, 3);
-        Row(marker);
-        Row(L(Tr("Colour")), beamColor);
-        sameColor.Padding = new Padding(16, 0, 0, 0);
-        Row(sameColor);
-        Row(L(Tr("Length (m)")), length);
-        Row(L(Tr("Width (cm)")), width);
-        Row(L(Tr("Strength %")), beamStrength);
-        if (wide)
-        {
-            current = Group(2);
-            Row(new Label { Text = Tr("Icon above the item"), AutoSize = true, Padding = new Padding(0, 4, 0, 3) }); // lines up with the Glow / Beam boxes
-        }
-        else Row(walls);
+        Height = 400;
+        foreach (var box in new[] { opacity, brightStrength, length, width, beamStrength, arrowWidth, iconStrength, labelStrength, copyStrength, iconSize, copySize, labelSize })
+            box.ValueChanged += (_, _) => Commit();
         iconButton.FlatAppearance.BorderColor = Color.FromArgb(160, 160, 160);
-        Row(L(Tr("Icon")), iconButton);
-        Row(L(Tr("Icon size (cm)")), iconSize);
-        Row(brighten);
-        Row(L(Tr("Strength %")), brightStrength);
-        new ToolTip { AutoPopDelay = 20000 }.SetToolTip(brighten,
-            Tr("The item's own colours shine, day and night. Nothing is added to the model and nothing shows through walls.\nIt changes the game's material, so everything using that material brightens too."));
-        if (!wide) Row(new Label { AutoSize = true }); // the last row takes the spare height - keeps the rows above even
-        preview.Paint += PaintPreview;
-        if (wide)
-        {
-            // the sketch (item, wall, beam, icon) right after the settings, not at the far edge of a wide window
-            preview.Size = new Size(110, 170);
-            preview.Margin = new Padding(8, 0, 0, 0);
-            grid.Controls.Add(preview, 3, 0);
-            grid.SetRowSpan(preview, 2);
-        }
-        else
-        {
-            preview.Dock = DockStyle.Right;
-            Controls.Add(preview);
-        }
-        Controls.Add(grid);
-        grid.BringToFront();
-        Height = wide ? 190 : 400;
-        glowColor.Click += (_, _) => Pick(true);
-        beamColor.Click += (_, _) => Pick(false);
-        foreach (var cb in new[] { glow, beam, sameColor, fill, brighten }) cb.CheckedChanged += (_, _) => Commit();
-        walls.CheckedChanged += (_, _) => { if (loading) return; style.AllWalls = walls.Checked; Commit(); }; // the one-column window: one switch for all
-        opacity.ValueChanged += (_, _) => Commit();
-        brightStrength.ValueChanged += (_, _) => Commit();
-        length.ValueChanged += (_, _) => Commit();
-        width.ValueChanged += (_, _) => Commit();
-        beamStrength.ValueChanged += (_, _) => Commit();
-        marker.SelectedIndexChanged += (_, _) => Commit();
         iconButton.Click += (_, _) => PickIcon();
-        iconSize.ValueChanged += (_, _) => Commit();
-        labelSize.ValueChanged += (_, _) => Commit();
     }
 
     public Style Value
@@ -650,18 +1011,17 @@ public sealed class StyleEditor : UserControl
         {
             style = value.Clone();
             loading = true;
-            glow.Checked = style.Glow;
-            fill.Checked = style.GlowFill;
-            beam.Checked = style.Beam;
-            marker.SelectedIndex = style.BeamArrow ? 1 : 0;
-            walls.Checked = style.AllWalls;
-            brighten.Checked = style.Brighten;
             brightStrength.Value = Math.Clamp(style.BrightenStrength, 25, 300);
             opacity.Value = Math.Clamp(style.GlowOpacity, 5, 100);
             length.Value = Math.Clamp((decimal)Math.Round(style.BeamLength / UnitsPerMetre), 1, 150);
             width.Value = Math.Clamp((decimal)Math.Round(style.BeamWidth * 2 / UnitsPerCm), width.Minimum, width.Maximum);
+            arrowWidth.Value = Math.Clamp((decimal)Math.Round(style.ArrowWidth * 2 / UnitsPerCm), arrowWidth.Minimum, arrowWidth.Maximum);
             beamStrength.Value = Math.Clamp(style.BeamStrength, 1, 300);
-            iconSize.Value = Math.Clamp((decimal)Math.Round(style.IconSize * 2 / UnitsPerCm), iconSize.Minimum, iconSize.Maximum);
+            iconStrength.Value = Math.Clamp(style.IconStrength, 10, 300);
+            labelStrength.Value = Math.Clamp(style.LabelStrength, 10, 300);
+            copyStrength.Value = Math.Clamp(style.CopyStrength, 10, 300);
+            iconSize.Value = Math.Clamp(style.IconScale, (int)iconSize.Minimum, (int)iconSize.Maximum);
+            copySize.Value = Math.Clamp(style.CopyScale, (int)copySize.Minimum, (int)copySize.Maximum);
             if (labelText.Text != style.LabelText) labelText.Text = style.LabelText;
             labelSize.Value = Math.Clamp((decimal)Math.Round(style.LabelSize * 2 / UnitsPerCm), labelSize.Minimum, labelSize.Maximum);
             sameColor.Checked = style.GlowColor.Equals(style.BeamColor, StringComparison.OrdinalIgnoreCase);
@@ -670,25 +1030,20 @@ public sealed class StyleEditor : UserControl
         }
     }
 
-    void PickIcon()
+    /// <summary>The icon picker; false when cancelled.</summary>
+    bool ChooseIcon()
     {
-        var c = Materials.Parse(style.Beam ? style.BeamColor : style.GlowColor);
-        if (IconPicker.Pick(this, style.Icon, icons3D || style.Icon3D, c, icons3D) is var (id, threeD))
-        {
-            style.Icon = id;
-            if (!icons3D) style.Icon3D = threeD && id.Length > 0;
-            UpdateLook();
-            Changed?.Invoke(this, EventArgs.Empty);
-        }
+        var c = Materials.Parse(style.IconColour);
+        if (IconPicker.Pick(this, style.Icon, icons3D || style.Icon3D, c, icons3D) is not var (id, threeD)) return false;
+        style.Icon = id;
+        if (!icons3D) style.Icon3D = threeD && id.Length > 0;
+        return true;
     }
 
-    void Pick(bool forGlow)
+    void PickIcon()
     {
-        using var dlg = new ColorDialog { FullOpen = true, Color = Materials.Parse(forGlow ? style.GlowColor : style.BeamColor) };
-        if (dlg.ShowDialog(this) != DialogResult.OK) return;
-        var hex = Materials.Hex(dlg.Color);
-        if (forGlow) style.GlowColor = hex; else style.BeamColor = hex;
-        if (sameColor.Checked) { if (forGlow) style.BeamColor = hex; else style.GlowColor = hex; }
+        if (!ChooseIcon()) return;
+        style.Layers = style.Stack.ToList(); // "no icon" takes it off the stack
         UpdateLook();
         Changed?.Invoke(this, EventArgs.Empty);
     }
@@ -696,17 +1051,17 @@ public sealed class StyleEditor : UserControl
     void Commit()
     {
         if (loading) return;
-        style.Glow = glow.Checked;
-        style.GlowFill = fill.Checked;
-        style.Beam = beam.Checked;
-        style.BeamArrow = marker.SelectedIndex == 1;
-        style.Brighten = brighten.Checked;
         style.BrightenStrength = (int)brightStrength.Value;
         style.GlowOpacity = (int)opacity.Value;
         style.BeamLength = (int)Math.Round((float)length.Value * UnitsPerMetre);
         style.BeamWidth = (float)width.Value * UnitsPerCm / 2; // diameter in cm -> radius in game units
+        style.ArrowWidth = (float)arrowWidth.Value * UnitsPerCm / 2;
         style.BeamStrength = (int)beamStrength.Value;
-        style.IconSize = (float)iconSize.Value * UnitsPerCm / 2; // width in cm -> half size in game units
+        style.IconStrength = (int)iconStrength.Value;
+        style.LabelStrength = (int)labelStrength.Value;
+        style.CopyStrength = (int)copyStrength.Value;
+        style.IconScale = (int)iconSize.Value; // % of the item's size
+        style.CopyScale = (int)copySize.Value;
         style.LabelSize = (float)labelSize.Value * UnitsPerCm / 2; // text height in cm -> half height in game units
         if (sameColor.Checked) style.BeamColor = style.GlowColor;
         UpdateLook();
@@ -715,98 +1070,17 @@ public sealed class StyleEditor : UserControl
 
     void UpdateLook()
     {
-        glowColor.BackColor = Materials.Parse(style.GlowColor);
-        beamColor.BackColor = Materials.Parse(style.BeamColor);
-        glowColor.Enabled = opacity.Enabled = fill.Enabled = style.Glow;
-        walls.Enabled = style.Glow || style.Beam || style.Icon.Length > 0; // nothing to see through walls otherwise
-        iconSize.Enabled = style.Icon.Length > 0;
-        brightStrength.Enabled = style.Brighten;
         bool show3D = icons3D || style.Icon3D;
         var ic = Icons.Get(style.Icon);
         var model = Models3D.Get(style.Icon);
         iconButton.Text = model != null ? Tr(model.Name) + Tr(" (model)") : ic == null ? Tr("No icon") : show3D ? Tr(ic.Name) + " (3D)" : Tr(ic.Name);
         iconButton.Image?.Dispose();
-        var ccol = Materials.Parse(style.Beam ? style.BeamColor : style.GlowColor);
+        var ccol = Materials.Parse(style.IconColour);
         int tile = Math.Max(18, Font.Height); // as tall as the text
         iconButton.Image = model != null ? Models3D.Tile(model, ccol, tile)
                          : ic == null ? null : show3D ? IconPicker.Tile3D(ic, ccol, tile) : IconPicker.Tile(ic, ccol, tile);
         swatches.Current = Materials.Parse(style.GlowColor);
         swatches.Invalidate();
-        beamColor.Enabled = width.Enabled = beamStrength.Enabled = sameColor.Enabled = marker.Enabled = style.Beam;
-        length.Enabled = style.Beam && !style.BeamArrow; // an arrow has its own size
-        if (sameColor.Checked) beamColor.Enabled = false;
-        if (sections.Count > 0) RefreshCards();
-        preview.Invalidate();
-    }
-
-    /// <summary>A crate behind a wall, with its glow and beam as they'd roughly look.</summary>
-    void PaintPreview(object? sender, PaintEventArgs e)
-    {
-        var g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        int w = preview.Width, h = preview.Height, ground = h - 24;
-        var item = new Rectangle(w / 2 - 14, ground - 26, 28, 26);
-        var wall = new Rectangle(w / 2 - 4, ground - 70, 40, 70);
-        using (var floor = new SolidBrush(Color.FromArgb(50, 56, 64))) g.FillRectangle(floor, 0, ground, w, h - ground);
-        using (var crate = new SolidBrush(Color.FromArgb(150, 120, 80))) g.FillRectangle(crate, item);
-        void Glow()
-        {
-            if (!style.Glow) return;
-            // additive light: the crate stays visible, brighter with strength
-            using var b = new SolidBrush(Color.FromArgb((int)Math.Min(200, 255 * style.GlowOpacity / 100f), Materials.Parse(style.GlowColor)));
-            g.FillRectangle(b, item);
-        }
-        void Beam()
-        {
-            if (!style.Beam) return;
-            var c = Materials.Parse(style.BeamColor);
-            if (style.BeamArrow)
-            {
-                // a solid arrow just above the crate, pointing down at it
-                float aw = Math.Clamp(style.BeamWidth * 1.6f, 10, 30), ah = aw * 1.7f, tipY = item.Top - 3;
-                using var ab = new SolidBrush(Color.FromArgb((int)(120 + 135 * Math.Clamp(style.BeamStrength / 100f, 0, 1)), c));
-                g.FillPolygon(ab, new[] { new PointF(w / 2f, tipY), new PointF(w / 2f - aw / 2, tipY - aw * 0.8f), new PointF(w / 2f + aw / 2, tipY - aw * 0.8f) });
-                g.FillRectangle(ab, w / 2f - aw * 0.18f, tipY - ah, aw * 0.36f, ah - aw * 0.8f + 1);
-                return;
-            }
-            float top = Math.Max(4, item.Top - (item.Top - 4) * Math.Min(1f, style.BeamLength / (30f * UnitsPerMetre)));
-            float bw = Math.Clamp(style.BeamWidth / 2.5f, 2, 40);
-            float bs = Math.Clamp(style.BeamStrength / 100f, 0.02f, 1f); // see-through like in game
-            // soft round column (edges fade) with a brighter core, fading towards the top; starts at the item's top
-            var r = new RectangleF(w / 2f - bw / 2, top, bw, item.Top - top);
-            using (var path = new GraphicsPath())
-            {
-                path.AddRectangle(r);
-                using var soft = new PathGradientBrush(new[] { new PointF(r.Left, r.Top), new PointF(r.Right, r.Top), new PointF(r.Right, r.Bottom), new PointF(r.Left, r.Bottom) })
-                { CenterColor = Color.FromArgb((int)(150 * bs), c), SurroundColors = new[] { Color.FromArgb(0, c) }, CenterPoint = new PointF(r.Left + r.Width / 2, r.Top + r.Height * 0.75f) };
-                g.FillRectangle(soft, r);
-            }
-            var core = new RectangleF(w / 2f - Math.Max(1, bw * 0.35f) / 2, top, Math.Max(1, bw * 0.35f), item.Top - top);
-            using var lg = new LinearGradientBrush(core, Color.FromArgb((int)(60 * bs), c), Color.FromArgb((int)(255 * bs), Color.FromArgb((c.R + 255) / 2, (c.G + 255) / 2, (c.B + 255) / 2)), LinearGradientMode.Vertical);
-            g.FillRectangle(lg, core);
-        }
-        Glow();
-        Beam();
-        using (var wb = new SolidBrush(Color.FromArgb(105, 110, 118))) g.FillRectangle(wb, wall);
-        if (style.GlowFx.Walls || style.BeamFx.Walls) { var clip = g.Clip; g.SetClip(wall); Glow(); Beam(); g.Clip = clip; }
-        using var f = new Font(Font.FontFamily, 7.5f);
-        using var tb = new SolidBrush(Color.FromArgb(160, 170, 180));
-        g.DrawString("wall", f, tb, wall.Left + 6, wall.Bottom - 14);
-        var ic = Icons.Get(style.Icon);
-        var model = Models3D.Get(style.Icon);
-        if (ic != null || model != null)
-        {
-            // at the top of the beam, or just above the crate
-            float top = !style.Beam ? item.Top - 4
-                : style.BeamArrow ? item.Top - 3 - Math.Clamp(style.BeamWidth * 1.6f, 10, 30) * 1.7f - 3
-                : Math.Max(4, item.Top - (item.Top - 4) * Math.Min(1f, style.BeamLength / (30f * UnitsPerMetre)));
-            int sz = (int)Math.Clamp(style.IconSize / 1.6f, 14, 44);
-            float y = Math.Max(2, top - sz);
-            var icol = Materials.Parse(style.Beam ? style.BeamColor : style.GlowColor);
-            using var tile = model != null ? Models3D.Tile(model, icol, sz)
-                           : icons3D || style.Icon3D ? IconPicker.Tile3D(ic!, icol, sz) : IconPicker.Tile(ic!, icol, sz);
-            tile.MakeTransparent(Color.FromArgb(24, 28, 34));
-            g.DrawImage(tile, w / 2f - sz / 2f, y, sz, sz);
-        }
+        if (presetTiles.Count > 0) RefreshCards();
     }
 }

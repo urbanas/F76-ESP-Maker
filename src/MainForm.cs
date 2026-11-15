@@ -373,6 +373,13 @@ public sealed class MainForm : Form
                 BeginInvoke(EditLookOfSelection);
                 return;
             }
+            // a part row (one brahmin type under Brahmin): its own look opens too, like an item row (user, 2026-11-15)
+            if (e.Button == MouseButtons.Left && hitItem?.Tag is PartRow && e.X >= hitItem.GetBounds(ItemBoundsPortion.Label).Left
+                && Control.ModifierKeys == Keys.None && lookPopup is not { Visible: true })
+            {
+                BeginInvoke(EditLookOfSelection);
+                return;
+            }
             if (e.Button != MouseButtons.Left || hitItem?.Tag is not Entry en) return;
             // "8 parts ›": open / close the parts under the row
             if (LinkAt(hitItem, 0) is Rectangle badge && badge.Contains(e.Location)) { ToggleRows(en); return; }
@@ -1732,12 +1739,15 @@ public sealed class MainForm : Form
     {
         var parts = new List<string>();
         if (st.Glow) parts.Add(Tr("glow"));
-        if (st.Beam) parts.Add(st.BeamArrow ? Tr("arrow") : Tf("beam {0} m", Math.Round(st.BeamLength / StyleEditor.UnitsPerMetre)));
+        if (st.Beam) parts.Add(Tf("beam {0} m", Math.Round(st.BeamLength / StyleEditor.UnitsPerMetre)));
+        if (st.Arrow) parts.Add(Tr("arrow"));
+        if (st.Copy) parts.Add(Tr("item copy"));
         if (Icons.Get(st.Icon) is Icons.Icon ic) parts.Add((e.NoIcon || st.Icon3D ? "3D " : "") + Tr(ic.Name).ToLower() + Tr(" icon"));
         else if (Models3D.Get(st.Icon) is Model3D m3) parts.Add(Tr(m3.Name).ToLower() + Tr(" model"));
         if (st.Brighten) parts.Add(Tr("bright colours"));
+        if (st.ShowsOwnXray && !st.Brighten) parts.Add(Tr("X-ray"));
         if (st.Invisible && e.CanHide) parts.Add(Tr("item hidden"));
-        if (st.Label && !e.NoIcon) parts.Add(st.LabelText.Trim().Length > 0 ? Tf("name \"{0}\"", st.LabelText.Trim()) : Tr("name"));
+        if (st.Label) parts.Add(st.LabelText.Trim().Length > 0 ? Tf("name \"{0}\"", st.LabelText.Trim()) : Tr("name"));
         if (st.Timed && parts.Count > 0) parts.Add(st.AllFx.Any(x => x.HideAfter > 0 && x.BlinkOff > 0) ? Tr("blinks") : Tr("hides after a while"));
         if (st.Moves && parts.Count > 0) parts.Add(Tr("moving"));
         return ((own ? Tr("own: ") : "") + (parts.Count > 0 ? "■ " + string.Join(" + ", parts) : Tr("nothing")), Readable(Materials.Parse(st.Glow ? st.GlowColor : st.BeamColor)));
@@ -2505,10 +2515,7 @@ public sealed class MainForm : Form
 
     // ---------------------------------------------------------------- recommended presets
 
-    const string SlasherHeads = "event:the slasher (halloween):spooky scorched (costume heads)",
-                 SlasherBodies = "event:the slasher (halloween):spooky scorched (costume bodies)";
-    /// <summary>Spooky Scorched Beacons' purple, and its green for the Pint-Sized Slasher mask.</summary>
-    const string SlasherPurple = "#941FFF", SlasherGreen = "#33FF40";
+    // the Slasher event preset was removed (user, 2026-11-15: the event is over); the event category stays
 
     /// <summary>The presets offered: tiles with a picture.</summary>
     List<PresetPicker.Tile> PresetTiles()
@@ -2522,7 +2529,6 @@ public sealed class MainForm : Form
             new("bobbleheads", Tr("Bobbleheads"), Tr("glow, beam and a 3D bobblehead"), M("model:bobblehead", "#FFFFFF")),
             new("magazines", Tr("Magazines"), Tr("glow, beam and a magazine icon"), I("magazine", "#FFFFFF")),
             new("plans", Tr("Plans"), Tr("glow, beam and a plan icon"), I("scroll", "#FFFFFF")),
-            new("slasher", Tr("Slasher event"), Tr("Spooky Scorched purple with a pumpkin; the Slasher mask green with a clown"), M("model:pumpkin", SlasherPurple)),
             new("xp", Tr("XP buffs"), Tr("every XP recipe's ingredients: glow and a 3D ramen"), M("model:ramen", Catalog.PlantGreen)),
             new("vending", Tr("Player vendors"), Tr("every CAMP vending machine: glow, a tall beam and a $ icon"), I("dollar", "#FFB347")),
             new("plants", Tr("Bright plants"), Tr("harvestable plants in their own colours, brighter - nothing added, not through walls"), I("herb", Catalog.PlantGreen)),
@@ -2544,7 +2550,6 @@ public sealed class MainForm : Form
             "plans" => In(c => c.Name == Catalog.Plans),
             "vending" => In(c => c.Name == Catalog.Vending).Where(e => e.Id.Contains("legendaryscrappingstation") == false),
             "plants" => In(c => c.Name == "Plants (all)"),
-            "slasher" => In(c => true).Where(e => e.Id is SlasherHeads or SlasherBodies),
             "xp" => In(c => c.Groups),
             _ => Enumerable.Empty<Entry>(),
         }).ToList();
@@ -2559,13 +2564,13 @@ public sealed class MainForm : Form
         if (dlg.Install) BuildSave();
     }
 
-    /// <summary>Ticks each preset's things and gives them its look (the category's, or - the Slasher - the entries' own).</summary>
+    /// <summary>Ticks each preset's things and gives them its category's look.</summary>
     void ApplyPresets(List<string> picked)
     {
         Style Look(Category c, Action<Style> set) { var st = LookOf(c).Clone(); set(st); project.CategoryStyles[c.Name] = st; return st; }
         static void Glowing(Style st) { st.Glow = true; st.GlowFill = false; st.GlowOpacity = 30; st.ThroughWalls = true; }
         static void Beam(Style st, string colour, int metres = 20)
-        { st.Beam = true; st.BeamArrow = false; st.BeamColor = colour; st.BeamLength = (int)(metres * StyleEditor.UnitsPerMetre); st.BeamWidth = 3.5f; st.BeamStrength = 30; }
+        { st.Set("beam", true); st.BeamColor = colour; st.BeamLength = (int)(metres * StyleEditor.UnitsPerMetre); st.BeamWidth = 3.5f; st.BeamStrength = 30; }
         static void Icon(Style st, string icon, float size) { st.Icon = icon; st.IconSize = size; st.Icon3D = false; }
         foreach (var key in picked)
         {
@@ -2597,24 +2602,6 @@ public sealed class MainForm : Form
                         foreach (var id in project.RecipeLooks) project.Overrides[id] = xp.Clone(); // the ingredients follow
                         break;
                 }
-            if (key == "slasher")
-            {
-                // as Spooky Scorched Beacons: heads with a purple beam and the pumpkin, bodies outlined purple, the
-                // Pint-Sized Slasher mask green with its own beam and the clown
-                var heads = new Style { GlowColor = SlasherPurple }; Glowing(heads); Beam(heads, SlasherPurple, 14); Icon(heads, "model:pumpkin", 30);
-                var bodies = new Style { GlowColor = SlasherPurple, BeamColor = SlasherPurple }; Glowing(bodies); bodies.Beam = false;
-                project.Overrides[SlasherHeads] = heads;
-                project.Overrides[SlasherBodies] = bodies;
-                if (entries.FirstOrDefault(e => e.Id == SlasherHeads) is Entry he)
-                {
-                    var looks = project.PartLooks.TryGetValue(he.Id, out var pl) ? pl : project.PartLooks[he.Id] = new();
-                    foreach (var m in he.Models.Where(m => m.Contains("pintsizedslasher")))
-                    {
-                        var mask = new Style { GlowColor = SlasherGreen }; Glowing(mask); Beam(mask, SlasherGreen, 14); Icon(mask, "model:clown", 30);
-                        looks[m] = mask;
-                    }
-                }
-            }
         }
         Save();
         RefreshCategoryCounts();
@@ -2963,7 +2950,7 @@ public sealed class MainForm : Form
                 await UseImport(r, false);
                 var lit = Ticked0().SelectMany(e => project.ModelsOf(e)).Select(Ba2Path.Normalize).ToHashSet();
                 log.Add($"     {r.Kind}: {r.Models} models, {r.Unknown.Count} unknown, {project.Selected.Count} selected, {project.OffParts.Count} with parts off, {project.CategoryStyles.Count} category looks, {project.Overrides.Count} own looks");
-                foreach (var g in project.CategoryStyles.Take(6)) log.Add($"     {g.Key}: glow {g.Value.Glow} {g.Value.GlowColor} fill {g.Value.GlowFill} walls {g.Value.AllWalls} beam {g.Value.Beam} arrow {g.Value.BeamArrow}");
+                foreach (var g in project.CategoryStyles.Take(6)) log.Add($"     {g.Key}: glow {g.Value.Glow} {g.Value.GlowColor} fill {g.Value.GlowFill} walls {g.Value.AllWalls} beam {g.Value.Beam} arrow {g.Value.Arrow}");
                 foreach (var m in r.Unknown.Take(6)) log.Add("     unknown: " + m);
                 var models = Ba2Archive.Open(r.Source).Entries.Where(e => e.Name.StartsWith(@"meshes\") && e.Name.EndsWith(".nif")).Select(e => e.Name[7..]).ToHashSet();
                 Check(lit.SetEquals(models.Except(r.Unknown)), $"selection lights the mod's models exactly ({lit.Count})");
@@ -3133,9 +3120,9 @@ public sealed class MainForm : Form
                 bmp.Save(Path.Combine(Path.GetDirectoryName(logPath)!, "presets.png"));
                 pp.Close();
             }
-            Check(PresetTiles().Count == 9, $"9 presets offered ({PresetTiles().Count})");
+            Check(PresetTiles().Count == 8, $"8 presets offered ({PresetTiles().Count})");
             project = Project.Fresh();
-            ApplyPresets(new() { "bobbleheads", "enemies", "slasher", "xp", "legendary" });
+            ApplyPresets(new() { "bobbleheads", "enemies", "xp", "legendary" });
             var bobbles = cats.First(c => c.Name == Catalog.Bobbleheads);
             Check(bobbles.Entries.All(IsTicked), "bobbleheads all checked");
             Check(project.CategoryStyles.GetValueOrDefault(Catalog.Bobbleheads) is { Glow: true, Beam: true, Icon: "model:bobblehead" }, "bobbleheads: glow, beam, 3D bobblehead");
@@ -3144,8 +3131,6 @@ public sealed class MainForm : Form
             Check(everyday.All(e => twins.GetValueOrDefault(e.Id, new()).Any(t => IsTicked(t) && !t.Name.Contains("everyday clothes"))),
                   $"everyday clothes only checked as twins ({everyday.Count})");
             Check(project.CategoryStyles.GetValueOrDefault(Enemies.Marked) is { Beam: true, GlowFill: false, Icon: "model:crown" }, "legendary: outline, beam + crown");
-            Check(project.Overrides.GetValueOrDefault(SlasherHeads) is { Beam: true, Icon: "model:pumpkin" } && project.PartLooks.GetValueOrDefault(SlasherHeads)?.Count == 2,
-                  "slasher: heads purple + pumpkin, the mask green + clown");
             Check(project.CategoryStyles.GetValueOrDefault(Catalog.XpRecipes) is { Icon: "model:ramen" } && project.RecipeLooks.Count > 0 &&
                   project.RecipeLooks.All(id => project.Overrides[id].Icon == "model:ramen"), $"XP buffs: ingredients checked with the ramen ({project.RecipeLooks.Count})");
 
@@ -3341,20 +3326,24 @@ public sealed class MainForm : Form
         }
         catLookButton.PerformClick(); // the category's look in the pop-up
         await FitPopup();
-        // framed: the category row (clicking it opens its look)
-        var nb = catTree.SelectedNode!.Bounds;
-        var np = catTree.PointToScreen(nb.Location);
-        var catRow = new Rectangle(np.X - Location.X - 2, np.Y - Location.Y, catTree.ClientSize.Width - nb.X, nb.Height);
-        await Shot("step3.png", catRow, On(inspector.Editor, inspector.Editor.HeaderHeight));
+        // framed (2026-11-15 layout: the pop-up covers the list): 1 the "Start from" presets, 2 the Layers box
+        var presets = inspector.Editor.PresetControls.Select(c => On(c)).Aggregate(Rectangle.Union);
+        presets.Inflate(4, 3);
+        await Task.Delay(2500); // the 3D preview loads
+        await Shot("step3.png", presets, On(inspector.Editor.LayersBox));
         lookPopup?.Hide();
+        // step 4: the list with the Guardian (its own look) and its parts, pop-up closed
         var guardian = cats.SelectMany(c => c.Entries).First(e => e.Id == "boss:guardian (en06)");
         DevShow(Enemies.Bosses, guardian.Id);
         TickSwitched(true);
+        status.Text = "";
+        await Shot("step4.png", Rows(li => li.Tag == guardian));
+        // step 5: its look with a beam, the 3D view framed
         EditLookOfSelection();
         status.Text = "";
         await FitPopup();
-        await Shot("step4.png", Rows(li => li.Tag == guardian), On(inspector.SwitchRow));
-        await Task.Delay(2500); // the 3D preview loads
+        inspector.Editor.DevPreset(1); // "Glow + beam": a look worth showing
+        await Task.Delay(3000); // the 3D preview loads
         await Shot("step5.png", On(inspector.View));
         lookPopup?.Hide();
         var stateText = On(installState);

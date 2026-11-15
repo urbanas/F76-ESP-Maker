@@ -6,14 +6,10 @@ Make your own ESP mod for **Fallout 76** without editing any files.
 
 Choose what you want to spot: bobbleheads, magazines, plans, XP food, pre-war food, notes, plants, loot, loot bags, CAMP storage boxes, clothes, every outfit and armor piece (on the ground or worn), event objects, player vending machines, workbenches, legendary enemies or any kind of creature. Then choose how it looks:
 
-- an outline or full glow, which also shows through walls
-- a beam into the sky (or an arrow)
-- a flat icon or a small 3D model above it
-- a floating name label
-- just brighter colours
-- or Invisible: the item disappears and only the beam, icon or name you add shows (it also hides foliage and worn outfits)
+- an outline or full glow, or just brighter colours - optionally seen through walls (X-ray)
+- or Invisible: the item disappears and only what you add shows (it also hides foliage and worn outfits)
 
-Each part can have effects: rainbow colours, pulse, spin, bob, light running up the beam, and a timer that hides it after a set time.
+Above the item you stack layers in any order: a beam into the sky, an arrow, a flat icon or a small 3D model, a copy of the item itself, and a floating name label. Each layer has its own colour, strength and size, and effects: X-ray, rainbow colours, pulse, spin, bob, light running up the beam, and a timer that hides it after a set time.
 
 The app speaks all 13 of the game's languages (**View → Language**). Item, enemy and category names come from your game's own text. The window text was translated with AI help, so some wording may be off; corrections are welcome.
 
@@ -29,7 +25,7 @@ Get the ready-to-run app from the [Releases](../../releases) page or from Nexus 
 
 1. Unzip anywhere and start `ESP Maker.exe`. If Windows shows "Windows protected your PC", click **More info → Run anyway** (the app isn't signed with a paid certificate).
 2. Pick a section in the bar on the far left, then a category, or search (Ctrl+K jumps anywhere). Select what you want to find.
-3. Click the category (or an item) to choose its look in the pop-up. The 3D preview shows the real game model the way the mod will show it; **Bigger view** lets you walk around it.
+3. Click the category (or an item) to choose its look in the pop-up: start from a preset, then **+ Add on top** to stack layers above the item. The 3D preview beside it shows the real game model the way the mod will show it: turn it, zoom, walk around it, and add a person, a house, a wall or a shed to test it.
 4. Close the game, click **Build & save**, name your mod, click **Build**, then start the game.
 
 **Edit → Add presets...** adds common setups in one click: enemies, legendary enemies, bobbleheads, magazines, plans, XP buffs, player vendors and more. **Import .ba2...** opens an existing mod (yours or someone else's) so you can change it or merge it with another. **Options → Mod manager** (or the **Mods** button) turns any of your mods on or off, changes the load order and shows which mods change the same files.

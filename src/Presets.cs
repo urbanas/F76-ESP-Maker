@@ -33,7 +33,7 @@ sealed class PresetPicker : Form
         var sub = new Label
         {
             Text = Tr("Pick one or more. Each selects its things and gives them its look - what you selected before stays as it is."),
-            Dock = DockStyle.Top, Height = 30, ForeColor = Color.DimGray,
+            Dock = DockStyle.Top, Height = 30, ForeColor = Ui.Muted,
         };
         var grid = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(0, 6, 0, 0) };
         foreach (var c in choices)
@@ -42,7 +42,7 @@ sealed class PresetPicker : Form
             {
                 Appearance = Appearance.Button, Tag = c.Key, Width = 265, Height = 100, Margin = new Padding(6),
                 Image = c.Picture, ImageAlign = ContentAlignment.MiddleLeft, FlatStyle = FlatStyle.Flat, Padding = new Padding(8, 0, 4, 0),
-                BackColor = Color.White, AccessibleName = c.Title,
+                BackColor = Ui.Window, AccessibleName = c.Title,
             };
             // the title bold, the note under it
             var bold = new Font(font, FontStyle.Bold);
@@ -53,14 +53,16 @@ sealed class PresetPicker : Form
                 var th = TextRenderer.MeasureText(e.Graphics, c.Title, bold, new Size(w, 100), flags).Height;
                 var nh = TextRenderer.MeasureText(e.Graphics, c.Note, font, new Size(w, 100), flags).Height;
                 int top = (box.Height - th - nh - 2) / 2;
-                TextRenderer.DrawText(e.Graphics, c.Title, bold, new Rectangle(left, top, w, th), Color.Black, flags);
-                TextRenderer.DrawText(e.Graphics, c.Note, font, new Rectangle(left, top + th + 2, w, nh), Color.FromArgb(80, 80, 80), flags);
+                TextRenderer.DrawText(e.Graphics, c.Title, bold, new Rectangle(left, top, w, th), Ui.Fg, flags);
+                TextRenderer.DrawText(e.Graphics, c.Note, font, new Rectangle(left, top + th + 2, w, nh), Ui.Muted, flags);
             };
-            box.FlatAppearance.BorderColor = Color.FromArgb(200, 204, 210);
-            box.FlatAppearance.CheckedBackColor = Color.FromArgb(214, 234, 255);
+            // theme colours (dark mode too - the tiles were fixed white with black text)
+            box.FlatAppearance.BorderColor = Ui.Line;
+            box.FlatAppearance.CheckedBackColor = Ui.AccentSoft;
+            box.FlatAppearance.MouseOverBackColor = Ui.Hover;
             box.CheckedChanged += (_, _) =>
             {
-                box.FlatAppearance.BorderColor = box.Checked ? Color.FromArgb(0, 102, 204) : Color.FromArgb(200, 204, 210);
+                box.FlatAppearance.BorderColor = box.Checked ? Ui.Accent : Ui.Line;
                 box.FlatAppearance.BorderSize = box.Checked ? 2 : 1;
                 add.Enabled = addInstall.Enabled = tiles.Any(t => t.Checked);
             };

@@ -566,6 +566,7 @@
 "Stand other selected items beside it, each in its own look": "Andere ausgewählte Gegenstände daneben stellen, jeden in seinem Look",
 "Start empty...": "Leer beginnen ...",
 "Start with the category": "Mit der Kategorie beginnen",
+"Text above it too": "Auch Text darüber",
 "Started empty.": "Leer begonnen.",
 "Stash boxes": "Lagerkisten",
 "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.": "Lagerkisten sowie die Fallout-1st-Hilfs-, Munitions- und Schrottkisten in C.A.M.P.s, jedes Design. Die Kiste jedes Spielers leuchtet, nicht nur deine.",
@@ -970,5 +971,18 @@
 "selected": "ausgewählt",
 "snowflake pant suits": "Schneeflocken-Hosenanzüge",
 "the Atlantic City gift-box clue lights up too": "der Geschenkkarton-Hinweis in Atlantic City leuchtet auch",
-"unselected": "abgewählt"
+"unselected": "abgewählt",
+"Gift box": "Geschenkbox",
+"Hiding Cappy": "Versteckter Korki",
+"Spin the Wheel": "Glücksrad",
+"Spin the Wheel: the hiding Cappy to find.": "Glücksrad: der versteckte Korki, den du finden musst.",
+"The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included).": "Die Entertainer der Atlantic-City-Expeditionen, gefunden an den Outfits, die sie tragen. Wer dieselben Outfits trägt, leuchtet auch (Spieler eingeschlossen).",
+"anyone wearing this outfit glows too": "wer dieses Outfit trägt, leuchtet auch",
+"the same entries as under ENEMIES > Showmen": "dieselben Einträge wie unter GEGNER > Entertainer",
+"{0} models - anyone wearing this outfit glows too": "{0} Modelle – wer dieses Outfit trägt, leuchtet auch",
+"{0} outfits - the same entries as under ENEMIES > Showmen": "{0} Outfits – dieselben Einträge wie unter GEGNER > Entertainer",
+"Item copy": "Kopie des Gegenstands",
+"Item copy: a copy of the item itself, in its own colours.": "Kopie des Gegenstands: eine Kopie des Gegenstands selbst, in seinen eigenen Farben.",
+"Same as the beam ·": "Wie der Strahl ·",
+"same as the beam": "wie der Strahl"
 }

@@ -178,8 +178,8 @@ public static class Importer
         st.GlowFill = !mat.Falloff;
         st.ThroughWalls = !mat.DepthTest;
         st.Glow = !arrow && !beam;
-        st.Beam = arrow || beam;
-        st.BeamArrow = arrow;
+        st.Beam = beam && !arrow;
+        st.Arrow = arrow;
         return st;
     }
 
@@ -194,7 +194,7 @@ public static class Importer
         var names = f.Models.SelectMany(m => used.GetValueOrDefault(Ba2Path.Normalize(m)) ?? new()).Select(m => OwnMaterial.Match(m.Name)).Where(m => m.Success).ToList();
         if (names.Count == 0) return null;
         var st = f.Cat.DefaultStyle.Clone();
-        st.Glow = st.Beam = st.BeamArrow = st.ThroughWalls = false;
+        st.Glow = st.Beam = st.Arrow = st.Copy = st.ThroughWalls = false;
         st.Icon = "";
         string? solid = null;
         foreach (var m in names)
@@ -217,8 +217,9 @@ public static class Importer
             else if (m.Groups["icon"].Success && Icons.Get(m.Groups["icon"].Value) != null) st.Icon = m.Groups["icon"].Value;
             else if (m.Groups["model"].Success && Models3D.Get(Models3D.Prefix + m.Groups["model"].Value) != null) st.Icon = Models3D.Prefix + m.Groups["model"].Value;
         }
+        if (st.Icon == Models3D.Self.Id) { st.Icon = ""; st.Copy = true; } // the item copy layer
         // the solid material without an icon of its own is the arrow marker
-        if (solid != null && st.Icon == "" && !st.Beam) { st.Beam = st.BeamArrow = true; st.BeamColor = solid; }
+        if (solid != null && st.Icon == "" && !st.Beam) { st.Arrow = true; st.ArrowColor = solid; }
         return st;
     }
 }

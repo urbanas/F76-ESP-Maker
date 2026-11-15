@@ -49,28 +49,35 @@ public static class Builder
                     continue;
                 }
                 // what a look puts on a model (the entry's look, or a part's own)
-                PatchOptions Options(Style s, bool main)
+                PatchOptions Options(Style s, bool main, string model)
                 {
-                    // the arrow is a solid shape: the 3D-icon material (shaded by its vertex colours), in the beam colour
-                    string? beamMat = !s.Beam ? null : s.BeamArrow ? Icon3DMaterial(s, template, materials) : BeamMaterial(s, template, materials, files);
-                    float beamLength = s.BeamArrow ? NifPatch.ArrowSize(s.BeamWidth) is var a ? a.Gap + a.Height : 0 : s.BeamLength; // icons go on top
+                    string? beamMat = s.Beam ? BeamMaterial(s, template, materials, files) : null;
+                    // the arrow is a solid shape: the 3D-icon material (shaded by its vertex colours)
+                    string? arrowMat = s.Arrow ? Icon3DMaterial(s.ArrowColour, s.ArrowFx.Walls, 100, template, materials) : null;
                     // animated objects (first aid kits, wall safes, ammo boxes: skinned, not creatures) showed no outline in
                     // game, only a fill (2026-11-05) - they get the fill whatever the look says
                     Style? filled = s.GlowFill || e.NoIcon ? null : s.Clone();
                     if (filled != null) filled.GlowFill = true;
-                    Func<GlowPart, GlowMat?>? glowFor = s.Glow ? part => GlowFor(part.Skinned && filled != null ? filled : s, part, game, template, materials, cutouts, files) : null;
+                    Func<GlowPart, GlowMat?>? glowFor = s.Glow ? part => GlowFor(part.Skinned && filled != null ? filled : s, part, game, template, materials, cutouts, files)
+                                                      : s.ShowsOwnXray ? part => XrayFor(part, s.XrayScale, game, template, materials) : null;
                     var chosen = Icons.Get(s.Icon);
                     bool use3D = e.NoIcon || s.Icon3D; // creatures can only show the 3D shape
                     string? iconMat = main && !use3D && chosen != null ? IconMaterial(s, chosen, template, materials, files) : null;
                     // the solid version always comes along: a flat icon on an animated model (fish, safes with lids,
                     // flairs) would be dropped by the game, so NifPatch uses the solid one there
                     bool[,]? mask = main && chosen != null ? (masks.TryGetValue(chosen.Id, out var mk) ? mk : masks[chosen.Id] = Icons.Mask(chosen)) : null;
-                    string? icon3dMat = mask != null ? Icon3DMaterial(s, template, materials) : null;
-                    var model3d = main ? Models3D.Get(s.Icon) : null;
-                    string? modelMat = model3d != null ? ModelMaterial(s, model3d, template, materials, files) : null;
+                    string? icon3dMat = mask != null ? Icon3DMaterial(s.IconColour, s.IconFx.Walls, s.IconStrength, template, materials) : null;
+                    var model3d = main && s.Has("icon") ? Models3D.Get(s.Icon) : null;
+                    Mesh? modelMesh = model3d != null ? Models3D.MeshOf(model3d) : null;
+                    if (modelMesh == null) model3d = null;
+                    string? modelMat = model3d != null ? ModelMaterial(s, model3d, false, template, materials, files) : null;
+                    // item copy: a small copy of the item's own shape
+                    Mesh? copyMesh = main && s.Copy ? Models3D.FromItem(game, Models3D.MiniSource(game, e, model), project.KeepOtherMods) : null;
+                    string? copyMat = copyMesh?.Texture != null ? CopyMaterial(s, copyMesh, template, materials, files)
+                                    : copyMesh != null ? ModelMaterial(s, Models3D.Self, true, template, materials, files) : null;
                     string? labelMat = null;
                     float labelRatio = 0;
-                    if (main && s.Label && !e.NoIcon)
+                    if (main && s.Label)
                     {
                         string text = s.LabelText.Trim().Length > 0 ? s.LabelText.Trim() : Icons.LabelText(e.Name);
                         if (s.LabelCategory) text = Icons.LabelText(cat.Name) + " · " + text;
@@ -78,11 +85,12 @@ public static class Builder
                     }
                     static PartMotion? M(PartFx x, bool flow = false) => x.Moves || x.HideAfter > 0
                         ? new PartMotion(x.Pulse, x.Rainbow, x.Spin, x.Bob, flow && x.Flow, x.HideAfter, x.HideAfter > 0 ? x.BlinkOff : 0) : null;
-                    var motion = s.Moves || s.Timed ? new Motion(M(s.GlowFx), M(s.BeamFx, !s.BeamArrow), M(s.IconFx), M(s.LabelFx)) : null;
-                    return new PatchOptions(glowFor, main ? beamMat : null, beamLength, s.BeamWidth, e.Harvestable, iconMat, s.IconSize, mask, icon3dMat,
-                                            s.BeamArrow, model3d != null ? Models3D.MeshOf(model3d) : null, modelMat,
+                    var motion = s.Moves || s.Timed ? new Motion(s.Glow ? M(s.GlowFx) : null, M(s.BeamFx, true), M(s.IconFx), M(s.LabelFx), M(s.ArrowFx), M(s.CopyFx)) : null;
+                    return new PatchOptions(glowFor, main ? beamMat : null, s.BeamLength, s.BeamWidth, e.Harvestable, iconMat, s.IconSize, mask, icon3dMat,
+                                            modelMesh, modelMat,
                                             labelMat, s.LabelSize * labelRatio, s.LabelSize, s.Invisible && e.CanHide,
-                                            motion, p => materials.TryGetValue(p, out var mb) ? Materials.BaseScale(mb) : 1f);
+                                            motion, p => materials.TryGetValue(p, out var mb) ? Materials.BaseScale(mb) : 1f,
+                                            s.Stack, main ? arrowMat : null, s.ArrowWidth, copyMesh, copyMat, s.CopySize, s.IconScale / 100f, s.CopyScale / 100f);
                 }
                 // invisible enemies: their shimmer's gradient in the glow colour (a game texture: into the texture archive)
                 if (e.Gradients != null && st.Glow)
@@ -111,7 +119,7 @@ public static class Builder
                         continue;
                     }
                     bool mainModel = own != null || beamModels == null || beamModels.Contains(model);
-                    var opts = Options(look, mainModel);
+                    var opts = Options(look, mainModel, model);
                     if (done.TryGetValue(path, out var by)) { log(Tf("  {0}: {1} is also selected as {2} - that look is used", e.Shown, model, by)); continue; }
                     // a hidden worn outfit: the bare body / hands go in its place (the outfit model is the body under it too)
                     var srcPath = path;
@@ -210,13 +218,40 @@ public static class Builder
                 files.Add((tex, Icons.Dds(bmp)));
                 ratios[tex] = ratio = bmp.Width / (float)bmp.Height;
             }
-        var c = Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor);
-        var path = $@"materials\itemfinder\label_{key}_{Key(Materials.Hex(c))}{(st.LabelFx.Walls ? "_x" : "")}.bgem";
-        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon(template, c, st.LabelFx.Walls, Icons.LabelMaterialTexture(key));
+        var c = Materials.Parse(st.LabelColour);
+        var path = $@"materials\itemfinder\label_{key}_{Key(Materials.Hex(c))}{(st.LabelFx.Walls ? "_x" : "")}{Pct(st.LabelStrength)}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon(template, c, st.LabelFx.Walls, Icons.LabelMaterialTexture(key), Top(st.LabelStrength));
         return (path, ratio);
     }
 
-    static bool ChangesModel(Style s) => s.Glow || s.Beam || s.Label || s.Invisible || Icons.Get(s.Icon) != null || Models3D.Get(s.Icon) != null;
+    /// <summary>Bright or Off look with X-ray (<see cref="Style.ShowsOwnXray"/>): a copy of the item's parts in their own
+    /// colours that shows through walls, colour scale <paramref name="scale"/>.</summary>
+    static GlowMat? XrayFor(GlowPart part, float scale, GameData game, byte[] template, Dictionary<string, byte[]> mats)
+    {
+        string tex = "";
+        byte? cut = null;
+        int at = part.Material.IndexOf(@"materials\", StringComparison.OrdinalIgnoreCase);
+        string key = at >= 0 ? part.Material[at..] : part.Material.Length > 0 ? @"materials\" + part.Material : "";
+        try
+        {
+            if (key.Length > 0 && game.Find(key) is { } entry)
+            {
+                var m = entry.Archive.ReadFile(entry);
+                tex = Materials.Diffuse(m);
+                if (m.Length > 0x2A && m[0x2A] != 0) cut = m[0x29]; // its own alpha test
+            }
+        }
+        catch { }
+        if (tex.Length == 0) tex = StripTextures(part.InlineTexture);
+        if (tex.Length == 0) return null;
+        if (part.Cutout && cut == null) cut = part.Threshold;
+        int k = (int)Math.Round(scale * 1000);
+        var path = $@"materials\itemfinder\xray3_{Ba2Hash.Crc(tex.ToLowerInvariant()):x8}_{k}{(cut is byte r ? "_c" + r : "")}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Xray(template, tex, cut, k / 1000f);
+        return new GlowMat(path, cut ?? -1); // its own additive alpha block, as the working glows
+    }
+
+    static bool ChangesModel(Style s) => s.ShowsOwnXray || s.Glow || s.Beam || s.Arrow || s.Copy || s.Label || s.Invisible || Icons.Get(s.Icon) != null || Models3D.Get(s.Icon) != null;
     static bool Shows(Style s) => ChangesModel(s) || s.Brighten;
 
     /// <summary>Brighter copies of the game materials a model uses, under the game's own paths. Always from the game's
@@ -369,22 +404,37 @@ public static class Builder
         var tex = Icons.TexturePath(icon.Id);
         if (!files.Any(f => f.Path == tex))
             using (var bmp = Icons.Draw(icon)) files.Add((tex, Icons.Dds(bmp)));
-        var c = Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor);
-        var path = $@"materials\itemfinder\icon_{icon.Id}_{Key(Materials.Hex(c))}{(st.IconFx.Walls ? "_x" : "")}.bgem";
-        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon(template, c, st.IconFx.Walls, Icons.MaterialTexture(icon.Id));
+        var c = Materials.Parse(st.IconColour);
+        var path = $@"materials\itemfinder\icon_{icon.Id}_{Key(Materials.Hex(c))}{(st.IconFx.Walls ? "_x" : "")}{Pct(st.IconStrength)}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon(template, c, st.IconFx.Walls, Icons.MaterialTexture(icon.Id), Top(st.IconStrength));
         return path;
     }
 
     /// <summary>A 3D model's texture (once per model) and a material per model and colour; models in their own colours
     /// get white (one material per model).</summary>
-    static string ModelMaterial(Style st, Model3D model, byte[] template, Dictionary<string, byte[]> mats, List<(string Path, byte[] Data)> files)
+    /// <summary>A textured item copy: its picture sheet (once per model) and a material per sheet, X-ray and strength.</summary>
+    static string CopyMaterial(Style st, Mesh copy, byte[] template, Dictionary<string, byte[]> mats, List<(string Path, byte[] Data)> files)
+    {
+        var tex = $@"textures\itemfinder\copy_{copy.Key}.dds";
+        if (!files.Any(f => f.Path == tex))
+            using (var bmp = Bitmaps.FromRgba(copy.Texture!, opaque: true)) files.Add((tex, Icons.Dds(bmp)));
+        bool walls = st.CopyFx.Walls;
+        var path = $@"materials\itemfinder\copy_{copy.Key}{(walls ? "_x" : "")}{Pct(st.CopyStrength)}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Model(template, Color.White, walls, $"itemfinder/copy_{copy.Key}.dds", Top(st.CopyStrength));
+        return path;
+    }
+
+    /// <param name="copy">The item copy layer (its own X-ray and strength), not the icon.</param>
+    static string ModelMaterial(Style st, Model3D model, bool copy, byte[] template, Dictionary<string, byte[]> mats, List<(string Path, byte[] Data)> files)
     {
         var tex = Models3D.TexturePath(model);
         if (!files.Any(f => f.Path == tex)) files.Add((tex, Models3D.Dds(model)));
-        var c = model.Tinted ? Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor) : Color.White;
+        var c = model.Tinted ? Materials.Parse(st.IconColour) : Color.White;
+        bool walls = copy ? st.CopyFx.Walls : st.IconFx.Walls;
+        int pct = copy ? st.CopyStrength : st.IconStrength;
         string id = model.Id[Models3D.Prefix.Length..];
-        var path = $@"materials\itemfinder\model_{id}{(model.Tinted ? "_" + Key(Materials.Hex(c)) : "")}{(st.IconFx.Walls ? "_x" : "")}.bgem";
-        if (!mats.ContainsKey(path)) mats[path] = Materials.Model(template, c, st.IconFx.Walls, Models3D.MaterialTexture(model));
+        var path = $@"materials\itemfinder\model_{id}{(model.Tinted ? "_" + Key(Materials.Hex(c)) : "")}{(walls ? "_x" : "")}{Pct(pct)}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Model(template, c, walls, Models3D.MaterialTexture(model), Top(pct));
         return path;
     }
 
@@ -414,11 +464,16 @@ public static class Builder
         return new Rgba(w, h, px);
     }
 
-    static string Icon3DMaterial(Style st, byte[] template, Dictionary<string, byte[]> mats)
+    /// <summary>The icon / mini item / name strength (1 = 100 %, as before) and its material-name suffix.</summary>
+    static float Top(int pct) => Math.Clamp(pct, 10, 300) / 100f;
+    static string Pct(int pct) => pct == 100 ? "" : "_s" + Math.Clamp(pct, 10, 300);
+
+    /// <summary>The solid 3D icon's or the arrow's material (shaded by vertex colours).</summary>
+    static string Icon3DMaterial(string colour, bool walls, int pct, byte[] template, Dictionary<string, byte[]> mats)
     {
-        var c = Materials.Parse(st.Beam ? st.BeamColor : st.GlowColor);
-        var path = $@"materials\itemfinder\icon3d_{Key(Materials.Hex(c))}{(st.IconFx.Walls ? "_x" : "")}.bgem";
-        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon3D(template, c, st.IconFx.Walls);
+        var c = Materials.Parse(colour);
+        var path = $@"materials\itemfinder\icon3d_{Key(Materials.Hex(c))}{(walls ? "_x" : "")}{Pct(pct)}.bgem";
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Icon3D(template, c, walls, Top(pct));
         return path;
     }
 
@@ -428,7 +483,7 @@ public static class Builder
     {
         var c = Materials.Parse(st.BeamColor);
         // flowing beam: one band per 2 m of beam
-        int tiles = st.BeamFx.Flow && !st.BeamArrow ? Math.Max(1, (int)Math.Round(st.BeamLength / 140f)) : 0;
+        int tiles = st.BeamFx.Flow ?Math.Max(1, (int)Math.Round(st.BeamLength / 140f)) : 0;
         var path = $@"materials\itemfinder\beam_{Key(Materials.Hex(c))}_{st.BeamStrength}{(st.BeamFx.Walls ? "_x" : "")}{(tiles > 0 ? $"_flow{tiles}" : "")}.bgem";
         if (tiles > 0 && !files.Any(f => f.Path == FlowTexture))
             using (var bmp = Materials.FlowTexture()) files.Add((FlowTexture, Icons.Dds(bmp)));

@@ -566,6 +566,7 @@
 "Stand other selected items beside it, each in its own look": "Placer d'autres objets sélectionnés à côté, chacun avec son style",
 "Start empty...": "Partir de zéro...",
 "Start with the category": "Partir de la catégorie",
+"Text above it too": "Texte au-dessus aussi",
 "Started empty.": "Parti de zéro.",
 "Stash boxes": "Coffres de stockage",
 "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.": "Coffres de stockage et caisses de soins, de munitions et de recyclage Fallout 1st dans les C.A.M.P., chaque modèle. Le coffre de chaque joueur s'illumine, pas seulement le vôtre.",
@@ -971,5 +972,18 @@
 "selected": "sélectionné",
 "snowflake pant suits": "combinaisons flocon",
 "the Atlantic City gift-box clue lights up too": "l'indice de la boîte-cadeau d'Atlantic City s'illumine aussi",
-"unselected": "désélectionné"
+"unselected": "désélectionné",
+"Gift box": "Boîte cadeau",
+"Hiding Cappy": "Cappy caché",
+"Spin the Wheel": "La roue de la fortune",
+"Spin the Wheel: the hiding Cappy to find.": "La roue de la fortune : le Cappy caché à trouver.",
+"The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included).": "Les Saltimbanques des expéditions d'Atlantic City, repérés par les tenues qu'ils portent. Quiconque porte les mêmes tenues brille aussi (joueurs compris).",
+"anyone wearing this outfit glows too": "quiconque porte cette tenue brille aussi",
+"the same entries as under ENEMIES > Showmen": "les mêmes entrées que sous ENNEMIS > Saltimbanques",
+"{0} models - anyone wearing this outfit glows too": "{0} modèles - quiconque porte cette tenue brille aussi",
+"{0} outfits - the same entries as under ENEMIES > Showmen": "{0} tenues - les mêmes entrées que sous ENNEMIS > Saltimbanques",
+"Item copy": "Copie de l'objet",
+"Item copy: a copy of the item itself, in its own colours.": "Copie de l'objet : une copie de l'objet lui-même, dans ses propres couleurs.",
+"Same as the beam ·": "Comme le faisceau ·",
+"same as the beam": "comme le faisceau"
 }

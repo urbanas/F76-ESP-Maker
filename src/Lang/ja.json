@@ -566,6 +566,7 @@
 "Stand other selected items beside it, each in its own look": "選択した他のアイテムをそれぞれの見た目で横に並べる",
 "Start empty...": "空の状態から始める...",
 "Start with the category": "カテゴリーから始める",
+"Text above it too": "上にテキストも表示",
 "Started empty.": "空の状態から始めました。",
 "Stash boxes": "収納箱",
 "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.": "C.A.M.P. の収納箱と Fallout 1st のエイド・弾薬・スクラップボックス、すべてのデザイン。あなたのものだけでなく全プレイヤーの箱が光ります。",
@@ -969,5 +970,18 @@
 "selected": "選択",
 "snowflake pant suits": "雪の結晶のパンツスーツ",
 "the Atlantic City gift-box clue lights up too": "アトランティックシティのギフトボックスの手がかりも光ります",
-"unselected": "選択解除"
+"unselected": "選択解除",
+"Gift box": "ギフトボックス",
+"Hiding Cappy": "隠れているキャッピー",
+"Spin the Wheel": "スピン・ザ・ホイール",
+"Spin the Wheel: the hiding Cappy to find.": "スピン・ザ・ホイール：探すべき隠れたキャッピー。",
+"The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included).": "アトランティック・シティ遠征のショーマン。着ている衣服で見つけます。同じ衣服を着ている人も光ります（プレイヤーを含む）。",
+"anyone wearing this outfit glows too": "この衣服を着ている人も光ります",
+"the same entries as under ENEMIES > Showmen": "敵 > ショーマン と同じ項目",
+"{0} models - anyone wearing this outfit glows too": "{0} 個のモデル - この衣服を着ている人も光ります",
+"{0} outfits - the same entries as under ENEMIES > Showmen": "{0} 種類の衣服 - 敵 > ショーマン と同じ項目",
+"Item copy": "アイテムのコピー",
+"Item copy: a copy of the item itself, in its own colours.": "アイテムのコピー：アイテム自体のコピー（本来の色で表示）。",
+"Same as the beam ·": "ビームと同じ ·",
+"same as the beam": "ビームと同じ"
 }

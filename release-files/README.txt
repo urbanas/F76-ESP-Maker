@@ -1,11 +1,11 @@
-ESP Maker 2.3 - make your own ESP mod for Fallout 76
+ESP Maker 2.4 - make your own ESP mod for Fallout 76
 ==================================================
 
 ESP Maker lets you pick what you want to spot in Fallout 76 - bobbleheads, magazines, plans,
 XP food, pre-war food, notes, plants, loot, loot bags, CAMP storage boxes, clothes, event objects, players' vending machines,
 workbenches, legendary enemies, any kind of creature - and how it should
-look: an outline glow (also through walls), a beam into the sky, a flat icon or a little 3D model
-above it, or simply brighter colours. It then builds the mod (.ba2) for you and installs it.
+look: an outline glow (also through walls), a beam into the sky, an arrow, a flat icon or a little
+3D model, a copy of the item or its name above it, or simply brighter colours. It then builds the mod (.ba2) for you and installs it.
 
 Everything is client-side and visual only: the app writes a normal .ba2 mod and lists it in your
 custom ini, like any other Fallout 76 mod.
@@ -35,13 +35,17 @@ HOW TO USE
    category or item). Select what you want to find.
 2. Click the category to choose its look in the pop-up. Click an item for its own look. The
    pop-up stays open and follows the row you pick; drag it anywhere, drag its edges to resize.
-   Start from a preset (Glow only / Glow + beam / Glow + beam + name), then set the three parts:
-   1 The item (Outline / Fill / Bright glow, colour, strength, or Invisible), 2 Beam / Arrow,
-   3 Icon / Text. Each part has its own effects: X-ray (seen through walls), Pulse, Rainbow,
-   Spin, Bob, Light runs up (beam), and Hide after (it shrinks away after a while).
+   Start from a preset (Glow only / Glow + beam / Glow + beam + name). The bottom row is the item
+   itself (Outline / Fill / Bright glow, colour, strength, or Off / Invisible). "+ Add on top"
+   stacks layers above it: Beam, Arrow, Icon (picture or 3D model), Item copy, Text - in any
+   order; drag a row to move it. Click a row for its settings: colour, strength, size and
+   effects - X-ray (seen through walls), Pulse, Rainbow, Spin, Bob, Light runs up (beam), and
+   Hide after (it shrinks away after a while). On creatures, Spin, Bob and Hide after can't work
+   (greyed out) and text faces the way the creature faces.
    The 3D preview shows the real model the way the mod will show it: turn, zoom, walk around it
-   (WASD), "View options" adds a person, a house, a wall behind or a shed around it, changes the
-   light, shows colour-blind views and compares other selected items side by side.
+   (WASD). The icons on the right of the picture add a person, a house, a wall behind, a shed
+   around it, junk or other selected items to compare; "View options" changes the camera, the
+   light and shows colour-blind views.
    "Show the look" off shows the plain game model (preview only). The preview plays the
    effects too: Pulse, Rainbow, Spin, Bob, Light runs up and Hide after.
 3. Close the game, click "Build & save", type a name for your mod, click Build, start the game.
@@ -57,8 +61,8 @@ change the same files, delete a mod. Your ini is backed up before saving.
 Edit -> "Colour by priority..." colours your picks by how much they matter (white rare, gold worth
 a detour, green useful, red junk).
 
-Edit -> "Add presets...": Enemies, Legendary enemies, Bobbleheads, Magazines, Plans, the Slasher
-event, XP buffs, Player vendors and Bright plants in one click.
+Edit -> "Add presets...": Enemies, Legendary enemies, Bobbleheads, Magazines, Plans, XP buffs,
+Player vendors and Bright plants in one click.
 Several mods: each name you build under is its own .ba2 - e.g. one for enemies, one for
 collectibles - and they work side by side. The bottom of the window lists your mods in the game.
 "Import .ba2..." opens a mod so you can change it, yours or someone else's. With something already

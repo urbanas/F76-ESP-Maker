@@ -1,6 +1,40 @@
 ESP Maker - changes
 ===================
 
+2.4
+New: layers
+- The look window is now a stack of layers. Start from a preset, then "+ Add on top": Beam,
+  Arrow, Icon (picture or 3D model), Item copy and Text - each one once, in any order. The top of
+  the list is the highest above the item. Drag a row (or Alt+Up / Alt+Down) to move it; a bar
+  shows where it will land. Click a row for its settings: each layer has its own colour,
+  strength, X-ray and effects.
+- Item copy: a copy of the item's own shape, in its own colours, floating above it.
+- Icon, 3D model and item copy sizes follow the item's size (S / M / L = 50 / 100 / 200 % of it),
+  so 100 % on a bobblehead is small and on a brahmin big.
+- Icon / Text: Strength (more see-through or brighter) and Size.
+New: X-ray
+- X-ray for Bright glow: a Bright item can now also be seen through walls. Its strength follows
+  the Shine strength.
+- X-ray with the item look Off: only a see-through copy of the item shows through walls, with
+  its own strength.
+New
+- Text above creatures: a fixed sign that faces the way the creature faces (the game can't turn
+  it towards you on animated models).
+- 3D view: the scene options (person, house, wall behind, shed, junk, compare) are icons down the
+  right edge of the picture, lit while on - so you always see that the wall is there.
+Changed
+- On creatures and worn outfits, Spin, Bob and Hide after are greyed out - hover for why (the
+  game can't move or time anything added to them).
+- The 3D preview shows the icon, text, 3D model and item copy strength like the game does.
+- "+ Add on top" menu with a picture and a line about each layer.
+- The Slasher event preset is gone (the event is over); the presets window follows dark mode.
+- The tour pictures and texts show the new look window.
+Fixed
+- Brahmin listed its hats as parts; Eyebot listed the camera drone, Vertibot the parked
+  vertibird, and Scorched: everyday clothes a power armour helmet (every player in power armour
+  would have glowed).
+- Clicking a part inside an item (e.g. one of the two brahmin types) now opens its own look.
+
 2.3
 New: languages
 - The app now speaks all 13 of the game's languages: English, Deutsch, Français, Italiano,

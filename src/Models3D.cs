@@ -12,6 +12,10 @@ public sealed class Mesh
 {
     public readonly List<MVert> V = new();
     public readonly List<(int, int, int)> T = new();
+    /// <summary>Its own picture (an item copy's sheet of the item's textures); null = the model's texture.</summary>
+    public Rgba? Texture;
+    /// <summary>Names that picture in the mod's files (item copies: a hash of the model path).</summary>
+    public string Key = "";
 }
 
 /// <summary>A 3D model icon: real geometry with its own texture, like the Spooky Scorched Beacons pumpkin.</summary>
@@ -60,9 +64,244 @@ public static class Models3D
         new("model:slime", "Slime", true, Slime, SlimeTexture),
         new("model:ramen", "Ramen", false, Ramen, RamenTexture),
         new("model:lava", "Lava block", false, LavaBlock, LavaTexture, Shade: false),
+        // holidays
+        new("model:gift", "Gift box", false, GiftBox, GiftTexture),
     };
 
-    public static Model3D? Get(string id) => id.StartsWith(Prefix) ? All.FirstOrDefault(m => m.Id == id) : null;
+    /// <summary>"Item copy": a small copy of the item's own shape in its own colours (vertex colours baked from its
+    /// textures; user, 2026-11-15 - was the look's colour). Not in the picker (Icon / Text / Mini item / Off in the
+    /// look); its own mesh is a cube, only for tiles - builds and the preview use <see cref="FromItem"/>.</summary>
+    public static readonly Model3D Self = new("model:self", "Item copy", false, LavaBlock, White);
+
+    public static Model3D? Get(string id) => id == Self.Id ? Self : id.StartsWith(Prefix) ? All.FirstOrDefault(m => m.Id == id) : null;
+
+    /// <summary>The model a mini copy is made of: the model carrying it - for a creature the biggest body model (its
+    /// beam may sit on an effect or a head).</summary>
+    public static string MiniSource(GameData game, Entry e, string model)
+    {
+        if (!e.NoIcon || e.Worn || e.Models.Count < 2) return model;
+        return e.Models.Where(m => !m.Contains("fx", StringComparison.OrdinalIgnoreCase))
+                       .OrderByDescending(m => game.Find(@"meshes\" + m)?.Size ?? 0).FirstOrDefault() ?? model;
+    }
+
+    /// <summary>At most this many triangles in a mini copy (bigger models are simplified).</summary>
+    const int MiniTriangles = 4000;
+    static readonly Dictionary<string, Mesh?> minis = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The mini copy of a game model: its drawn parts (animated ones in their rest pose, as the preview shows
+    /// them), standing on z = 0, centred, 2 units across its biggest side, simplified to <see cref="MiniTriangles"/>,
+    /// smooth-shaded white (tinted by the material). Null when the model has nothing to copy.</summary>
+    public static Mesh? FromItem(GameData game, string model, bool keepOtherMods)
+    {
+        string key = model + (keepOtherMods ? "|k" : "");
+        lock (minis) if (minis.TryGetValue(key, out var hit)) return hit;
+        Mesh? mesh = null;
+        try
+        {
+            var scene = ModelPreview.LoadShape(game, model, keepOtherMods);
+            var parts = scene.Parts.Where(p => p.Kind is PartKind.Solid or PartKind.Blend).ToList();
+            // sharp copy (user, 2026-11-15: vertex colours were blurry): the parts' own textures in one picture sheet, the
+            // corners keep their texture places - so no simplifying; bigger models keep the vertex colours
+            int triCount = parts.Sum(p => p.Tri.Length / 3);
+            var sheet = triCount <= TexturedTriangles ? Sheet(parts) : null;
+            var pts = new List<Vector3>();
+            var given = new List<Vector3>();
+            var cols = new List<Vector3>();
+            var uvs = sheet != null ? new List<(float U, float V)>() : null;
+            var tris = new List<(int, int, int)>();
+            foreach (var p in parts)
+            {
+                int b0 = pts.Count;
+                var place = sheet?.Places.GetValueOrDefault(p);
+                for (int i = 0; i + 2 < p.P.Length; i += 3)
+                {
+                    pts.Add(new(p.P[i], p.P[i + 1], p.P[i + 2]));
+                    given.Add(p.N != null && i + 2 < p.N.Length ? new(p.N[i], p.N[i + 1], p.N[i + 2]) : Vector3.Zero);
+                    int v = i / 3;
+                    if (sheet == null) { cols.Add(ColourAt(p, v)); continue; }
+                    if (place is var (x0, y0, w))
+                    {
+                        // its texture on the sheet; the colour is only the vertex colour (the texture brings the rest)
+                        cols.Add(p.Col != null && v * 4 + 2 < p.Col.Length ? new Vector3(p.Col[v * 4], p.Col[v * 4 + 1], p.Col[v * 4 + 2]) / 255f : Vector3.One);
+                        float u = Math.Clamp(p.Uv![v * 2], 0, 1), t = Math.Clamp(p.Uv[v * 2 + 1], 0, 1);
+                        uvs!.Add((x0 + u * w, y0 + t * w));
+                    }
+                    else
+                    {
+                        cols.Add(ColourAt(p, v)); // no texture of its own on the sheet: the white patch, its colour in the vertex
+                        uvs!.Add(sheet.White);
+                    }
+                }
+                for (int t = 0; t + 2 < p.Tri.Length; t += 3)
+                {
+                    var (a, b, c) = (b0 + p.Tri[t], b0 + p.Tri[t + 1], b0 + p.Tri[t + 2]);
+                    if (a >= pts.Count || b >= pts.Count || c >= pts.Count) continue;
+                    // a plant's buried half stays underground
+                    if (!float.IsNaN(scene.Ground) && pts[a].Z < scene.Ground && pts[b].Z < scene.Ground && pts[c].Z < scene.Ground) continue;
+                    tris.Add((a, b, c));
+                }
+            }
+            if (tris.Count > 0) mesh = Shrink(pts, given, cols, tris, uvs);
+            if (mesh != null && sheet != null)
+            {
+                mesh.Texture = sheet.Picture;
+                mesh.Key = $"{Ba2Hash.Crc(key.ToLowerInvariant()):x8}";
+            }
+        }
+        catch (Exception) { }
+        lock (minis) minis[key] = mesh;
+        return mesh;
+    }
+
+    /// <summary>A vertex's own colour (0..1): its texture at its texture position (3x3 average against noise) times
+    /// its vertex colour; light grey without a texture.</summary>
+    static Vector3 ColourAt(PreviewPart p, int v)
+    {
+        var c = new Vector3(0.75f);
+        if (p.Tex is { Width: > 0, Height: > 0 } t && p.Uv != null && v * 2 + 1 < p.Uv.Length)
+        {
+            float u = p.Uv[v * 2] - MathF.Floor(p.Uv[v * 2]), w = p.Uv[v * 2 + 1] - MathF.Floor(p.Uv[v * 2 + 1]);
+            int cx = (int)(u * t.Width), cy = (int)(w * t.Height);
+            var sum = Vector3.Zero;
+            int step = Math.Max(1, t.Width / 128);
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int x = ((cx + dx * step) % t.Width + t.Width) % t.Width, y = ((cy + dy * step) % t.Height + t.Height) % t.Height;
+                    int o = (y * t.Width + x) * 4;
+                    sum += new Vector3(t.Pixels[o], t.Pixels[o + 1], t.Pixels[o + 2]);
+                }
+            c = sum / (9 * 255f);
+        }
+        if (p.Col != null && v * 4 + 2 < p.Col.Length)
+            c *= new Vector3(p.Col[v * 4], p.Col[v * 4 + 1], p.Col[v * 4 + 2]) / 255f;
+        return c;
+    }
+
+    /// <summary>A textured copy keeps every corner up to this many triangles (above: simplified, vertex colours).</summary>
+    const int TexturedTriangles = 20000;
+
+    /// <summary>An item copy's picture: the parts' textures side by side (256 px each, one texture 512 px), plus a white
+    /// patch for parts whose texture repeats (places outside 0..1) or that have none. Places are in sheet units (0..1).</summary>
+    sealed record CopySheet(Rgba Picture, Dictionary<PreviewPart, (float X, float Y, float W)> Places, (float U, float V) White);
+
+    static CopySheet? Sheet(List<PreviewPart> parts)
+    {
+        static bool Fits(PreviewPart p) => p.Tex is { Width: > 0, Height: > 0 } && p.Uv != null && p.Uv.Length >= p.P.Length / 3 * 2
+                                           && p.Uv.All(u => u > -0.01f && u < 1.01f);
+        var texs = parts.Where(Fits).Select(p => p.Tex!).Distinct(ReferenceEqualityComparer.Instance).Cast<Rgba>().ToList();
+        if (texs.Count == 0) return null; // nothing to show sharper
+        bool white = parts.Any(p => !Fits(p));
+        int n = texs.Count + (white ? 1 : 0);
+        if (n > 16) return null;
+        int cols = n == 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
+        int tile = n == 1 ? 512 : 256, size = cols * tile, pad = 2;
+        var px = new byte[size * size * 4];
+        var at = new Dictionary<Rgba, (float, float, float)>(ReferenceEqualityComparer.Instance);
+        for (int i = 0; i < n; i++)
+        {
+            int x0 = i % cols * tile, y0 = i / cols * tile;
+            if (i < texs.Count)
+            {
+                var t = texs[i];
+                // box average of the source pixels under each sheet pixel (textures are bigger than their tile)
+                for (int y = 0; y < tile; y++)
+                    for (int x = 0; x < tile; x++)
+                    {
+                        int sx0 = x * t.Width / tile, sx1 = Math.Max(sx0 + 1, (x + 1) * t.Width / tile);
+                        int sy0 = y * t.Height / tile, sy1 = Math.Max(sy0 + 1, (y + 1) * t.Height / tile);
+                        int r = 0, g = 0, b = 0, c = 0;
+                        for (int sy = sy0; sy < sy1; sy += Math.Max(1, (sy1 - sy0) / 4))
+                            for (int sx = sx0; sx < sx1; sx += Math.Max(1, (sx1 - sx0) / 4))
+                            {
+                                int o = (sy * t.Width + sx) * 4;
+                                r += t.Pixels[o]; g += t.Pixels[o + 1]; b += t.Pixels[o + 2]; c++;
+                            }
+                        int d = ((y0 + y) * size + x0 + x) * 4;
+                        px[d] = (byte)(r / c); px[d + 1] = (byte)(g / c); px[d + 2] = (byte)(b / c); px[d + 3] = 255;
+                    }
+                // the texture's own picture inside a 2 px border (no bleeding from the next tile when shrunk)
+                at[t] = ((x0 + pad) / (float)size, (y0 + pad) / (float)size, (tile - 2 * pad) / (float)size);
+            }
+            else
+                for (int y = 0; y < tile; y++)
+                    for (int x = 0; x < tile; x++) Array.Fill(px, (byte)255, ((y0 + y) * size + x0 + x) * 4, 4);
+        }
+        var places = parts.Where(Fits).ToDictionary(p => p, p => at[p.Tex!]);
+        int wi = texs.Count;
+        var whiteAt = ((wi % cols * tile + tile / 2f) / size, (wi / cols * tile + tile / 2f) / size);
+        return new CopySheet(new Rgba(size, size, px), places, white ? whiteAt : (0, 0));
+    }
+
+    /// <param name="uvs">Texture places (a textured copy): no simplifying, the corners keep them.</param>
+    static Mesh? Shrink(List<Vector3> pts, List<Vector3> given, List<Vector3> cols, List<(int A, int B, int C)> tris, List<(float U, float V)>? uvs = null)
+    {
+        var used = tris.SelectMany(t => new[] { t.A, t.B, t.C }).Distinct().Select(i => pts[i]).ToList();
+        var min = used.Aggregate(Vector3.Min);
+        var max = used.Aggregate(Vector3.Max);
+        var size = max - min;
+        float big = Math.Max(size.X, Math.Max(size.Y, size.Z));
+        if (!(big > 1e-4f)) return null;
+        float k = 2 / big;
+        var centre = new Vector3((min.X + max.X) / 2, (min.Y + max.Y) / 2, min.Z);
+        var p = pts.Select(v => (v - centre) * k).ToList();
+        // the winding: do the faces point the way the model's own normals do? (else they are turned round)
+        float agree = 0;
+        foreach (var (a, b, c) in tris)
+            agree += Vector3.Dot(Vector3.Cross(p[b] - p[a], p[c] - p[a]), given[a] + given[b] + given[c]);
+        bool flip = agree < 0;
+        // simplify: merge the corners in a grid until few enough triangles are left (vertex clustering)
+        var outTris = tris;
+        var outPts = p;
+        var outCols = cols;
+        for (int res = 160; uvs == null && outTris.Count > MiniTriangles && res >= 8; res = res * 3 / 4)
+        {
+            var cell = new Dictionary<(int, int, int), int>();
+            var sum = new List<Vector3>();
+            var csum = new List<Vector3>();
+            var count = new List<int>();
+            var map = new int[p.Count];
+            float step = 2f / res;
+            for (int i = 0; i < p.Count; i++)
+            {
+                var g = ((int)MathF.Floor(p[i].X / step), (int)MathF.Floor(p[i].Y / step), (int)MathF.Floor(p[i].Z / step));
+                if (!cell.TryGetValue(g, out int n)) { cell[g] = n = sum.Count; sum.Add(Vector3.Zero); csum.Add(Vector3.Zero); count.Add(0); }
+                sum[n] += p[i]; csum[n] += cols[i]; count[n]++;
+                map[i] = n;
+            }
+            outCols = csum.Select((s, i) => s / count[i]).ToList();
+            var seen = new HashSet<(int, int, int)>();
+            var nt = new List<(int A, int B, int C)>();
+            foreach (var (a, b, c) in tris)
+            {
+                var t = (map[a], map[b], map[c]);
+                if (t.Item1 == t.Item2 || t.Item2 == t.Item3 || t.Item1 == t.Item3) continue;
+                if (seen.Add(t)) nt.Add(t);
+            }
+            outTris = nt;
+            outPts = sum.Select((s, i) => s / count[i]).ToList();
+        }
+        if (outPts.Count > 65000) return null;
+        // smooth normals from the faces (weighted by area), shaded like the other models (lit from above-front)
+        var normals = new Vector3[outPts.Count];
+        foreach (var (a, b, c) in outTris)
+        {
+            var fn = Vector3.Cross(outPts[b] - outPts[a], outPts[c] - outPts[a]);
+            if (flip) fn = -fn;
+            normals[a] += fn; normals[b] += fn; normals[c] += fn;
+        }
+        var mesh = new Mesh();
+        for (int i = 0; i < outPts.Count; i++)
+        {
+            var n = normals[i].LengthSquared() > 1e-12f ? Vector3.Normalize(normals[i]) : Vector3.UnitZ;
+            float s = 0.58f + 0.42f * Math.Max(0, Vector3.Dot(n, Light)) + 0.12f * Math.Max(0, n.Z);
+            var c = Vector3.Clamp(outCols[i] * s * 255, Vector3.Zero, new Vector3(255));
+            var (u, v) = uvs != null ? uvs[i] : (0.5f, 0.5f);
+            mesh.V.Add(new MVert(outPts[i], n, u, v, Color.FromArgb(255, (int)c.X, (int)c.Y, (int)c.Z)));
+        }
+        mesh.T.AddRange(outTris);
+        return mesh;
+    }
 
     static readonly Dictionary<string, Mesh> meshes = new();
 
@@ -1453,5 +1692,58 @@ public static class Models3D
         foreach (var (x, y) in new[] { (0.55f, 0.25f), (0.62f, 0.3f), (0.5f, 0.6f), (0.7f, 0.55f), (0.3f, 0.65f), (0.4f, 0.72f), (0.66f, 0.7f) })
             g.FillEllipse(green, n * x, n * y, n * 0.035f, n * 0.035f);
         PlainBand(g, n, Color.White);
+    });
+
+    /// <summary>A wrapped present: red box with a wider lid, gold ribbon on every side (texture: left half = a side with
+    /// one band, right half = the top with the cross) and a gold bow of two loops and a knot on top.</summary>
+    static Mesh GiftBox()
+    {
+        var m = new Mesh();
+        void Face(Vector3 c, Vector3 right, Vector3 up, float u0)
+        {
+            var n = Vector3.Normalize(Vector3.Cross(right, up));
+            int b0 = m.V.Count;
+            m.V.Add(new MVert(c - right - up, n, u0, 0.92f, Color.White));
+            m.V.Add(new MVert(c + right - up, n, u0 + 0.5f, 0.92f, Color.White));
+            m.V.Add(new MVert(c + right + up, n, u0 + 0.5f, 0, Color.White));
+            m.V.Add(new MVert(c - right + up, n, u0, 0, Color.White));
+            m.T.Add((b0, b0 + 1, b0 + 2)); m.T.Add((b0, b0 + 2, b0 + 3));
+        }
+        void Box(float w, float z0, float z1)
+        {
+            float h = (z1 - z0) / 2;
+            Vector3 X = new(w, 0, 0), Y = new(0, w, 0), Z = new(0, 0, h), C = new(0, 0, z0 + h);
+            Face(C - Y, X, Z, 0); Face(C + Y, -X, Z, 0); Face(C + X, Y, Z, 0); Face(C - X, -Y, Z, 0);
+            Face(C - Z, X, -Y, 0.5f); Face(C + Z, X, Y, 0.5f);
+        }
+        Box(0.72f, 0, 1.12f);
+        Box(0.8f, 1.1f, 1.38f);   // the lid
+        Color gold = Color.FromArgb(240, 196, 60);
+        foreach (int s in new[] { -1, 1 })
+        {
+            var q = Quaternion.CreateFromAxisAngle(Vector3.UnitY, s * 0.55f) * Quaternion.CreateFromAxisAngle(Vector3.UnitX, MathF.PI / 2);
+            Torus(m, new Vector3(s * 0.31f, 0, 1.63f), q, 0.28f, 0.075f, gold, 10, 32);
+        }
+        Grid(m, 10, 20, Ellipsoid(new Vector3(0, 0, 1.43f), 0.15f, 0.12f, 0.12f), (p, a, b) => (0.5f, PlainV), Paint(gold));
+        return m;
+    }
+
+    static Bitmap GiftTexture() => Canvas(256, Color.FromArgb(196, 28, 40), (g, n) =>
+    {
+        using (var dot = new SolidBrush(Color.FromArgb(226, 64, 76)))
+            for (int y = 0; y < 8; y++)
+                for (int x = 0; x < 8; x++)
+                    if ((x + y) % 2 == 0) g.FillEllipse(dot, n * (x + 0.35f) / 8, n * (y + 0.35f) / 8 * 0.92f, n * 0.035f, n * 0.035f);
+        using var gold = new SolidBrush(Color.FromArgb(240, 196, 60));
+        using var edge = new SolidBrush(Color.FromArgb(196, 146, 28));
+        float b = n * 0.09f, mid = n * 0.46f;
+        // side: one upright band in the left half; top: the cross in the right half
+        g.FillRectangle(edge, n * 0.25f - b / 2 - 2, 0, b + 4, n);
+        g.FillRectangle(edge, n * 0.75f - b / 2 - 2, 0, b + 4, n);
+        g.FillRectangle(edge, n * 0.5f, mid - b / 2 - 2, n * 0.5f, b + 4);
+        g.FillRectangle(gold, n * 0.25f - b / 2, 0, b, n);
+        g.FillRectangle(gold, n * 0.75f - b / 2, 0, b, n);
+        g.FillRectangle(gold, n * 0.5f, mid - b / 2, n * 0.5f, b);
+        PlainBand(g, n, Color.White);   // the bow's plain spot (vertex colour gold)
     });
 }

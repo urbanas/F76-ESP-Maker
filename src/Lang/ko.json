@@ -566,6 +566,7 @@
 "Stand other selected items beside it, each in its own look": "선택한 다른 아이템을 각자 모양으로 옆에 세우기",
 "Start empty...": "빈 상태로 시작...",
 "Start with the category": "카테고리로 시작",
+"Text above it too": "위에 텍스트도 표시",
 "Started empty.": "빈 상태로 시작했습니다.",
 "Stash boxes": "보관함",
 "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.": "C.A.M.P.의 보관함과 Fallout 1st 구급품·탄약·고철 상자, 모든 디자인. 내 것만이 아니라 모든 플레이어의 상자가 빛납니다.",
@@ -969,5 +970,18 @@
 "selected": "선택됨",
 "snowflake pant suits": "눈송이 바지 정장",
 "the Atlantic City gift-box clue lights up too": "애틀랜틱 시티 선물 상자 단서도 빛남",
-"unselected": "선택 해제됨"
+"unselected": "선택 해제됨",
+"Gift box": "선물 상자",
+"Hiding Cappy": "숨은 뚜껑이",
+"Spin the Wheel": "스핀 더 휠",
+"Spin the Wheel: the hiding Cappy to find.": "스핀 더 휠: 찾아야 할 숨은 뚜껑이.",
+"The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included).": "애틀랜틱시티 원정의 쇼맨. 입고 있는 복장으로 찾습니다. 같은 복장을 입은 누구나 빛남 (플레이어 포함).",
+"anyone wearing this outfit glows too": "이 복장을 입은 누구나 빛남",
+"the same entries as under ENEMIES > Showmen": "적 > 쇼맨과 같은 항목",
+"{0} models - anyone wearing this outfit glows too": "모델 {0}개 - 이 복장을 입은 누구나 빛남",
+"{0} outfits - the same entries as under ENEMIES > Showmen": "복장 {0}개 - 적 > 쇼맨과 같은 항목",
+"Item copy": "아이템 사본",
+"Item copy: a copy of the item itself, in its own colours.": "아이템 사본: 아이템 자체의 사본(원래 색상으로 표시).",
+"Same as the beam ·": "빔과 같음 ·",
+"same as the beam": "빔과 같음"
 }

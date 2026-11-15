@@ -566,6 +566,7 @@
 "Stand other selected items beside it, each in its own look": "把其他已選物品放在旁邊，各用自己的外觀",
 "Start empty...": "從空白開始...",
 "Start with the category": "從分類開始",
+"Text above it too": "上方也顯示文字",
 "Started empty.": "已從空白開始。",
 "Stash boxes": "儲物箱",
 "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.": "C.A.M.P. 中的儲物箱以及 Fallout 1st 的輔助、彈藥和廢料箱，所有設計。每個玩家的箱子都會發光，不只是你的。",
@@ -969,5 +970,18 @@
 "selected": "已選中",
 "snowflake pant suits": "雪花連身裤裝",
 "the Atlantic City gift-box clue lights up too": "大西洋城禮盒線索也會發光",
-"unselected": "已取消選中"
+"unselected": "已取消選中",
+"Gift box": "禮盒",
+"Hiding Cappy": "躲藏的阿蓋",
+"Spin the Wheel": "轉動輪盤",
+"Spin the Wheel: the hiding Cappy to find.": "轉動輪盤：要找到的躲藏的阿蓋。",
+"The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included).": "大西洋城遠征的演艺人，通過他們穿的服裝來找到。穿著同樣服裝的任何人也會發光（包括玩家）。",
+"anyone wearing this outfit glows too": "穿著這套服裝的任何人也會發光",
+"the same entries as under ENEMIES > Showmen": "與 敵人 > 演艺人 中的條目相同",
+"{0} models - anyone wearing this outfit glows too": "{0} 個模型 - 穿著這套服裝的任何人也會發光",
+"{0} outfits - the same entries as under ENEMIES > Showmen": "{0} 套服裝 - 與 敵人 > 演艺人 中的條目相同",
+"Item copy": "物品副本",
+"Item copy: a copy of the item itself, in its own colours.": "物品副本：物品本身的副本，使用其原本的顏色。",
+"Same as the beam ·": "與光柱相同 ·",
+"same as the beam": "與光柱相同"
 }

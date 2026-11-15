@@ -138,6 +138,10 @@ public static class EventCatalog
              new Pick("Loot dispensers", new[] { @"setdressing\guntherswildwestshowprops\gwws_ticketmachineandlight.nif" }),
              new Pick("Getaway wagon", new[] { @"setdressing\guntherswagon\guntherswagon.nif" }, "CAMP getaway wagons light up too"),
          }),
+        // the game show's other props (mascots, the Vim-nata, the Crappy imposter) are easy to see: only the hiding Cappy
+        ("Spin the Wheel", "^E09B_", "(?!)", "#40B0FF",
+         "Spin the Wheel: the hiding Cappy to find.",
+         new[] { new Pick("Hiding Cappy", new[] { @"setdressing\nukaworldprops\cappyhidingposeclean.nif" }) }),
         ("Encryptid", "^E01B_Encryptid", "(?!)", "#C080FF",
          "Encryptid: the pylons to power up.",
          new[] { new Pick("Pylons", new[] { @"props\encryptedpylon\encryptedpylon_computer.nif" }) }),
@@ -226,6 +230,7 @@ public static class EventCatalog
             }
             c.Entries.RemoveAll(e => e.Id.StartsWith("enemy:") && e.Id.EndsWith(" clothes") && e.Models.Count == 0);
         }
+        AddShowmen(idx, exists, cats);
         AddEnemyCopies(cats);
         PartNames.NameAll(idx, cats);
         cats.AddRange(Catalog.Rest(idx, exists, cats));
@@ -362,6 +367,64 @@ public static class EventCatalog
                     if (armo.EditorId.Contains("Headwear", StringComparison.OrdinalIgnoreCase) && !heads.Contains(m)) heads.Add(m);
                 }
         return (all, heads);
+    }
+
+    public const string Showmen = "Showmen";
+
+    /// <summary>The Showmen of the Atlantic City expeditions: an ENEMIES category with one entry per outfit, read from the
+    /// game's outfit list (LLI_Outfit_Showmen_XPD_AC: each outfit = sunglasses + one suit). The sunglasses are left out
+    /// (common shades), so the suit carries the beam. Atlantic City expeditions gets a "Showmen" group entry that ticks
+    /// them all - a group, not one entry with every model, so ticking a single outfit doesn't light up all of them.</summary>
+    static void AddShowmen(GameIndex idx, Func<string, bool> exists, List<Category> cats)
+    {
+        var list = idx.Records.FirstOrDefault(r => r.Type == "LVLI" && r.EditorId == "LLI_Outfit_Showmen_XPD_AC_NONPLAYABLE");
+        if (list?.Parts == null) return;
+        var cat = new Category
+        {
+            Name = Showmen, Section = "ENEMIES",
+            Description = Tr("The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included)."),
+            DefaultStyle = new Style { GlowFill = true, GlowColor = Palette.Humans.Hex, BeamColor = Palette.Humans.Hex, BeamLength = 1400 },
+        };
+        foreach (var outfit in list.Parts.Select(p => idx.ById.GetValueOrDefault(p)).Where(o => o?.Type == "LVLI" && o.Parts != null))
+        {
+            foreach (var armo in outfit!.Parts!.Select(p => idx.ById.GetValueOrDefault(p)).Where(a => a?.Type == "ARMO"))
+            {
+                var models = (armo!.Parts ?? new()).Select(p => idx.ById.GetValueOrDefault(p)).Where(a => a?.Type == "ARMA")
+                    .SelectMany(a => a!.Models ?? new()).Select(Catalog.NormalizeModel)
+                    .Where(m => !m.StartsWith(@"actors\") && exists(m)).Distinct().OrderBy(m => m).ToList();
+                // the Cowhide outfit's gloves are Preston Garvey's, worn with many other outfits: the suit is enough
+                if (models.Any(m => !m.Contains("glove"))) models.RemoveAll(m => m.Contains("glove"));
+                var name = armo.Name.Trim().Length > 0 ? armo.Name.Trim() : armo.EditorId;
+                if (models.Count == 0 || cat.Entries.Any(e => e.Name == name)) continue;
+                // two outfits on the same models (White Tuxedo, Black and White Tuxedo): one entry naming both
+                if (cat.Entries.FirstOrDefault(e => e.Models.SequenceEqual(models)) is Entry same)
+                {
+                    same.Name += " / " + name;
+                    same.ItemNames.Insert(0, name);
+                    continue;
+                }
+                cat.Entries.Add(new Entry
+                {
+                    Id = "showmen:" + name.ToLowerInvariant(), Category = Showmen, Name = name, Models = models,
+                    ItemNames = new() { name, "Showman" }, NoIcon = true,
+                    Detail = Tf("{0} models - anyone wearing this outfit glows too", models.Count),
+                });
+            }
+        }
+        if (cat.Entries.Count == 0) return;
+        cat.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        int at = cats.FindIndex(c => c.Name == Enemies.Humans);
+        cats.Insert(at >= 0 ? at + 1 : cats.Count, cat);
+        if (cats.FirstOrDefault(c => c.Name == "Atlantic City expeditions") is Category ac)
+        {
+            ac.Entries.Add(new Entry
+            {
+                Id = "event:atlantic city expeditions:showmen", Category = ac.Name, Name = Showmen, Group = cat.Entries.ToList(),
+                Spots = -1, NoLink = true, ItemNames = new() { Showmen, "Showman" },
+                Detail = Tf("{0} outfits - the same entries as under ENEMIES > Showmen", cat.Entries.Count),
+            });
+            ac.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     /// <summary>More than half of the named things using the model are event records.</summary>

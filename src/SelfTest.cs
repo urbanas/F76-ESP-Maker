@@ -232,6 +232,14 @@ public static class SelfTest
                                                    x: new RenderExtras { Sky = Sky.Day });
             bmp.Save(Path.ChangeExtension(file, null) + name);
         }
+        // with a name label, from the front (as the 3D view starts): -label.png
+        var lab = new Style { Glow = false, Beam = false, Brighten = false, Icon = "", Label = true };
+        var withLabel = ModelPreview.Load(game, model, lab, true, false, true, false, "Test: Label");
+        var (lmn, lmx) = (withLabel.AllMin, withLabel.AllMax);
+        float lr = Math.Max(1f, 0.5f * MathF.Sqrt((lmx.X - lmn.X) * (lmx.X - lmn.X) + (lmx.Y - lmn.Y) * (lmx.Y - lmn.Y) + (lmx.Z - lmn.Z) * (lmx.Z - lmn.Z)));
+        using (var lb = PreviewRenderer.Render(withLabel, lab, 640, 480, MathF.PI / 2, 0.2f, ((lmn.X + lmx.X) / 2, (lmn.Y + lmx.Y) / 2, (lmn.Z + lmx.Z) / 2), lr / MathF.Sin(20 * MathF.PI / 180),
+                                               x: new RenderExtras { Sky = Sky.Day }))
+            lb.Save(Path.ChangeExtension(file, null) + "-label.png");
         return 0;
     }
 

@@ -566,6 +566,7 @@
 "Stand other selected items beside it, each in its own look": "Metti altri oggetti selezionati accanto, ognuno col suo stile",
 "Start empty...": "Inizia da zero...",
 "Start with the category": "Parti dalla categoria",
+"Text above it too": "Anche testo sopra",
 "Started empty.": "Iniziato da zero.",
 "Stash boxes": "Casse di scorta",
 "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.": "Casse di scorta e casse di aiuti, munizioni e rottami di Fallout 1st nei C.A.M.P., ogni modello. Si illumina la cassa di ogni giocatore, non solo la tua.",
@@ -969,5 +970,18 @@
 "selected": "selezionato",
 "snowflake pant suits": "tute a fiocchi di neve",
 "the Atlantic City gift-box clue lights up too": "si illumina anche l'indizio della scatola regalo di Atlantic City",
-"unselected": "deselezionato"
+"unselected": "deselezionato",
+"Gift box": "Scatola regalo",
+"Hiding Cappy": "Cappy nascosto",
+"Spin the Wheel": "Gira la ruota",
+"Spin the Wheel: the hiding Cappy to find.": "Gira la ruota: il Cappy nascosto da trovare.",
+"The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included).": "Gli Intrattenitori delle spedizioni ad Atlantic City, trovati dai completi che indossano. Chiunque indossi gli stessi completi brilla (giocatori compresi).",
+"anyone wearing this outfit glows too": "chiunque indossi questo completo brilla",
+"the same entries as under ENEMIES > Showmen": "le stesse voci di NEMICI > Intrattenitori",
+"{0} models - anyone wearing this outfit glows too": "{0} modelli - chiunque indossi questo completo brilla",
+"{0} outfits - the same entries as under ENEMIES > Showmen": "{0} completi - le stesse voci di NEMICI > Intrattenitori",
+"Item copy": "Copia dell'oggetto",
+"Item copy: a copy of the item itself, in its own colours.": "Copia dell'oggetto: una copia dell'oggetto stesso, nei suoi colori originali.",
+"Same as the beam ·": "Come il raggio ·",
+"same as the beam": "come il raggio"
 }

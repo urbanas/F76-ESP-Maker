@@ -41,22 +41,23 @@ public static class Materials
 
     /// <summary>Icon on the beam: its own white texture tinted with the colour, no falloff - like the tested
     /// Item Finder cookie icon.</summary>
-    public static byte[] Icon(byte[] template, Color c, bool throughWalls, string texture) =>
-        Make(template, texture, c, 1.3f, falloff: false, throughWalls, alpha: null);
+    /// <param name="strength">1 = as before; below 1 more see-through, above 1 brighter (the look's icon / text strength).</param>
+    public static byte[] Icon(byte[] template, Color c, bool throughWalls, string texture, float strength = 1) =>
+        Make(template, texture, c, 1.3f * Math.Max(1, strength), falloff: false, throughWalls, alpha: strength < 1 ? strength : null);
 
     /// <summary>3D icon: untextured, lit only by its vertex colours (darker walls), added light like the glow.</summary>
-    public static byte[] Icon3D(byte[] template, Color c, bool throughWalls)
+    public static byte[] Icon3D(byte[] template, Color c, bool throughWalls, float strength = 1)
     {
-        var m = Make(template, "", c, 1.4f, falloff: false, throughWalls, alpha: 1f);
+        var m = Make(template, "", c, 1.4f * Math.Max(1, strength), falloff: false, throughWalls, alpha: Math.Min(1, strength));
         Additive(m);
         return m;
     }
 
     /// <summary>3D model icon: its own texture (times the colour - white for models in their own colours), as the
     /// Spooky Scorched Beacons pumpkin: alpha 0.75, normal blending, colour scale 1.3, one-sided.</summary>
-    public static byte[] Model(byte[] template, Color c, bool throughWalls, string texture)
+    public static byte[] Model(byte[] template, Color c, bool throughWalls, string texture, float strength = 1)
     {
-        var m = Make(template, texture, c, 1.3f, falloff: false, throughWalls, alpha: 0.75f);
+        var m = Make(template, texture, c, 1.3f * Math.Max(1, strength), falloff: false, throughWalls, alpha: Math.Min(1, 0.75f * strength));
         BitConverter.TryWriteBytes(m.AsSpan(BlendSrc), 6); BitConverter.TryWriteBytes(m.AsSpan(BlendDst), 7);
         m[0x30] = 0; // one-sided
         if (!throughWalls) m[ZWrite] = 1; // hides its own back (the clown's hat behind the head)
@@ -174,6 +175,26 @@ public static class Materials
         var tex = System.Text.Encoding.ASCII.GetString(mat, TextureStart, Math.Max(0, len - 1));
         if (tex.Length == 0) throw new InvalidDataException("cut-out material without a texture");
         return (tex, mat[AlphaTestRef]);
+    }
+
+    /// <summary>The colour texture of a game material (.bgsm/.bgem v22); "" when it has none.</summary>
+    public static string Diffuse(byte[] mat)
+    {
+        if (mat.Length < TextureStart || BitConverter.ToInt32(mat, 4) != 22) return "";
+        int len = BitConverter.ToInt32(mat, TextureLength);
+        return len <= 1 || TextureStart + len > mat.Length ? "" : System.Text.Encoding.ASCII.GetString(mat, TextureStart, len - 1);
+    }
+
+    /// <summary>X-ray copy for the Bright look: the part's own colour texture, unlit, seen through walls, added light like
+    /// the cut-out glow (proven through walls). Normal blending without an alpha block on the shape did NOT show through
+    /// walls in game (2026-11-14).</summary>
+    /// <param name="scale">Colour scale; 2 washed a brahmin out to plain white (2026-11-14) - now 0.35 x the shine strength.</param>
+    public static byte[] Xray(byte[] template, string texture, byte? cutRef, float scale)
+    {
+        var m = Make(template, texture, System.Drawing.Color.White, scale, falloff: false, throughWalls: true, alpha: 1f);
+        Additive(m);
+        if (cutRef is byte r) { m[AlphaTest] = 1; m[AlphaTestRef] = r; }
+        return m;
     }
 
     // .bgsm v22 after the header: 10 texture strings (slot 4 = glow map), 75 fixed bytes, the root material's name, one byte,

@@ -6,8 +6,73 @@ using System.Text.RegularExpressions;
 namespace ItemFinder;
 
 /// <summary>How a highlighted thing looks.</summary>
-public sealed class Style
+public sealed class Style : IJsonOnDeserialized
 {
+    /// <summary>The layers above the item (look stack, user 2026-11-15), each on its own: beam, arrow, icon, item copy, text.</summary>
+    public static readonly string[] Kinds = { "beam", "arrow", "icon", "copy", "text" };
+    /// <summary>Their order, lowest (just above the item) first. Kinds that are on but not listed go on top, in <see cref="Kinds"/> order.</summary>
+    public List<string> Layers { get; set; } = new();
+    public bool Has(string kind) => kind switch { "beam" => Beam, "arrow" => Arrow, "icon" => Icon.Length > 0 && Icon != Models3D.Self.Id, "copy" => Copy, "text" => Label, _ => false };
+    /// <summary>The layers that are on, lowest first.</summary>
+    [JsonIgnore] public string[] Stack => Kinds.Where(Has).OrderBy(k => Layers.IndexOf(k) is int i and >= 0 ? i : 100 + Array.IndexOf(Kinds, k)).ToArray();
+    /// <summary>Switches a layer on (on top, or where it was) or off. The icon is switched by setting <see cref="Icon"/> first.</summary>
+    public void Set(string kind, bool on)
+    {
+        var order = Stack.ToList();
+        switch (kind) { case "beam": Beam = on; break; case "arrow": Arrow = on; break; case "copy": Copy = on; break; case "text": Label = on; break; }
+        if (on && !order.Contains(kind)) order.Add(kind);
+        if (!on) order.Remove(kind);
+        Layers = order;
+    }
+
+    /// <summary>The arrow pointing down at what is under it (its own layer; until 2026-11-15 the beam drawn as an arrow, BeamArrow).</summary>
+    public bool Arrow { get; set; }
+    /// <summary>"" = the item's (glow) colour.</summary>
+    public string? ArrowColor { get; set; }
+    public float ArrowWidth { get; set; } = 3.5f;
+    public PartFx ArrowFx { get; set; } = new();
+    /// <summary>Icon / 3D model and item copy size in % of the item's biggest side (100 = as big as the item; user 2026-11-15).
+    /// IconSize / CopySize are only used when a model's size can't be measured.</summary>
+    public int IconScale { get; set; } = 100;
+    public int CopyScale { get; set; } = 100;
+    /// <summary>A small copy of the item in its own colours (until 2026-11-15 the icon "model:self").</summary>
+    public bool Copy { get; set; }
+    public float CopySize { get; set; } = 35f;
+    public int CopyStrength { get; set; } = 100;
+    public PartFx CopyFx { get; set; } = new();
+    /// <summary>Icon / text colour, "" = the item's colour; strength in % (100 = as before, less = more see-through).</summary>
+    public string? IconColor { get; set; }
+    public int IconStrength { get; set; } = 100;
+    public string? LabelColor { get; set; }
+    public int LabelStrength { get; set; } = 100;
+    [JsonIgnore] public string ArrowColour => string.IsNullOrEmpty(ArrowColor) ? GlowColor : ArrowColor;
+    [JsonIgnore] public string IconColour => string.IsNullOrEmpty(IconColor) ? GlowColor : IconColor;
+    [JsonIgnore] public string LabelColour => string.IsNullOrEmpty(LabelColor) ? GlowColor : LabelColor;
+    // legacy (before the look stack): read once, converted in OnDeserialized, never written
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool BeamArrow { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? TopColor { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int TopStrength { get; set; }
+
+    /// <summary>Old looks into the stack: the beam-as-arrow becomes the Arrow layer, "model:self" the Copy layer, the shared
+    /// icon / name colour (TopColor: "" = the beam's with a beam, else the glow's) and strength go to each layer.</summary>
+    public void OnDeserialized()
+    {
+        string oldTop = !string.IsNullOrEmpty(TopColor) ? TopColor : Beam ? BeamColor : GlowColor;
+        string Own(string c) => c.Equals(GlowColor, StringComparison.OrdinalIgnoreCase) ? "" : c;
+        if (BeamArrow)
+        {
+            if (Beam) { Arrow = true; ArrowWidth = BeamWidth; ArrowFx = BeamFx.Clone(); ArrowFx.Flow = false; ArrowColor = Own(BeamColor); }
+            Beam = false;
+            BeamArrow = false;
+        }
+        ArrowColor ??= Own(BeamColor);
+        if (Icon == Models3D.Self.Id) { Icon = ""; Copy = true; CopySize = IconSize; CopyFx = IconFx.Clone(); }
+        IconColor ??= Own(oldTop);
+        LabelColor ??= Own(oldTop);
+        if (TopStrength > 0) { IconStrength = LabelStrength = CopyStrength = TopStrength; TopStrength = 0; }
+        TopColor = null;
+    }
+
     public bool Glow { get; set; } = true;
     public string GlowColor { get; set; } = "#00E5FF";
     /// <summary>0..100 %.</summary>
@@ -22,9 +87,6 @@ public sealed class Style
     /// <summary>Colour over the whole item (hides its texture). Off = an outline: clear where the surface faces you,
     /// coloured towards the edges - like the outline ESP mods, the item keeps its normal look.</summary>
     public bool GlowFill { get; set; }
-    /// <summary>The marker above the item is a solid arrow pointing down at it instead of a beam into the sky
-    /// (beam colour, strength and width; no length).</summary>
-    public bool BeamArrow { get; set; }
     /// <summary>Off by default - beams are added where wanted (category or single item).</summary>
     public bool Beam { get; set; }
     public string BeamColor { get; set; } = "#00E5FF";
@@ -39,21 +101,21 @@ public sealed class Style
     public bool ThroughWalls
     {
         get => false;
-        set { GlowFx.Walls = BeamFx.Walls = IconFx.Walls = LabelFx.Walls = value; }
+        set { GlowFx.Walls = BeamFx.Walls = IconFx.Walls = LabelFx.Walls = ArrowFx.Walls = CopyFx.Walls = value; }
     }
     /// <summary>Effects per section of the look: the glow, the beam / arrow, the icon (flat, 3D or model), the name.</summary>
     public PartFx GlowFx { get; set; } = new();
     public PartFx BeamFx { get; set; } = new();
     public PartFx IconFx { get; set; } = new();
     public PartFx LabelFx { get; set; } = new();
-    /// <summary>Every section, in that order.</summary>
-    [JsonIgnore] public PartFx[] AllFx => new[] { GlowFx, BeamFx, IconFx, LabelFx };
+    /// <summary>Every section, in the order of NifPatch's Motion parts.</summary>
+    [JsonIgnore] public PartFx[] AllFx => new[] { GlowFx, BeamFx, IconFx, LabelFx, ArrowFx, CopyFx };
     /// <summary>All sections through walls (or none).</summary>
     [JsonIgnore] public bool AllWalls { get => AllFx.All(x => x.Walls); set { foreach (var x in AllFx) x.Walls = value; } }
     /// <summary>Icon above the item / at the top of the beam (<see cref="Icons"/> id), "" = none.</summary>
     public string Icon { get; set; } = "";
     /// <summary>Icon half size in game units.</summary>
-    public float IconSize { get; set; } = 24.5f; // 70 cm wide
+    public float IconSize { get; set; } = 35f; // 100 cm wide (was 70 cm until 2026-11-12)
     /// <summary>A solid 3D shape instead of the flat camera-facing icon (creatures always get 3D).</summary>
     public bool Icon3D { get; set; }
     /// <summary>The item's name floats above it (above the icon), turned to the camera. Not on animated models.</summary>
@@ -69,6 +131,16 @@ public sealed class Style
     public bool Brighten { get; set; }
     /// <summary>Brighten strength, 100 % = the texture's own colours at full light, day or night.</summary>
     public int BrightenStrength { get; set; } = 100;
+    /// <summary>Item look "Off" + X-ray (user, 2026-11-15): the item stays normal, a copy in its own colours shows through
+    /// walls (Builder.XrayFor). Its own switch, not GlowFx.Walls (that is on by default and would add it to every Off look).</summary>
+    public bool OwnXray { get; set; }
+    /// <summary>Strength of that copy in %, 100 = Medium.</summary>
+    public int XrayStrength { get; set; } = 100;
+    /// <summary>The X-ray copy of the item's own colours: Bright + X-ray, or Off + its own X-ray.</summary>
+    [JsonIgnore] public bool ShowsOwnXray => !Glow && (Brighten ? GlowFx.Walls : OwnXray && !Invisible);
+    /// <summary>Colour scale of that copy: Bright 0.35 x the shine (tested in game), Off 0.25 x its strength (Medium 0.25 - Bright
+    /// stays the stronger one, user 2026-11-15).</summary>
+    [JsonIgnore] public float XrayScale => Brighten ? 0.35f * Math.Clamp(BrightenStrength, 25, 300) / 100f : 0.25f * Math.Clamp(XrayStrength, 25, 300) / 100f;
     /// <summary>The item's own parts are hidden in the game (the hidden flag); what the look adds (glow, marker, icon,
     /// name) still shows. Still there to pick up and bump into. Not on creatures.</summary>
     public bool Invisible { get; set; }
@@ -99,6 +171,7 @@ public sealed class Style
     {
         var c = (Style)MemberwiseClone();
         c.GlowFx = GlowFx.Clone(); c.BeamFx = BeamFx.Clone(); c.IconFx = IconFx.Clone(); c.LabelFx = LabelFx.Clone();
+        c.ArrowFx = ArrowFx.Clone(); c.CopyFx = CopyFx.Clone(); c.Layers = new List<string>(Layers);
         return c;
     }
 }

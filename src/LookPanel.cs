@@ -103,20 +103,25 @@ sealed class LookPanel : UserControl
     /// <summary>The height that shows everything without scrolling (the pop-up grows to it when the screen has room).</summary>
     public int WantedHeight =>
         titleRow.Height + sub.Height + (hasTick ? tick.Height : 0)
-        + (hasSwitch ? switchRow.GetPreferredSize(new Size(Math.Max(100, scroll.ClientSize.Width), 0)).Height : 0)
-        + Editor.Height + (hasPick ? pickRow.Height : 0) + PreviewHeight + Padding.Vertical;
+        + (hasSwitch ? switchRow.GetPreferredSize(new Size(Math.Max(100, header.ClientSize.Width), 0)).Height : 0)
+        + Math.Max(Editor.Height, PreviewMin) + Padding.Vertical;
 
-    /// <summary>The preview's full height in the pop-up; it shrinks down to <see cref="PreviewMin"/> before the
-    /// settings above it have to scroll.</summary>
-    const int PreviewHeight = 240, PreviewMin = 150;
+    /// <summary>The least height of the preview (it sits right of the settings, as tall as they are or more).</summary>
+    const int PreviewMin = 300;
 
-    /// <summary>The preview takes what the settings leave over (between its least and full height).</summary>
+    /// <summary>The settings column: as wide as the editor wants (look stack, 2026-11-15), the preview takes the rest;
+    /// a narrow pop-up gives the settings all of it and the preview goes under them.</summary>
     void FitPreview()
     {
-        int settings = settingsHidden ? 0 : WantedHeight - PreviewHeight - Padding.Vertical - (hasPick ? pickRow.Height : 0);
-        int h = Math.Max(PreviewMin, body.Height - (hasPick ? pickRow.Height : 0) - settings); // all the room left (the pop-up is sized by hand)
-        if (View.Height != h) View.Height = h;
+        header.Height = titleRow.Height + sub.Height + (hasSwitch ? switchRow.GetPreferredSize(new Size(Math.Max(100, header.ClientSize.Width), 0)).Height : 0);
+        int w = Math.Min(StyleEditor.WantedWidth(Editor.Font), Math.Max(300, body.Width - 320));
+        if (scroll.Width != w) scroll.Width = w;
     }
+
+    /// <summary>Title, "Own look · use ... again" (across the top, over both columns).</summary>
+    readonly Panel header = new() { Dock = DockStyle.Top };
+    /// <summary>The preview and its "Preview on:" row, right of the settings.</summary>
+    readonly Panel right = new() { Dock = DockStyle.Fill, Padding = new Padding(8, 0, 0, 0) };
 
     /// <summary><see cref="WantedHeight"/> may have changed (a card opened / closed, another look shown).</summary>
     public event Action? WantedHeightChanged;
@@ -127,15 +132,18 @@ sealed class LookPanel : UserControl
         title.Dock = DockStyle.Fill;
         titleRow.Controls.Add(title);
         titleRow.Controls.Add(reset);
-        var stack = new Control[] { Editor, sameHint, switchRow, tick, sub, titleRow };
-        foreach (var c in stack) scroll.Controls.Add(c);
-        // the preview stays at the bottom; only the settings above it scroll
-        View.Dock = DockStyle.Bottom;
-        View.Height = PreviewHeight;
-        pickRow.Dock = DockStyle.Bottom;
+        foreach (var c in new Control[] { switchRow, tick, sub, titleRow }) header.Controls.Add(c);
+        scroll.Controls.Add(Editor);
+        scroll.Controls.Add(sameHint);
+        // settings on the left (they scroll), the preview fills the right (as in the look-stack mock-up)
+        scroll.Dock = DockStyle.Left;
+        View.Dock = DockStyle.Fill;
+        pickRow.Dock = DockStyle.Top;
+        right.Controls.Add(View);
+        right.Controls.Add(pickRow);
+        body.Controls.Add(right);
         body.Controls.Add(scroll);
-        body.Controls.Add(pickRow);
-        body.Controls.Add(View);
+        body.Controls.Add(header);
     }
 
     /// <summary>Nothing to edit here (a section or the overview is picked): just a hint.</summary>

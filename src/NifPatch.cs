@@ -182,13 +182,20 @@ public sealed record GlowMat(string Material, int TestRef = -1, int AlphaMode = 
 public sealed record GlowPart(string Material, bool Cutout, string InlineTexture, byte Threshold, bool Skinned = false);
 
 /// <param name="GlowFor">Glow for a part; returns null for no glow on that part. A null function = no glow at all.</param>
-/// <param name="BeamArrow">The beam is a solid arrow pointing down at the item (BeamLength = how high its top is).</param>
 /// <param name="Model">A 3D model icon (Models3D) with its textured material, instead of an icon.</param>
+/// <param name="Stack">The layers' order above the item, lowest first (Style.Kinds: beam, arrow, icon, copy, text); null = that order.</param>
+/// <param name="ArrowMaterial">A solid arrow pointing down at what is under it.</param>
+/// <param name="Copy">A small copy of the item (Models3D.FromItem) with its material, CopySize = half its size.</param>
 public sealed record PatchOptions(Func<GlowPart, GlowMat?>? GlowFor, string? BeamMaterial, float BeamLength, float BeamWidth, bool Harvestable,
                                   string? IconMaterial = null, float IconSize = 40, bool[,]? Icon3D = null, string? Icon3DMaterial = null,
-                                  bool BeamArrow = false, Mesh? Model = null, string? ModelMaterial = null,
+                                  Mesh? Model = null, string? ModelMaterial = null,
                                   string? LabelMaterial = null, float LabelHalfWidth = 0, float LabelHalfHeight = 0,
-                                  bool Invisible = false, Motion? Motion = null, Func<string, float>? ScaleOf = null);
+                                  bool Invisible = false, Motion? Motion = null, Func<string, float>? ScaleOf = null,
+                                  string[]? Stack = null, string? ArrowMaterial = null, float ArrowWidth = 3.5f,
+                                  Mesh? Copy = null, string? CopyMaterial = null, float CopySize = 35,
+                                  float IconScale = 0, float CopyScale = 0);
+// IconScale / CopyScale: > 0 = the icon / copy is that part of the item's size (1 = as big as the item), IconSize /
+// CopySize only when the item's size can't be measured
 
 /// <summary>One section's animations (standalone looping controllers - no behaviour graph needed) and hide timer.</summary>
 /// <param name="HideAfter">Shrinks away this many seconds after loading; 0 = never.</param>
@@ -198,10 +205,11 @@ public sealed record PartMotion(bool Pulse, bool Cycle, bool Spin, bool Bob, boo
     public bool Any => Pulse || Cycle || Spin || Bob || Flow || HideAfter > 0;
 }
 
-/// <summary>Per section of the look: the glow copies, the beam / arrow, the icon (flat, 3D or model), the name.</summary>
-public sealed record Motion(PartMotion? Glow, PartMotion? Beam, PartMotion? Icon, PartMotion? Label)
+/// <summary>Per section of the look: 0 the glow copies, 1 the beam, 2 the icon (flat, 3D or model), 3 the name, 4 the arrow,
+/// 5 the item copy (Style.AllFx order).</summary>
+public sealed record Motion(params PartMotion?[] Parts)
 {
-    public PartMotion? this[int part] => part switch { 0 => Glow, 1 => Beam, 2 => Icon, _ => Label };
+    public PartMotion? this[int part] => part < Parts.Length ? Parts[part] : null;
 }
 
 public sealed record PatchResult(byte[] Data, int GlowShapes, bool Beam, string Note);
@@ -275,9 +283,9 @@ public static class NifPatch
 
         var glowAdded = new Dictionary<int, List<int>>();
         int glowCount = 0, skippedCutouts = 0;
-        // the sections (0 glow, 1 beam / arrow, 2 icon, 3 name): their added shaders (pulse, rainbow) and top blocks (timer)
-        const int GlowPart = 0, BeamPart = 1, IconPart = 2, LabelPart = 3;
-        var partShaders = Enumerable.Range(0, 4).Select(_ => new List<(int Shader, string Mat)>()).ToArray();
+        // the sections (0 glow, 1 beam, 2 icon, 3 name, 4 arrow, 5 item copy): their added shaders (pulse, rainbow) and top blocks (timer)
+        const int GlowPart = 0, BeamPart = 1, IconPart = 2, LabelPart = 3, ArrowPart = 4, CopyPart = 5, Parts = 6;
+        var partShaders = Enumerable.Range(0, Parts).Select(_ => new List<(int Shader, string Mat)>()).ToArray();
         var partOf = new Dictionary<int, int>();
         PartMotion? Mo(int part) => o.Motion?[part];
         int beamShader = -1;
@@ -357,22 +365,68 @@ public static class NifPatch
             }
         }
 
+        bool skinned = shapes.Any(s => BitConverter.ToInt32(f.Blocks[s].Data, NifFile.ShapeRefs(f.Blocks[s].Data)) >= 0);
+        // the layers above the item (look stack): each starts where the one below ends. A beam / arrow first starts at the
+        // item's top (the arrow has its own gap), anything else a little above it (creatures: clear of separate heads);
+        // small fixed gaps between layers, none on top of a beam or arrow
+        float itemSize = 0;
+        var (bx, by, bz) = o.BeamMaterial != null || o.ArrowMaterial != null || o.IconMaterial != null || o.Icon3DMaterial != null || o.ModelMaterial != null
+                           || o.LabelMaterial != null || o.CopyMaterial != null ? BeamBase(f, shapes, parent, origin, beamParent, out itemSize) : (0f, 0f, 0f);
+        // icon / model / item copy sized by the item (user, 2026-11-15: 100 % on a bobblehead isn't 100 % on a brahmin):
+        // half the item's biggest side x the scale, 10 cm .. 5 m; the fixed size when the item's size is unknown.
+        // Small items count as at least 75 cm (52.5 units; user 2026-11-15: bobblehead copies were too small)
+        float Scaled(float scale, float fixedHalf) => scale > 0 && itemSize > 1 ? Math.Clamp(Math.Max(itemSize, 52.5f) / 2 * scale, 3.5f, 175f) : fixedHalf;
+        o = o with { IconSize = Scaled(o.IconScale, o.IconSize), CopySize = Scaled(o.CopyScale, o.CopySize) };
+        bool iconHere = (o.IconMaterial != null && !skinned) || (o.Icon3D != null && o.Icon3DMaterial != null) || (o.Model != null && o.ModelMaterial != null);
+        bool Drawn(string k) => k switch
+        {
+            "beam" => o.BeamMaterial != null, "arrow" => o.ArrowMaterial != null, "icon" => iconHere,
+            "copy" => o.Copy != null && o.CopyMaterial != null, "text" => o.LabelMaterial != null, _ => false,
+        };
+        float LayerHeight(string k) => k switch
+        {
+            "beam" => o.BeamLength, "arrow" => ArrowSize(o.ArrowWidth) is var a ? a.Gap + a.Height : 0,
+            "icon" => 2 * o.IconSize, "copy" => 2 * o.CopySize, _ => 2 * o.LabelHalfHeight,
+        };
+        var bottomOf = new Dictionary<string, float>();
+        {
+            float z = bz;
+            string? below = null;
+            foreach (var k in (o.Stack ?? new[] { "beam", "arrow", "icon", "copy", "text" }).Where(Drawn))
+            {
+                if (below == null) z += k is "beam" or "arrow" ? 0 : skinned ? 70 : 20;
+                else if (below is not ("beam" or "arrow") && k != "arrow") z += 4;
+                bottomOf[k] = z;
+                z += LayerHeight(k);
+                below = k;
+            }
+        }
         bool beam = false;
         if (o.BeamMaterial != null)
         {
             int mat = f.AddString(o.BeamMaterial);
             int shader = f.Add("BSEffectShaderProperty", EffectShader(mat));
             int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
-            int name = f.AddString("ItemFinderBeam");
-            var (bx, by, bz) = BeamBase(f, shapes, parent, origin, beamParent);
-            int shape = f.Add("BSTriShape", o.BeamArrow ? ArrowShape(name, shader, alpha, o.BeamWidth, (bx, by, bz))
-                                                         : TubeShape(name, shader, alpha, o.BeamLength, o.BeamWidth, (bx, by, bz)));
+            int shape = f.Add("BSTriShape", TubeShape(f.AddString("ItemFinderBeam"), shader, alpha, o.BeamLength, o.BeamWidth, (bx, by, bottomOf["beam"])));
             if (!glowAdded.TryGetValue(beamParent, out var list)) glowAdded[beamParent] = list = new();
             list.Add(shape);
             partOf[shape] = BeamPart;
             partShaders[BeamPart].Add((shader, o.BeamMaterial));
-            if (o.BeamArrow) movers.Add((shape, (bx, by, bz), o.BeamLength, BeamPart));
-            else beamShader = shader;
+            beamShader = shader;
+            beam = true;
+        }
+        if (o.ArrowMaterial != null)
+        {
+            int mat = f.AddString(o.ArrowMaterial);
+            int shader = f.Add("BSEffectShaderProperty", EffectShader(mat));
+            int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
+            float az = bottomOf["arrow"];
+            int shape = f.Add("BSTriShape", ArrowShape(f.AddString("ESPMakerArrow"), shader, alpha, o.ArrowWidth, (bx, by, az)));
+            if (!glowAdded.TryGetValue(beamParent, out var list)) glowAdded[beamParent] = list = new();
+            list.Add(shape);
+            partOf[shape] = ArrowPart;
+            partShaders[ArrowPart].Add((shader, o.ArrowMaterial));
+            movers.Add((shape, (bx, by, az), LayerHeight("arrow"), ArrowPart));
             beam = true;
         }
         var notes = new List<string>();
@@ -400,12 +454,10 @@ public static class NifPatch
             AddMoveController(f, n, false, Math.Max(4f, h * 0.2f), alongY: true);
             return n;
         }
-        bool skinned = shapes.Any(s => BitConverter.ToInt32(f.Blocks[s].Data, NifFile.ShapeRefs(f.Blocks[s].Data)) >= 0);
         if (o.IconMaterial != null && !skinned)
         {
-            var (bx, by, bz) = BeamBase(f, shapes, parent, origin, beamParent);
             float S = o.IconSize;
-            float z = bz + (o.BeamMaterial != null ? o.BeamLength : 20) + S;
+            float z = bottomOf["icon"] + S;
             int mat = f.AddString(o.IconMaterial);
             int shader = f.Add("BSEffectShaderProperty", EffectShader(mat));
             int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
@@ -419,22 +471,26 @@ public static class NifPatch
             icon = true;
         }
         // name label: a camera-facing card with the item's name, above the icon (or where the icon would go). Like the
-        // flat icon, only on models the game doesn't animate
+        // flat icon, camera-facing only on models the game doesn't animate; animated (skinned) models drop that node, so
+        // there the card stands upright in a plain node, facing the creature's front (+y) - user, 2026-11-15
         bool label = false;
-        if (o.LabelMaterial != null && !skinned)
+        if (o.LabelMaterial != null)
         {
-            var (bx, by, bz) = BeamBase(f, shapes, parent, origin, beamParent);
-            float z = bz + (o.BeamMaterial != null ? o.BeamLength : 20) + (icon ? 2 * o.IconSize + 4 : 0) + o.LabelHalfHeight;
+            float z = bottomOf["text"] + o.LabelHalfHeight;
             int mat = f.AddString(o.LabelMaterial);
             int shader = f.Add("BSEffectShaderProperty", EffectShader(mat));
             int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
-            int quad = f.Add("BSTriShape", IconShape(f.AddString("ESPMakerLabel:0"), shader, alpha, o.LabelHalfWidth, o.LabelHalfHeight));
-            int bill = f.Add("NiBillboardNode", BillboardNode(f.AddString("ESPMakerLabel"), (bx, by, z), Bobbing(Inner(quad, "ESPMakerTimedLabel", LabelPart), LabelPart, 2 * o.LabelHalfHeight)));
+            // animated: the card itself stands upright under the root, no node (an upright node showed nothing in game,
+            // 2026-11-15); it faces +y, where creatures and people face (items face -y)
+            int bill = skinned ? f.Add("BSTriShape", UprightShape(f.AddString("ESPMakerLabel"), shader, alpha, o.LabelHalfWidth, o.LabelHalfHeight, (bx, by, z)))
+                               : f.Add("NiBillboardNode", BillboardNode(f.AddString("ESPMakerLabel"), (bx, by, z),
+                                       Bobbing(Inner(f.Add("BSTriShape", IconShape(f.AddString("ESPMakerLabel:0"), shader, alpha, o.LabelHalfWidth, o.LabelHalfHeight)),
+                                                     "ESPMakerTimedLabel", LabelPart), LabelPart, 2 * o.LabelHalfHeight)));
             if (!glowAdded.TryGetValue(beamParent, out var list)) glowAdded[beamParent] = list = new();
             list.Add(bill);
             partOf[bill] = LabelPart;
             partShaders[LabelPart].Add((shader, o.LabelMaterial));
-            OrBsx(f, 0x101);
+            if (!skinned) OrBsx(f, 0x101);
             label = true;
         }
         // 3D icon: a solid shape needs no camera-facing node, so it also works on animated (skinned) models like the
@@ -442,10 +498,8 @@ public static class NifPatch
         bool icon3d = false;
         if (o.Icon3D != null && o.Icon3DMaterial != null && (o.IconMaterial == null || skinned)) // the flat icon wins where it works
         {
-            var (bx, by, bz) = BeamBase(f, shapes, parent, origin, beamParent);
             float S = o.IconSize;
-            // creatures: clear of heads that are separate parts; items: just above
-            float z = bz + (o.BeamMaterial != null ? o.BeamLength : skinned ? 70 : 20) + S;
+            float z = bottomOf["icon"] + S;
             int mat = f.AddString(o.Icon3DMaterial);
             int shader = f.Add("BSEffectShaderProperty", EffectShader(mat));
             int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
@@ -461,9 +515,8 @@ public static class NifPatch
         bool model = false;
         if (o.Model != null && o.ModelMaterial != null)
         {
-            var (bx, by, bz) = BeamBase(f, shapes, parent, origin, beamParent);
             float S = o.IconSize;
-            float z = bz + (o.BeamMaterial != null ? o.BeamLength : skinned ? 70 : 20);
+            float z = bottomOf["icon"];
             int mat = f.AddString(o.ModelMaterial);
             int shader = f.Add("BSEffectShaderProperty", EffectShader(mat));
             int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
@@ -474,6 +527,23 @@ public static class NifPatch
             partShaders[IconPart].Add((shader, o.ModelMaterial));
             movers.Add((shape, (bx, by, z), 2 * S, IconPart));
             model = true;
+        }
+        // item copy: a small copy of the item's own shape in its own colours, placed like a model icon
+        bool copied = false;
+        if (o.Copy != null && o.CopyMaterial != null)
+        {
+            float S = o.CopySize;
+            float z = bottomOf["copy"];
+            int mat = f.AddString(o.CopyMaterial);
+            int shader = f.Add("BSEffectShaderProperty", EffectShader(mat));
+            int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
+            int shape = f.Add("BSTriShape", ModelShape(f.AddString("ESPMakerCopy"), shader, alpha, o.Copy, S, (bx, by, z)));
+            if (!glowAdded.TryGetValue(beamParent, out var list)) glowAdded[beamParent] = list = new();
+            list.Add(shape);
+            partOf[shape] = CopyPart;
+            partShaders[CopyPart].Add((shader, o.CopyMaterial));
+            movers.Add((shape, (bx, by, z), 2 * S, CopyPart));
+            copied = true;
         }
         // a part that hangs on a connection point (robot parts: "connect at C-BotCore") is not placed like a worn piece:
         // markers on its root showed at the hip, then 3 m away (in game). Its skinned parts are placed right (the glow), so
@@ -489,14 +559,14 @@ public static class NifPatch
         // spin / bob: each solid marker goes into a node turning round its own centre line (outer node moves the origin there)
         int moved = bobs;
         bool spun = false, bobbed = bobs > 0;
-        bool Moving(int part) => Mo(part) is { } m && (m.Spin && part == IconPart || m.Bob);
+        bool Moving(int part) => Mo(part) is { } m && (m.Spin && part is IconPart or CopyPart || m.Bob);
         if (!skinned && glowAdded.TryGetValue(beamParent, out var moveKids))
             foreach (var (shape, at, h, part) in movers.Where(m => Moving(m.Part)))
             {
                 int i = moveKids.IndexOf(shape);
                 if (i < 0) continue;
                 var m = Mo(part)!;
-                bool spin = m.Spin && part == IconPart; // a round arrow shows no turn
+                bool spin = m.Spin && part is IconPart or CopyPart; // a round arrow shows no turn
                 int back = f.Add("NiNode", PlainNode(f.AddString("ESPMakerMoveIn"), Moved(-at.X, -at.Y), new[] { shape }));
                 int turn = f.Add("NiNode", PlainNode(f.AddString("ESPMakerMove" + moved), Moved(0, 0), new[] { back }));
                 moveKids[i] = f.Add("NiNode", PlainNode(f.AddString("ESPMakerMoveAt"), Moved(at.X, at.Y), new[] { turn }));
@@ -509,7 +579,7 @@ public static class NifPatch
         // hide after N seconds: everything added goes into its own node(s), and an animation that starts when the model
         // loads (the game's autoplay behaviour, as the BobbleBanner mod does it) shrinks them to nothing
         bool timed = false;
-        if (Enumerable.Range(0, 4).Any(p => Mo(p) is { HideAfter: > 0 }) && glowAdded.Count > 0)
+        if (Enumerable.Range(0, Parts).Any(p => Mo(p) is { HideAfter: > 0 }) && glowAdded.Count > 0)
         {
             var rb = f.Blocks[0].Data;
             int rootCtl = BitConverter.ToInt32(rb, 8 + 4 * BitConverter.ToInt32(rb, 4));
@@ -541,13 +611,13 @@ public static class NifPatch
         foreach (var (node, kids) in glowAdded) f.AddChildren(node, kids);
         if (label) notes.Add("label");
         if (timed)
-            notes.Add(string.Join(", ", Enumerable.Range(0, 4).Where(p => Mo(p) is { HideAfter: > 0 }).Select(p => (p switch { 0 => "glow", 1 => "marker", 2 => "icon", _ => "name" }) +
+            notes.Add(string.Join(", ", Enumerable.Range(0, Parts).Where(p => Mo(p) is { HideAfter: > 0 }).Select(p => (p switch { 0 => "glow", 1 => "beam", 2 => "icon", 3 => "name", 4 => "arrow", _ => "item copy" }) +
                 (Mo(p)!.BlinkOff > 0 ? $" blinks ({Mo(p)!.HideAfter:0} s on, {Mo(p)!.BlinkOff:0} s off)" : $" hides after {Mo(p)!.HideAfter:0} s"))));
         // shader animations per section: pulse (brightness), rainbow (colour), flowing beam (texture runs up)
         {
             int shaderCtls = 0;
             var did = new List<string>();
-            for (int p = 0; p < 4; p++)
+            for (int p = 0; p < Parts; p++)
             {
                 if (Mo(p) is not { } m || partShaders[p].Count == 0) continue;
                 if (m.Pulse)
@@ -585,6 +655,7 @@ public static class NifPatch
         else if (o.IconMaterial != null && skinned && !icon3d) notes.Add("no icon (animated model)");
         if (icon3d) notes.Add("3D icon");
         if (model) notes.Add("3D model");
+        if (copied) notes.Add("item copy");
         if (o.Invisible)
         {
             // the item's own parts get the hidden flag (bit 0 of the NiAVObject flags); glow copies were made from them
@@ -608,10 +679,12 @@ public static class NifPatch
     /// <summary>Where the beam starts, in the space of the node it hangs from: centred over the item's visible
     /// parts (lit shapes, so editor markers don't count), at the top of them - so it rises out of the item
     /// instead of running through it. (0,0,0) if nothing sensible is found.</summary>
+    /// <param name="size">The item's biggest side (width, depth or height) in game units; 0 when unknown.</param>
     static (float X, float Y, float Z) BeamBase(NifFile f, List<int> shapes, Dictionary<int, int> parent,
-                                                Dictionary<int, (float X, float Y, float Z)> origin, int beamParent)
+                                                Dictionary<int, (float X, float Y, float Z)> origin, int beamParent, out float size)
     {
-        float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue, top = float.MinValue;
+        size = 0;
+        float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue, top = float.MinValue, bottom = float.MaxValue;
         foreach (int s in shapes)
         {
             var b = f.Blocks[s].Data;
@@ -644,8 +717,10 @@ public static class NifPatch
             minX = Math.Min(minX, x - hx); maxX = Math.Max(maxX, x + hx);
             minY = Math.Min(minY, y - hy); maxY = Math.Max(maxY, y + hy);
             top = Math.Max(top, z + hz);
+            bottom = Math.Min(bottom, z - hz);
         }
         if (top == float.MinValue || top > 2000 || maxX - minX > 4000 || maxY - minY > 4000) return (0, 0, 0); // nothing sensible (effects etc.)
+        size = Math.Max(maxX - minX, Math.Max(maxY - minY, top - Math.Max(bottom, top - 4000)));
         var p = origin.GetValueOrDefault(beamParent);
         return ((minX + maxX) / 2 - p.X, (minY + maxY) / 2 - p.Y, Math.Max(0, top) - p.Z);
     }
@@ -749,7 +824,7 @@ public static class NifPatch
 
     /// <summary>A marker shape this patch added (beam, arrow, icons, 3D model) - not a glow copy.</summary>
     static bool IsMarker(NifFile f, int k) =>
-        f.Strings.ElementAtOrDefault(BitConverter.ToInt32(f.Blocks[k].Data, 0)) is "ItemFinderBeam" or "ItemFinderIcon3D" or "ItemFinderModel" or "ItemFinderIcon";
+        f.Strings.ElementAtOrDefault(BitConverter.ToInt32(f.Blocks[k].Data, 0)) is "ItemFinderBeam" or "ItemFinderIcon3D" or "ItemFinderModel" or "ItemFinderIcon" or "ESPMakerLabel";
 
     /// <summary>Where the game puts this model's root when it hangs it on a connection point: the transform of the node
     /// named in its BSConnectPoint::Children (in the model's own rest pose). Null when it has none.</summary>
@@ -916,6 +991,19 @@ public static class NifPatch
         for (int c = 0; c < 4; c++) verts.Add(new Vert(corners[c], uvs[c], (0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), new byte[] { 255, 255, 255, 255 }));
         var tris = new List<(int, int, int)> { (0, 1, 2), (0, 2, 3), (0, 2, 1), (0, 3, 2) };
         return Pack(name, shader, alpha, verts, tris, -sy, sy, Math.Max(sx, sy));
+    }
+
+    /// <summary>The label card standing upright at <paramref name="at"/> without a node of its own (animated models drop
+    /// added nodes; shapes right under the root show, as the 3D icons do): its face looks to +y, where creatures face,
+    /// the text reading from there; both sides.</summary>
+    static byte[] UprightShape(int name, int shader, int alpha, float sx, float sy, (float X, float Y, float Z) at)
+    {
+        var verts = new List<Vert>();
+        var corners = new[] { (sx, 0f, -sy), (-sx, 0f, -sy), (-sx, 0f, sy), (sx, 0f, sy) };
+        var uvs = new[] { (0f, 1f), (1f, 1f), (1f, 0f), (0f, 0f) };
+        for (int c = 0; c < 4; c++) verts.Add(new Vert(corners[c], uvs[c], (0.0, 1.0, 0.0), (-1.0, 0.0, 0.0), (0.0, 0.0, 1.0), new byte[] { 255, 255, 255, 255 }));
+        var tris = new List<(int, int, int)> { (0, 1, 2), (0, 2, 3), (0, 2, 1), (0, 3, 2) };
+        return Pack(name, shader, alpha, verts, tris, -sy, sy, Math.Max(sx, sy), at);
     }
 
     static void OrBsx(NifFile f, int bits)

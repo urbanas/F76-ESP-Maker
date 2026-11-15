@@ -566,6 +566,7 @@
 "Stand other selected items beside it, each in its own look": "Pôr outros itens selecionados ao lado, cada um com seu visual",
 "Start empty...": "Começar do zero...",
 "Start with the category": "Começar pela categoria",
+"Text above it too": "Texto acima também",
 "Started empty.": "Começou do zero.",
 "Stash boxes": "Caixas de estoque",
 "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.": "Caixas de estoque e as caixas de auxílio, munição e sucata do Fallout 1st nos C.A.M.P., todos os modelos. A caixa de todo jogador acende, não só a sua.",
@@ -969,5 +970,18 @@
 "selected": "selecionado",
 "snowflake pant suits": "macacões de floco de neve",
 "the Atlantic City gift-box clue lights up too": "a pista da caixa de presente de Atlantic City também acende",
-"unselected": "desmarcado"
+"unselected": "desmarcado",
+"Gift box": "Caixa de presente",
+"Hiding Cappy": "Tamposo escondido",
+"Spin the Wheel": "Gire a roda",
+"Spin the Wheel: the hiding Cappy to find.": "Gire a roda: o Tamposo escondido para encontrar.",
+"The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included).": "Os Espetaculares das expedições a Atlantic City, encontrados pelos trajes que usam. Quem usa os mesmos trajes também brilha (jogadores incluídos).",
+"anyone wearing this outfit glows too": "quem usa este traje também brilha",
+"the same entries as under ENEMIES > Showmen": "as mesmas entradas de INIMIGOS > Espetaculares",
+"{0} models - anyone wearing this outfit glows too": "{0} modelos - quem usa este traje também brilha",
+"{0} outfits - the same entries as under ENEMIES > Showmen": "{0} trajes - as mesmas entradas de INIMIGOS > Espetaculares",
+"Item copy": "Cópia do item",
+"Item copy: a copy of the item itself, in its own colours.": "Cópia do item: uma cópia do próprio item, nas cores originais.",
+"Same as the beam ·": "Igual ao feixe ·",
+"same as the beam": "igual ao feixe"
 }

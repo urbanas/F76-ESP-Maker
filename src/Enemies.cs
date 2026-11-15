@@ -32,8 +32,9 @@ public static class Enemies
     static readonly Regex SkipRace = new(@"^(CAMPPets_|CUT_|DEL_|zz|Dev|DLC05ArmorRack|PowerArmor|Human|Main_Human|Ghoul|GHL_|Lost(Healer)?Race|Fisherman|P62_|ATX_COMP_|Dummy|RedRocketRobot|DogCollectron|MechTest|SQ_|DogmeatRace|CatRace|CatPetRace|GhoulChild|SCORE_|DLC01WorkshopWallLight|TurretWorkshop)", RegexOptions.IgnoreCase);
 
     /// <summary>Files that aren't the creature's body: effects, skeletons, projectiles, severed-limb pieces... and the
-    /// Wendigo scout outfit (an unused skin: wendigos wear no clothes in game - user, 2026-11-11).</summary>
-    static readonly Regex NotBody = new(@"(wendigoscoutoutfit|dummyfxskin|skeleton|\\_rig\\|fx|explosion|projectile|hazard|muzzle|morphs\\|replace|dest\.nif|dest\d|lite\.nif|light|overheat|particles|attack|despawn|intro|landingeffects|standin|dummyweapon|chargeao|chargestealth|dest(chest|[lr]arm|head)|legdest|headdest|mps|encryptedfire)", RegexOptions.IgnoreCase);
+    /// Wendigo scout outfit (an unused skin: wendigos wear no clothes in game - user, 2026-11-11), and creature hats (user,
+    /// 2026-11-15: Brahmin listed 5 hats under it besides its 2 bodies).</summary>
+    static readonly Regex NotBody = new(@"(characterassets\\hats\\|wendigoscoutoutfit|dummyfxskin|skeleton|\\_rig\\|fx|explosion|projectile|hazard|muzzle|morphs\\|replace|dest\.nif|dest\d|lite\.nif|light|overheat|particles|attack|despawn|intro|landingeffects|standin|dummyweapon|chargeao|chargestealth|dest(chest|[lr]arm|head)|legdest|headdest|mps|encryptedfire)", RegexOptions.IgnoreCase);
 
     /// <summary>Small attached parts: they glow, but don't get a beam (one beam per creature).</summary>
     /// <summary>Skin add-ons drawn on top of the body (alien glass helmet, bloodbug hair, mole rat sores...).</summary>
@@ -252,6 +253,9 @@ public static class Enemies
                 foreach (var m in a.Models!.Select(Norm))
                 {
                     if (NotBody.IsMatch(m) || bossModels.Contains(m) || !exists(m)) continue;
+                    // not the creature: an Atomic Shop skin (the eyebot race lists the player's camera drone,
+                    // atx_cambot) or a vehicle (vertibots list the parked vertibird) - scan 2026-11-15
+                    if (m.StartsWith(@"atx\") || m.StartsWith(@"vehicles\")) continue;
                     // shared with people (clothes players wear too) - but a creature's own body file stays, even when a
                     // human-race record borrows it (the Scorched body is also the skin of Scorched statues)
                     bool ownBody = m.StartsWith(@"actors\") && !m.StartsWith(@"actors\character\") && !m.StartsWith(@"actors\powerarmor\");
@@ -303,7 +307,8 @@ public static class Enemies
                 var mine = fits.Where(x => races.Contains(x.Link) || (x.Parts ?? new()).Any(races.Contains)).ToList();
                 foreach (var m in (mine.Count > 0 ? mine : fits).SelectMany(x => x.Models!.Select(Norm)).Distinct())
                     // never the human body (hands, skin): that would light up every player and NPC
-                    if (!m.StartsWith(@"actors\character\") &&
+                    // nor power armour (a Scorched outfit list holds a PA helmet: every player in PA would glow)
+                    if (!m.StartsWith(@"actors\character\") && !m.Contains(@"powerarmor\") &&
                         !models.Contains(m) && !clothes.Contains(m) && !NotBody.IsMatch(m) && !bossModels.Contains(m) && exists(m) &&
                         racesOf[m].Any(r => !races.Contains(r) && IsHumanish(idx, kw, r)))
                         clothes.Add(m);

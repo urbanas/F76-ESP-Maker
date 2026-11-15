@@ -566,6 +566,7 @@
 "Stand other selected items beside it, each in its own look": "Postaw obok inne wybrane przedmioty, każdy w swoim wyglądzie",
 "Start empty...": "Zacznij od zera...",
 "Start with the category": "Zacznij od kategorii",
+"Text above it too": "Także tekst nad nim",
 "Started empty.": "Rozpoczęto od zera.",
 "Stash boxes": "Skrzynie na zapasy",
 "Stash boxes and the Fallout 1st aid, ammo and scrap boxes in CAMPs, every design. Every player's box lights up, not only yours.": "Skrzynie na zapasy oraz skrzynki z pomocą, amunicją i złomem Fallout 1st w O.B.O.Z.-ach, każdy wzór. Świeci skrzynia każdego gracza, nie tylko twoja.",
@@ -969,5 +970,18 @@
 "selected": "zaznaczono",
 "snowflake pant suits": "kombinezony w płatki śniegu",
 "the Atlantic City gift-box clue lights up too": "wskazówka z pudełkiem prezentowym w Atlantic City też świeci",
-"unselected": "odznaczono"
+"unselected": "odznaczono",
+"Gift box": "Pudełko z prezentem",
+"Hiding Cappy": "Ukryty Kapslik",
+"Spin the Wheel": "Kręć kołem",
+"Spin the Wheel: the hiding Cappy to find.": "Kręć kołem: ukryty Kapslik do znalezienia.",
+"The Showmen of the Atlantic City expeditions, found by the outfits they wear. Anyone wearing the same outfits glows too (players included).": "Showmani z ekspedycji do Atlantic City, rozpoznawani po strojach, które noszą. Każdy w tych samych strojach też świeci (także gracze).",
+"anyone wearing this outfit glows too": "każdy w tym stroju też świeci",
+"the same entries as under ENEMIES > Showmen": "te same pozycje co w WROGOWIE > Showmani",
+"{0} models - anyone wearing this outfit glows too": "{0} modeli - każdy w tym stroju też świeci",
+"{0} outfits - the same entries as under ENEMIES > Showmen": "{0} strojów - te same pozycje co w WROGOWIE > Showmani",
+"Item copy": "Kopia przedmiotu",
+"Item copy: a copy of the item itself, in its own colours.": "Kopia przedmiotu: kopia samego przedmiotu w jego własnych kolorach.",
+"Same as the beam ·": "Jak promień ·",
+"same as the beam": "jak promień"
 }
