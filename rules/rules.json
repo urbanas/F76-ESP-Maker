@@ -1,0 +1,1410 @@
+{
+  "schema": 1,
+  "version": 1,
+  "minApp": "2.5",
+  "latestApp": "2.5",
+  "updated": "2026-11-16",
+  "changes": [
+    { "version": 1, "text": [ "Pick-up ball now also offered for the Fuel Canister (Gleaming Depths raid)" ] }
+  ],
+  "enemies": {
+    "kinds": [
+      {
+        "category": "Robots",
+        "keywords": [
+          "ActorTypeRobot",
+          "ActorTypeTurret"
+        ],
+        "color": "#8CBEFF",
+        "description": "Robots and turrets. Robots are built from parts; every part glows, the beam rises from the torso."
+      },
+      {
+        "category": "Scorched",
+        "keywords": [
+          "ActorTypeScorched"
+        ],
+        "color": "#FF7A14",
+        "description": "Scorched and Scorchbeasts. Their outfits are Scorched-only; clothing they share with players is left out so you don't glow yourself."
+      },
+      {
+        "category": "Super Mutants",
+        "keywords": [
+          "ActorTypeSuperMutant",
+          "ActorTypeSuperMutantBehemoth"
+        ],
+        "color": "#84F224",
+        "description": "Super Mutants and Behemoths, with their armor pieces."
+      },
+      {
+        "category": "Feral Ghouls",
+        "keywords": [
+          "ActorTypeFeralGhoul"
+        ],
+        "color": "#FFBE0D",
+        "description": "Feral ghouls, glowing ones and their outfits."
+      },
+      {
+        "category": "Cryptids",
+        "keywords": [
+          "ActorTypeCryptid"
+        ],
+        "color": "#F34DFF",
+        "description": "Mothman, Snallygaster, Grafton Monster, Flatwoods Monster and other cryptids."
+      },
+      {
+        "category": "Insects & bugs",
+        "keywords": [
+          "ActorTypeBug"
+        ],
+        "color": "#FFFF33",
+        "description": "Bloatflies, bloodbugs, stingwings, radroaches, ants, crickets..."
+      },
+      {
+        "category": "Mirelurks & crabs",
+        "keywords": [
+          "ActorTypeMirelurk",
+          "ActorTypeMirelurkKing",
+          "ActorTypeArthropods"
+        ],
+        "color": "#16E0BF",
+        "description": "Mirelurks, hunters, kings, hermit crabs, radscorpions..."
+      },
+      {
+        "category": "Hostile animals",
+        "keywords": [
+          "ActorTypeAnimal"
+        ],
+        "color": "#24AEF2",
+        "description": "Animals that attack - wolves, yao guai, mole rats, mongrels, attack dogs..."
+      },
+      {
+        "category": "Harmless animals",
+        "keywords": [
+          "\u0001"
+        ],
+        "color": "#B2F7FF",
+        "description": "Animals that don't attack - brahmin, radstags, chickens, rabbits, foxes, squirrels..."
+      },
+      {
+        "category": "Other creatures",
+        "keywords": [
+          "ActorTypeCreature"
+        ],
+        "color": "#D98CFF",
+        "description": "Every other creature."
+      }
+    ],
+    "skipRace": "^(CAMPPets_|CUT_|DEL_|zz|Dev|DLC05ArmorRack|PowerArmor|Human|Main_Human|Ghoul|GHL_|Lost(Healer)?Race|Fisherman|P62_|ATX_COMP_|Dummy|RedRocketRobot|DogCollectron|MechTest|SQ_|DogmeatRace|CatRace|CatPetRace|GhoulChild|SCORE_|DLC01WorkshopWallLight|TurretWorkshop)",
+    "notBody": "(characterassets\\\\hats\\\\|wendigoscoutoutfit|dummyfxskin|skeleton|\\\\_rig\\\\|fx|explosion|projectile|hazard|muzzle|morphs\\\\|replace|dest\\.nif|dest\\d|lite\\.nif|light|overheat|particles|attack|despawn|intro|landingeffects|standin|dummyweapon|chargeao|chargestealth|dest(chest|[lr]arm|head)|legdest|headdest|mps|encryptedfire)",
+    "skinExtra": "(glass|hair|sores|nosering|mohawk|fur[._]|flower|vine|spikes|corpse|cordycep|collar)",
+    "noBeam": "(hand|head|hat|glasses|backpack|glove|helmet|mask|eye|crown|mouth|horns|tie|bowtie|ascot|smock|chains|headband|arm|leg|decal|armor|armour|plate|eggs)",
+    "robotParts": [
+      {
+        "name": "Protectron",
+        "pattern": "protectron"
+      },
+      {
+        "name": "Assaultron",
+        "pattern": "assaultron"
+      },
+      {
+        "name": "Sentry Bot",
+        "pattern": "sentry"
+      },
+      {
+        "name": "Mr. Handy",
+        "pattern": "(handy|gutsy|rose_|sawhand|flamethrowerhand|pincherhand|armstypea|mobsterhat)"
+      },
+      {
+        "name": "Robobrain",
+        "pattern": "robobrain"
+      }
+    ],
+    "guardianParts": {
+      "actors\\createabot\\guardianbot\\torsoguardianbot.nif": "Torso",
+      "actors\\createabot\\guardianbottop.nif": "Top",
+      "actors\\createabot\\guardianbot\\guardianbotbase.nif": "Base",
+      "actors\\createabot\\guardianbot\\guardianbotdoors01.nif": "Base doors",
+      "actors\\robot\\parts\\headsentrytype1.nif": "Head (shared)",
+      "actors\\robot\\parts\\headsentrytype1armor.nif": "Head armor (shared)",
+      "actors\\robot\\parts\\sentryfrontarmor.nif": "Front armor (shared)",
+      "actors\\robot\\parts\\sentrytoparmor.nif": "Top armor (shared)",
+      "actors\\robot\\parts\\armleftsentrybot.nif": "Left arm (shared)",
+      "actors\\robot\\parts\\armrightsentrybot.nif": "Right arm (shared)",
+      "actors\\robot\\parts\\armleftsentryarmor.nif": "Left arm armor (shared)",
+      "actors\\robot\\parts\\armrightsentryarmor.nif": "Right arm armor (shared)",
+      "actors\\robot\\parts\\sentryleftshoulderclustergrenadelauncher.nif": "Left shoulder launcher (shared)",
+      "actors\\robot\\parts\\sentryrightshoulderclustergrenadelauncher.nif": "Right shoulder launcher (shared)",
+      "actors\\dlc01\\robot\\parts\\robots_handleftautomaticlaser.nif": "Left laser hand (shared)",
+      "actors\\dlc01\\robot\\parts\\robots_handrightautomaticlaser.nif": "Right laser hand (shared)"
+    },
+    "sharedRobotParts": [
+      {
+        "robot": "Sentry Bot",
+        "parts": [
+          "armleftsentrybot",
+          "armrightsentrybot",
+          "armleftsentryarmor",
+          "armrightsentryarmor",
+          "headsentrytype1",
+          "headsentrytype1armor",
+          "sentryfrontarmor",
+          "sentrytoparmor",
+          "sentryleftshoulderclustergrenadelauncher",
+          "sentryrightshoulderclustergrenadelauncher",
+          "robots_handleftautomaticlaser",
+          "robots_handrightautomaticlaser"
+        ]
+      },
+      {
+        "robot": "Robobrain",
+        "parts": [
+          "armleftsentrybot",
+          "armrightsentrybot",
+          "armleftsentryarmor",
+          "armrightsentryarmor",
+          "headsentrytype1",
+          "sentryfrontarmor",
+          "sentrytoparmor"
+        ]
+      },
+      {
+        "robot": "Protectron",
+        "parts": [
+          "armleftsentryarmor",
+          "armrightsentryarmor",
+          "headsentrytype1armor",
+          "sentryfrontarmor",
+          "sentrytoparmor",
+          "robots_handrightautomaticlaser"
+        ]
+      },
+      {
+        "robot": "Mr. Handy",
+        "parts": [
+          "armrightsentryarmor"
+        ]
+      }
+    ],
+    "bossModels": [
+      {
+        "name": "Scorchbeast Queen",
+        "models": [
+          "actors\\scorchbeast\\characterassets\\scorchbeastqueen.nif"
+        ]
+      },
+      {
+        "name": "Earle Williams (Wendigo Colossus)",
+        "models": [
+          "actors\\wendigocolossus\\characterassets\\wendigocolossus.nif",
+          "actors\\wendigocolossus\\characterassets\\wendigocolossus_boss.nif"
+        ]
+      },
+      {
+        "name": "Ultracite Terror",
+        "models": [
+          "actors\\scorchtongue\\characterassets\\scorchtongue.nif",
+          "actors\\scorchtonguebody\\characterassets\\scorchtonguebody.nif",
+          "actors\\scorchtonguetail\\characterassets\\scorchtonguetail.nif",
+          "actors\\scorchtonguetail\\scorchtonguetail.nif"
+        ]
+      },
+      {
+        "name": "Ultracite Abomination",
+        "models": [
+          "actors\\ultraciteabomination\\characterassets\\ultraciteabomination.nif"
+        ]
+      },
+      {
+        "name": "Storm Goliaths",
+        "models": [
+          "actors\\stormboss\\characterassets\\stormboss.nif",
+          "actors\\stormboss\\parts\\"
+        ]
+      },
+      {
+        "name": "Mirelurk Queen",
+        "models": [
+          "actors\\mirelurkqueen\\characterassets\\mirelurkqueen.nif",
+          "actors\\mirelurkqueen\\characterassets\\mirelurkqueen_parasitic.nif"
+        ]
+      },
+      {
+        "name": "Wise Mothman",
+        "models": [
+          "actors\\mothman\\characterassets\\mothmanmeshexportroot_wise.nif",
+          "actors\\mothman\\characterassets\\mothmanmeshexportroot_wise_equinox.nif"
+        ]
+      },
+      {
+        "name": "Rust King",
+        "models": [
+          "actors\\supermutant\\rustking\\characterassets\\rustkingbody01.nif",
+          "actors\\supermutant\\rustking\\characterassets\\rustkingarmour01.nif",
+          "actors\\supermutant\\rustking\\characterassets\\rustkingcrown01.nif",
+          "actors\\supermutant\\rustking\\characterassets\\rustkinghead01.nif",
+          "actors\\supermutant\\rustking\\characterassets\\rustkingeye01.nif",
+          "actors\\supermutant\\rustking\\characterassets\\rustkingmouth01.nif",
+          "actors\\supermutant\\rustking\\characterassets\\rustkingheadmeatcap.nif"
+        ]
+      },
+      {
+        "name": "Behemoth (boss)",
+        "models": [
+          "actors\\supermutantbehemoth\\boss\\supermutantbehemothboss.nif"
+        ]
+      },
+      {
+        "name": "Bigfoot",
+        "models": [
+          "actors\\supermutantbehemoth\\bigfoot\\characterassets\\supermutantbehemoth_bigfoot.nif"
+        ]
+      },
+      {
+        "name": "Overgrown Tank",
+        "models": [
+          "actors\\supermutant\\overgrown\\overgrowntank.nif",
+          "actors\\supermutant\\overgrown\\overgrowntankflowres.nif"
+        ]
+      },
+      {
+        "name": "Guardian (EN06)",
+        "models": [
+          "actors\\createabot\\guardianbot\\torsoguardianbot.nif",
+          "actors\\createabot\\guardianbottop.nif",
+          "actors\\createabot\\guardianbot\\guardianbotbase.nif",
+          "actors\\createabot\\guardianbot\\guardianbotdoors01.nif",
+          "actors\\robot\\parts\\headsentrytype1.nif",
+          "actors\\robot\\parts\\headsentrytype1armor.nif",
+          "actors\\robot\\parts\\sentryfrontarmor.nif",
+          "actors\\robot\\parts\\sentrytoparmor.nif",
+          "actors\\robot\\parts\\armleftsentrybot.nif",
+          "actors\\robot\\parts\\armrightsentrybot.nif",
+          "actors\\robot\\parts\\armleftsentryarmor.nif",
+          "actors\\robot\\parts\\armrightsentryarmor.nif",
+          "actors\\robot\\parts\\sentryleftshoulderclustergrenadelauncher.nif",
+          "actors\\robot\\parts\\sentryrightshoulderclustergrenadelauncher.nif",
+          "actors\\dlc01\\robot\\parts\\robots_handleftautomaticlaser.nif",
+          "actors\\dlc01\\robot\\parts\\robots_handrightautomaticlaser.nif"
+        ]
+      },
+      {
+        "name": "Imposter Sheepsquatch",
+        "models": [
+          "actors\\createabot\\characterassets\\sheepsquatchfanaticoutfit.nif"
+        ]
+      },
+      {
+        "name": "Jersey Devil",
+        "models": [
+          "actors\\jerseydevil\\characterassets\\jerseydevil.nif"
+        ]
+      },
+      {
+        "name": "Blue Devil",
+        "models": [
+          "actors\\deathclaw\\bluedevil\\bluedevil.nif",
+          "actors\\deathclaw\\bluedevil\\bluedevil_main.nif"
+        ]
+      }
+    ],
+    "markedModels": [
+      {
+        "name": "Legendary enemies",
+        "models": [
+          "effects\\shaderparticles\\legendaryradiationfxsp.nif",
+          "effects\\shaderparticles\\legendaryradiation_b_fxsp.nif"
+        ]
+      },
+      {
+        "name": "Bounty targets (Burning Springs)",
+        "models": [
+          "effects\\shaderparticles\\burn_bountyhunt_casterparticles.nif"
+        ]
+      }
+    ],
+    "humanGroups": [
+      {
+        "name": "Lost",
+        "folders": [
+          "actors\\storm_lost\\",
+          "clothes\\vaultarmourlost\\",
+          "clothes\\vaultsuitburntlost\\"
+        ],
+        "beam": "eyes\\.nif$",
+        "note": "faces, eyes and Lost-only armour"
+      },
+      {
+        "name": "Rust Kingdom raiders",
+        "folders": [
+          "clothes\\rustkingdomraiders\\"
+        ],
+        "beam": "(chest|rustraider_[abc]_[mf]\\.nif)",
+        "note": "their own armour"
+      },
+      {
+        "name": "Raiders",
+        "folders": [
+          "clothes\\raider\\",
+          "clothes\\raider04_fashion\\",
+          "clothes\\raider06_ski\\"
+        ],
+        "beam": "",
+        "note": "players wearing these outfits glow too"
+      },
+      {
+        "name": "Gas-mask raiders",
+        "folders": [
+          "atx\\clothes\\gasmaskraider\\"
+        ],
+        "beam": "",
+        "note": "players wearing this outfit glow too"
+      },
+      {
+        "name": "Blood Eagle mercs",
+        "folders": [
+          "atx\\clothes\\bloodeaglemerc_charmer\\"
+        ],
+        "beam": "",
+        "note": "players wearing this outfit glow too"
+      },
+      {
+        "name": "Cultists",
+        "folders": [
+          "clothes\\cultist",
+          "clothes\\cultoutfit\\",
+          "clothes\\pastor\\",
+          "armor\\wood\\",
+          "armor\\raidermodarmor\\headgear1"
+        ],
+        "beam": "",
+        "note": "players wearing cultist robes, the pastor outfit, wood armour or the sack hood glow too"
+      },
+      {
+        "name": "Communists",
+        "folders": [
+          "atx\\clothes\\communist"
+        ],
+        "beam": "",
+        "note": "players wearing these outfits glow too"
+      },
+      {
+        "name": "Fanatics",
+        "folders": [
+          "atx\\clothes\\atx_fanatic",
+          "actors\\powerarmor\\fanaticspa\\"
+        ],
+        "beam": "",
+        "note": "players wearing these outfits glow too"
+      }
+    ],
+    "outfitNames": {
+      "cultistadept": "Cultist Adept robes",
+      "cultistelder": "Cultist Elder robes",
+      "cultistincarnatehelmet": "Cultist Incarnate",
+      "cultistneophyte": "Cultist Neophyte robes",
+      "cultoutfit": "Cult outfit",
+      "pastor": "Pastor outfit",
+      "wood": "Wood armour",
+      "raidermodarmor": "Sack hood",
+      "vaultarmourlost": "Lost vault armour",
+      "vaultsuitburntlost": "Lost burnt vault suit",
+      "rustkingdomraiders": "Rust Kingdom armour",
+      "gasmaskraider": "Gas-mask raider",
+      "bloodeaglemerc_charmer": "Blood Eagle merc",
+      "fanaticspa": "Fanatic power armour",
+      "storm_lost": "Lost face"
+    },
+    "humanSkip": "(go\\.nif$|_go_|^go_|1st|_fp\\.nif$|_1p\\.nif$)",
+    "humanNoBeam": "(helmet|hat|glove|hood|mask|eye|mouth|facebones|arm|leg|scarf|bag)",
+    "locationNpc": "^LC\\d+_"
+  },
+  "events": {
+    "groups": [
+      { "name": "Seasonal", "icon": "sparkle" },
+      { "name": "Public events", "icon": "flag" },
+      { "name": "Raids & expeditions", "icon": "shield" },
+      { "name": "Secrets", "icon": "flag" }
+    ],
+    "all": [
+      {
+        "name": "The Slasher (Halloween)",
+        "group": "Seasonal",
+        "prefixes": "^SDOW_",
+        "ownModels": "slasher",
+        "color": "#FF7A00",
+        "description": "The Pint-Sized Slasher event. Graves to dig, the Phantoms and the Slasher himself. Outfit entries also light up players wearing that outfit.",
+        "picks": [
+          {
+            "name": "Disturbed graves",
+            "models": [
+              "landscape\\gravesactivators\\graveactivator01\\graveactivator01.nif",
+              "landscape\\gravesactivators\\graveactivator01\\graveactivator_noskeleton.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Pint-Sized Phantoms (outfit)",
+            "models": [
+              "atx\\clothes\\pint_sized_slasher\\slashervictim\\pintsizedslasher_slashervictim_m.nif",
+              "atx\\clothes\\pint_sized_slasher\\slashervictim\\pintsizedslasher_slashervictim_f.nif"
+            ],
+            "detail": "players in this outfit glow too"
+          },
+          {
+            "name": "Pint-Sized Slasher (costume)",
+            "models": [
+              "atx\\clothes\\pintsizedslasher\\pintsizedslasher_m.nif",
+              "atx\\clothes\\pintsizedslasher\\pintsizedslasher_f.nif"
+            ],
+            "detail": "players in this costume glow too"
+          },
+          {
+            "name": "Uninvited Guest (Pale Rider armour)",
+            "models": [
+              "atx\\actors\\powerarmor\\characterassets\\mods\\pa_palerider_body.nif",
+              "atx\\actors\\powerarmor\\characterassets\\mods\\pa_palerider_larm.nif",
+              "atx\\actors\\powerarmor\\characterassets\\mods\\pa_palerider_rarm.nif",
+              "atx\\actors\\powerarmor\\characterassets\\mods\\pa_palerider_lleg.nif",
+              "atx\\actors\\powerarmor\\characterassets\\mods\\pa_palerider_rleg.nif"
+            ],
+            "detail": "players in this power armour glow too"
+          },
+          {
+            "name": "Slasher hat",
+            "models": [
+              "clothes\\slasherhat\\slasherhat_go.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Spooky Scorched (costumes)",
+            "models": [
+              "atx\\clothes\\pintsizedslasher\\pintsizedslasher_mask_m.nif",
+              "atx\\clothes\\pintsizedslasher\\pintsizedslashermask_f.nif",
+              "atx\\clothes\\mothman\\atx_mothmanmask_2_m.nif",
+              "atx\\clothes\\mothman\\atx_mothmanmask_2_f.nif",
+              "atx\\clothes\\atx_cardboardrobot\\atx_cardboardrobot_helmet_m.nif",
+              "atx\\clothes\\atx_cardboardrobot\\atx_cardboardrobot_helmet_f.nif",
+              "atx\\clothes\\atx_executioner\\atx_executioneroutfithood_m.nif",
+              "atx\\clothes\\atx_executioner\\atx_executioneroutfithood_f.nif",
+              "clothes\\halloweencostumes\\halloweencostume01_male_hat.nif",
+              "clothes\\halloweencostumes\\halloweencostume01_female_hat.nif",
+              "clothes\\halloweencostumes\\halloweencostume01_male_hat_facebones.nif",
+              "clothes\\halloweencostumes\\halloweencostume01_female_hat_facebones.nif",
+              "atx\\clothes\\psycho\\atx_psycho_mask_m.nif",
+              "atx\\clothes\\psycho\\atx_psycho_mask_f.nif",
+              "atx\\clothes\\rubbermonster\\atx_outfit_rubbermonster_m_helmet.nif",
+              "atx\\clothes\\rubbermonster\\atx_outfit_rubbermonster_f_helmet.nif",
+              "atx\\clothes\\halloweenpirate\\atx_halloweenpirate_hat_m.nif",
+              "atx\\clothes\\halloweenpirate\\atx_halloweenpirate_hat_f.nif",
+              "atx\\clothes\\halloweenvikingbustedhorns\\atx_halloweenvikingbustedhorns_helmet_m.nif",
+              "atx\\clothes\\halloweenvikingbustedhorns\\atx_halloweenvikingbustedhorns_helmet_f.nif",
+              "clothes\\sheepsquatchmascot\\sheepsquatchmascothatm.nif",
+              "clothes\\sheepsquatchmascot\\sheepsquatchmascothatf.nif",
+              "clothes\\silvershroud\\silvershroudgloves.nif",
+              "clothes\\silvershroud\\silvershroudglovesf.nif"
+            ],
+            "detail": "players wearing these costumes glow too"
+          }
+        ]
+      },
+      {
+        "name": "Mischief Night",
+        "group": "Seasonal",
+        "prefixes": "^(MN2_|E03A_Mischief)",
+        "ownModels": "(mischief|mn2_|halloween|batplushie|radscorpionplushie|pumkin|pumpkin)",
+        "color": "#B040FF",
+        "description": "Mischief Night objectives: pyres to light, candy bowls, boxes of forks, paint for graffiti, fireworks crates.",
+        "picks": [
+          {
+            "name": "Pyres & bonfires",
+            "models": [
+              "setdressing\\mischief_bonfire\\mischief_bonfire.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Candy bowls",
+            "models": [
+              "atx\\workshop\\atx_workshop_halloweencandybowl\\atx_workshop_halloweencandybowl.nif",
+              "atx\\workshop\\atx_workshop_halloweencandybowl\\crania\\atx_workshop_craniacandybowl.nif",
+              "atx\\workshop\\atx_workshop_halloweencandybowl\\morgue\\atx_workshop_candybowl_morgue.nif"
+            ],
+            "detail": "CAMP candy bowls light up too"
+          },
+          {
+            "name": "Boxes of forks",
+            "models": [
+              "scol\\seventysix.esm\\cm00573cc8.nif",
+              "scol\\seventysix.esm\\cm00573cc9.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Paint buckets (graffiti)",
+            "models": [
+              "props\\paint\\paintbucket_generic.nif",
+              "props\\paint\\paintbucket_blue.nif",
+              "props\\paint\\paintbucket_red.nif",
+              "props\\paint\\paintbucket_yellow.nif",
+              "props\\paint\\paintbucketpink_tol.nif"
+            ],
+            "detail": "paint buckets everywhere light up too"
+          },
+          {
+            "name": "Fireworks crates",
+            "models": [
+              "setdressing\\fireworkscrate\\mn2_fireworkscrate.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Costumed Lost (mummy & costume)",
+            "models": [
+              "atx\\clothes\\mummy\\atx_mummy_m.nif",
+              "atx\\clothes\\mummy\\atx_mummy_f.nif",
+              "clothes\\halloweencostumes\\halloweencostume02_male_body.nif",
+              "clothes\\halloweencostumes\\halloweencostume02_female_body.nif"
+            ],
+            "detail": "players wearing these costumes glow too"
+          }
+        ]
+      },
+      {
+        "name": "Holiday Scorched",
+        "group": "Seasonal",
+        "prefixes": "^(c_)?Festive_",
+        "ownModels": "(?!)",
+        "color": "#30E070",
+        "description": "Holiday Scorched: Scorched in Santa, Mrs. Claus, elf and snowflake pant-suit outfits - they drop Holiday Gifts. Also the gifts and gift wrap when they lie on the ground.",
+        "picks": [
+          {
+            "name": "Festive Scorched (costumes)",
+            "models": [
+              "atx\\clothes\\mrclaus\\mrclausm.nif",
+              "atx\\clothes\\mrclaus\\mrclausf.nif",
+              "atx\\clothes\\mrclaus\\mrclaushatm.nif",
+              "atx\\clothes\\mrclaus\\mrclaushatf.nif",
+              "atx\\clothes\\mrsclaus\\mrsclausm.nif",
+              "atx\\clothes\\mrsclaus\\mrsclausf.nif",
+              "atx\\clothes\\christmaself\\christmaselfm.nif",
+              "atx\\clothes\\christmaself\\christmaselff.nif",
+              "atx\\clothes\\christmaself\\christmaselfhatm.nif",
+              "atx\\clothes\\christmaself\\christmaselfhatf.nif",
+              "atx\\clothes\\pantsuit\\atx_pantsuit_m.nif",
+              "atx\\clothes\\pantsuit\\atx_pantsuit_f.nif",
+              "atx\\clothes\\santabeard\\santabeardm.nif",
+              "atx\\clothes\\santabeard\\santabeardfemale.nif"
+            ],
+            "detail": "Santa suits & hats, Mrs. Claus dresses, elf outfits, snowflake pant suits, Santa beards · players wearing them glow too"
+          },
+          {
+            "name": "Holiday gifts",
+            "models": [
+              "atx\\setdressing\\giftboxes\\giftbox.nif"
+            ],
+            "detail": "gifts on the ground (also waterlogged and handmade ones) · the Atlantic City gift-box clue lights up too"
+          },
+          {
+            "name": "Gift wrap",
+            "models": [
+              "setdressing\\giftbox\\giftwrappingpaper_01.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "Fasnacht",
+        "group": "Seasonal",
+        "prefixes": "^E01F_",
+        "ownModels": "(fasnacht|helvetia|helv_|cm0059e955)",
+        "color": "#40D0FF",
+        "description": "Fasnacht Day: bonfire, beehives, frog egg clusters and the other supply spots.",
+        "picks": []
+      },
+      {
+        "name": "Meat Week",
+        "group": "Seasonal",
+        "prefixes": "^E02A_",
+        "ownModels": "(meat_bbq|meatweek|grahm|cm0054a3a6)",
+        "color": "#FF4040",
+        "description": "Meat Week (Grahm's) cookout objects.",
+        "picks": []
+      },
+      {
+        "name": "Mothman Equinox",
+        "group": "Seasonal",
+        "prefixes": "^E07A_",
+        "ownModels": "(mothman|moth|enlightened|cultist)",
+        "color": "#E0E060",
+        "description": "Mothman Equinox ritual objects and Enlightened Mothman Eggs.",
+        "picks": []
+      },
+      {
+        "name": "Invaders from Beyond",
+        "group": "Seasonal",
+        "prefixes": "^E07B_",
+        "ownModels": "(zetan|brainwave)",
+        "color": "#60FF90",
+        "description": "Invaders from Beyond: the Zetan brainwave siphons.",
+        "picks": []
+      },
+      {
+        "name": "Once in a Blue Moon",
+        "group": "Public events",
+        "prefixes": "^MOON_",
+        "ownModels": "(bluemoon|moon_)",
+        "color": "#4080FF",
+        "description": "Once in a Blue Moon objectives.",
+        "picks": []
+      },
+      {
+        "name": "Lucky Strike",
+        "group": "Seasonal",
+        "prefixes": "^MTRZ05",
+        "ownModels": "(?!)",
+        "color": "#FFC040",
+        "description": "Lucky Strike: the dig sites your map leads to and the U-Mine-It! vending machines that sell the maps.",
+        "picks": [
+          {
+            "name": "Dig sites",
+            "models": [
+              "setdressing\\ashlootmounds\\ashlootmound02.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "U-Mine-It! vending machines",
+            "models": [
+              "setdressing\\autodispenser\\autodispenserumine.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "Gleaming Depths (raid)",
+        "group": "Raids & expeditions",
+        "prefixes": "^RD01_",
+        "ownModels": "(?!)",
+        "color": "#5CFFB8",
+        "description": "The Gleaming Depths raid: fuel canisters to carry, where they go, the kinetic charging nodes and the Ultragenetic Mole Miner Stalker.",
+        "picks": [
+          {
+            "name": "Fuel Canister",
+            "models": [
+              "dlc03\\setdressing\\quest\\fogcondensor\\fogcondensorcanister01.nif"
+            ],
+            "detail": "Plastic Gas Canisters elsewhere light up too"
+          },
+          {
+            "name": "Fuel Deposit",
+            "models": [
+              "setdressing\\coalchute\\coalchute.nif"
+            ],
+            "detail": "CAMP fertilizer storages and ore extractors light up too"
+          },
+          {
+            "name": "Kinetic Charging Node",
+            "models": [
+              "interiors\\vault\\vault111\\setdressing\\v111generator02.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Ultragenetic Mole Miner Stalker",
+            "models": [
+              "actors\\moleminer\\characterassets\\body_mesh_cultist.nif"
+            ],
+            "detail": "its body - cultist mole miners light up too"
+          }
+        ]
+      },
+      {
+        "name": "Secrets",
+        "group": "Secrets",
+        "prefixes": "(?!)",
+        "ownModels": "(?!)",
+        "color": "#C080FF",
+        "description": "Hidden objects and easter eggs in the world, such as the pipe from the \"Pipe is life\" meme.",
+        "picks": [
+          {
+            "name": "Pipe (\"Pipe is life\")",
+            "models": [
+              "scol\\seventysix.esm\\cm00564510.nif"
+            ],
+            "detail": "props built into the same piece of scenery may light up too"
+          }
+        ]
+      },
+      {
+        "name": "Tunnel of Love",
+        "group": "Public events",
+        "prefixes": "^E09C_",
+        "ownModels": "(?!)",
+        "color": "#FF60B0",
+        "description": "Tunnel of Love: robot parts and heart lamps to collect, the confetti cannons and Miss Lovely.",
+        "picks": [
+          {
+            "name": "Robot parts",
+            "models": [
+              "setdressing\\fakemisshandy\\fakemisshandypartbucket.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Heart lamps",
+            "models": [
+              "setdressing\\tunnelofloveprops\\tol_loveheartcollectible.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Confetti cannons",
+            "models": [
+              "setdressing\\tunnelofloveprops\\tol_confetticannon.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Miss Lovely",
+            "models": [
+              "setdressing\\fakemisshandy\\fakemisshandy01.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "Radiation Rumble",
+        "group": "Public events",
+        "prefixes": "^E05_Radiation",
+        "ownModels": "(?!)",
+        "color": "#B0FF40",
+        "description": "Radiation Rumble: the irradiated ore veins to mine and the ore storage container to fill.",
+        "picks": [
+          {
+            "name": "Irradiated ore veins",
+            "models": [
+              "landscape\\plants\\florairradiatedore01.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Ore storage container",
+            "models": [
+              "scol\\seventysix.esm\\cm0023e109.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "Most Wanted",
+        "group": "Public events",
+        "prefixes": "^E09D_",
+        "ownModels": "(?!)",
+        "color": "#E0A050",
+        "description": "Most Wanted (Gunther's Wild West Show): loot safes, wall safes, loot dispensers and the getaway wagon.",
+        "picks": [
+          {
+            "name": "Loot safes",
+            "models": [
+              "setdressing\\guntherswildwestshowprops\\guntherssafe.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Loot wall safes",
+            "models": [
+              "setdressing\\guntherswildwestshowprops\\guntherswallsafe.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Loot dispensers",
+            "models": [
+              "setdressing\\guntherswildwestshowprops\\gwws_ticketmachineandlight.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Getaway wagon",
+            "models": [
+              "setdressing\\guntherswagon\\guntherswagon.nif"
+            ],
+            "detail": "CAMP getaway wagons light up too"
+          }
+        ]
+      },
+      {
+        "name": "Spin the Wheel",
+        "group": "Public events",
+        "prefixes": "^E09B_",
+        "ownModels": "(?!)",
+        "color": "#40B0FF",
+        "description": "Spin the Wheel: the hiding Cappy to find.",
+        "picks": [
+          {
+            "name": "Hiding Cappy",
+            "models": [
+              "setdressing\\nukaworldprops\\cappyhidingposeclean.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "Encryptid",
+        "group": "Public events",
+        "prefixes": "^E01B_Encryptid",
+        "ownModels": "(?!)",
+        "color": "#C080FF",
+        "description": "Encryptid: the pylons to power up.",
+        "picks": [
+          {
+            "name": "Pylons",
+            "models": [
+              "props\\encryptedpylon\\encryptedpylon_computer.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "Uranium Fever",
+        "group": "Public events",
+        "prefixes": "^MTNS06",
+        "ownModels": "(?!)",
+        "color": "#80FF60",
+        "description": "Uranium Fever: the uranium extractor to defend.",
+        "picks": [
+          {
+            "name": "Uranium extractor",
+            "models": [
+              "setdressing\\indmachines\\custom\\indmachines_extractor01\\indmachines_extractor02.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "Dangerous Pastimes",
+        "group": "Public events",
+        "prefixes": "^Storm_E01",
+        "ownModels": "(?!)",
+        "color": "#60C0FF",
+        "description": "Skyline Valley: the harvester parts to collect.",
+        "picks": [
+          {
+            "name": "Harvester parts",
+            "models": [
+              "dlc01\\setdressing\\machinegreebles\\mechanical_metal09.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "Eviction Notice",
+        "group": "Public events",
+        "prefixes": "^E08B_",
+        "ownModels": "(?!)",
+        "color": "#C06030",
+        "description": "Eviction Notice: the meat bags to destroy.",
+        "picks": [
+          {
+            "name": "Meat bags",
+            "models": [
+              "props\\supermutant\\meatbag_01.nif",
+              "props\\supermutant\\meatbag_floor01.nif"
+            ],
+            "detail": "meat bags in super mutant camps light up too"
+          }
+        ]
+      },
+      {
+        "name": "Campfire Tales",
+        "group": "Public events",
+        "prefixes": "^E01C_",
+        "ownModels": "(?!)",
+        "color": "#FF9040",
+        "description": "Campfire Tales: dry kindling to collect (wet kindling doesn't count), the campfire and the items the tales ask for.",
+        "picks": [
+          {
+            "name": "Dry kindling",
+            "models": [
+              "setdressing\\campfiretalestwigs\\campfiretalestwig_06.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Wet kindling",
+            "models": [
+              "setdressing\\campfiretalestwigs\\campfiretalestwig_05.nif"
+            ],
+            "detail": "the one to leave"
+          },
+          {
+            "name": "Campfire",
+            "models": [
+              "props\\campfiretalescampfire\\campfiretales_campfire.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Tale items (pet rock, lucky charm, telescope)",
+            "models": [
+              "scol\\seventysix.esm\\cm004215f6.nif",
+              "setdressing\\sheepsquatchhorn\\sheepsquatchhorn_small.nif",
+              "dlc04\\setdressing\\telescope\\dlc04_telescope.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "Distinguished Guests",
+        "group": "Public events",
+        "prefixes": "^MTNM04",
+        "ownModels": "(?!)",
+        "color": "#FFE080",
+        "description": "Distinguished Guests (Bolton Greens): place settings and centerpieces to put on the tables.",
+        "picks": [
+          {
+            "name": "Place settings",
+            "models": [
+              "props\\platesetting\\mtnm04_platesetting_messy.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Centerpieces",
+            "models": [
+              "setdressing\\pumpkins\\pumpkincenterpiece01.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "Atlantic City expeditions",
+        "group": "Raids & expeditions",
+        "prefixes": "^XPD_AC",
+        "ownModels": "(?!)",
+        "color": "#FFD24A",
+        "description": "Atlantic City expeditions (Tax Evasion, The Most Sensational Game, The Human Condition): listening bugs, slot machines, tickets, supplies, secret teddy bears and the other objectives.",
+        "picks": [
+          {
+            "name": "Listening bugs",
+            "models": [
+              "setdressing\\powerbox\\powerbox_activator.nif"
+            ],
+            "detail": "Tax Evasion · a few power boxes elsewhere light up too"
+          },
+          {
+            "name": "Slot machines",
+            "models": [
+              "setdressing\\ac_slotmachines\\ac_slotmachine01.nif",
+              "setdressing\\ac_slotmachines\\ac_slotmachine02.nif"
+            ],
+            "detail": "Tax Evasion · every casino slot machine lights up, the game has no separate objective model"
+          },
+          {
+            "name": "Cap stash drop-off",
+            "models": [
+              "atx\\setdressing\\atx_stashboxcontainers\\atx_stashboxcontainer_ornate.nif"
+            ],
+            "detail": "Tax Evasion"
+          },
+          {
+            "name": "Terminals",
+            "models": [
+              "furniture\\terminals\\terminalon.nif",
+              "furniture\\terminals\\terminalconsoleontall.nif"
+            ],
+            "detail": "every terminal in the game lights up too, not only the objective ones"
+          },
+          {
+            "name": "Tickets",
+            "models": [
+              "dlc04\\setdressing\\games\\dlc04_nukacade_ticketstack01.nif"
+            ],
+            "detail": "The Most Sensational Game"
+          },
+          {
+            "name": "Tato baskets",
+            "models": [
+              "props\\consumables\\pitt\\pitt_tatobasket_01.nif"
+            ],
+            "detail": "The Most Sensational Game"
+          },
+          {
+            "name": "Confetti cannons",
+            "models": [
+              "setdressing\\tunnelofloveprops\\tol_confetticannon.nif"
+            ],
+            "detail": "The Most Sensational Game · Tunnel of Love's cannons too"
+          },
+          {
+            "name": "Secret teddy bears",
+            "models": [
+              "setdressing\\teddybear\\toyteddybeardirty01_babyteddy.nif",
+              "setdressing\\teddybear\\toyteddybeardirty01_red.nif",
+              "setdressing\\teddybear\\toyteddybeardirty01_demon.nif",
+              "setdressing\\teddybear\\toyteddybeardirty01_polar.nif",
+              "setdressing\\teddybear\\toyteddybeardirty01_blue.nif"
+            ],
+            "detail": "The Most Sensational Game · these teddy bears elsewhere light up too"
+          },
+          {
+            "name": "Muni Supplies",
+            "models": [
+              "scol\\seventysix.esm\\cm007598ce.nif"
+            ],
+            "detail": "The Human Condition"
+          },
+          {
+            "name": "Muni security cameras",
+            "models": [
+              "scol\\seventysix.esm\\cm003609a6.nif"
+            ],
+            "detail": "The Human Condition"
+          },
+          {
+            "name": "Medical Supplies",
+            "models": [
+              "setdressing\\firstaidkit\\firstaidkitvandalized.nif"
+            ],
+            "detail": "The Human Condition · first aid kits elsewhere light up too"
+          },
+          {
+            "name": "Lost Dossiers",
+            "models": [
+              "setdressing\\office\\folderpapers02.nif"
+            ],
+            "detail": "The Human Condition · these folders elsewhere light up too"
+          },
+          {
+            "name": "City Hall metal detectors",
+            "models": [
+              "setdressing\\xpd_ac\\xpd_ac_cityhall\\xpd_ac_cityhall_metaldetector.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      },
+      {
+        "name": "The Pitt expeditions",
+        "group": "Raids & expeditions",
+        "prefixes": "^XPD_?(Pitt|RTTP)",
+        "ownModels": "pitt|uniondues",
+        "color": "#FF9A3C",
+        "description": "The Pitt expeditions: Union supply crates, chemicals to gather, coolant canisters, dead drops, deposit points, prison doors, trench masks and meds.",
+        "picks": [
+          {
+            "name": "Coolant canisters / Troglocide",
+            "models": [
+              "props\\gascanister02.nif"
+            ],
+            "detail": "gas canisters elsewhere light up too"
+          },
+          {
+            "name": "Coolant canister stockpiles",
+            "models": [
+              "atx\\setdressing\\atx_freezer\\atx_freezer_nukacola.nif"
+            ],
+            "detail": "CAMP Nuka-Cola freezers light up too"
+          },
+          {
+            "name": "Chemical weapons stockpiles",
+            "models": [
+              "setdressing\\machinekit\\custom\\console\\industrialmachineconsole01activator.nif"
+            ],
+            "detail": "these consoles elsewhere light up too"
+          },
+          {
+            "name": "Distribution stations",
+            "models": [
+              "setdressing\\graftonsteelmachines\\graftonregulator01\\graftonregulatoractivator01.nif"
+            ],
+            "detail": "these machines elsewhere light up too"
+          },
+          {
+            "name": "Testing vats",
+            "models": [
+              "interiors\\industrial\\smpipe\\indsmpipe1way01activator.nif"
+            ],
+            "detail": "these pipe valves elsewhere light up too"
+          },
+          {
+            "name": "Prison doors",
+            "models": [
+              "interiors\\jail\\jaildoorswing01.nif",
+              "setdressing\\doors\\switchdoors\\switchdoorexsmlatch01\\switchdoorexsmlatch01.nif",
+              "setdressing\\doors\\switchdoors\\switchdoorexsmlatch01\\switchdoorexsmlatch02.nif"
+            ],
+            "detail": "these doors elsewhere light up too"
+          },
+          {
+            "name": "Trench masks",
+            "models": [
+              "armor\\gasmask\\gasmaskgo.nif"
+            ],
+            "detail": "gas masks lying elsewhere light up too"
+          },
+          {
+            "name": "Trench meds",
+            "models": [
+              "props\\radx.nif"
+            ],
+            "detail": "every Rad-X lights up too"
+          },
+          {
+            "name": "Fallen prisoner's collars",
+            "models": [
+              "dlc04\\clothes\\slavecollar\\slavecollar_go.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Steel ingots",
+            "models": [
+              "props\\steelingotstack\\steel_ingot_stack.nif"
+            ],
+            "detail": ""
+          },
+          {
+            "name": "Hazards (trench mounds)",
+            "models": [
+              "props\\escapefrompurgatory_trenchmound\\escapefrompurgatory_trenchmound_sign.nif"
+            ],
+            "detail": ""
+          }
+        ]
+      }
+    ],
+    "headPiece": "(hat|helmet|mask|hood|headgear|headwear|facebones|silvershroudgloves)",
+    "enemyPicks": [
+      "Pint-Sized Slasher (costume)",
+      "Pint-Sized Phantoms (outfit)",
+      "Uninvited Guest (Pale Rider armour)",
+      "Spooky Scorched (costume heads)",
+      "Spooky Scorched (costume bodies)",
+      "Costumed Lost (mummy & costume)",
+      "Ultragenetic Mole Miner Stalker",
+      "Festive Scorched (costumes)"
+    ]
+  },
+  "catalog": {
+    "junk": "^(zz|DEL_|CUT_|BACKUP|Test|DEBUG|DUPLICATE|xx)",
+    "nothingDrawn": "^markers\\\\|loadmarker|dummy|invisible|activatorvolume|^armor\\\\raider01\\\\static\\.nif$|_startlights\\.nif$|^clothes\\\\hats\\\\gomininghelmet\\.nif$|^effects\\\\splinesparks",
+    "campId": "CAMP|Workshop|^ATX_|^SCORE_",
+    "preWarFoods": [
+      "Blamco Brand Mac and Cheese",
+      "Bubblegum",
+      "Cajun Rice & Beans",
+      "Canned Coffee",
+      "Canned Dog Food",
+      "Canned Meat Stew",
+      "Cola Perk Bubblegum",
+      "Cotton Candy Bites",
+      "Cram",
+      "Dandy Boy Apples",
+      "Fancy Lads Snack Cakes",
+      "Fasnacht Donut",
+      "Funnel Cake",
+      "Grape Perk Bubblegum",
+      "Gum Drops",
+      "Halloween Candy",
+      "Imitation Seafood",
+      "InstaMash",
+      "Mystery Candy",
+      "Noodle Cup",
+      "Nuka Victory Candy",
+      "Nuka-Cola Candy",
+      "Nuka-Cola Quantum Candy",
+      "Perfect Bubblegum",
+      "Perfectly Preserved Pie",
+      "Perk Bubblegum",
+      "Popcorn",
+      "Pork n' Beans",
+      "Potato Crisps",
+      "Preserved InstaMash",
+      "Rudy's Canned Pozole",
+      "Salisbury Steak",
+      "Strawberry Perk Bubblegum",
+      "Sugar Bombs",
+      "Vegetarian Ham",
+      "Watermelon Perk Bubblegum",
+      "Yum Yum Deviled Eggs"
+    ],
+    "xpEffects": [
+      "FortifyXPBonusFood",
+      "FortifyIntelligenceFood"
+    ]
+  },
+  "partNames": {
+    "extraWords": [
+      "body",
+      "head",
+      "mask",
+      "helmet",
+      "hat",
+      "hood",
+      "outfit",
+      "costume",
+      "arm",
+      "arms",
+      "leg",
+      "legs",
+      "left",
+      "right",
+      "torso",
+      "chest",
+      "tail",
+      "wing",
+      "wings",
+      "eye",
+      "eyes",
+      "glow",
+      "glove",
+      "gloves",
+      "boot",
+      "boots",
+      "hair",
+      "face",
+      "jaw",
+      "teeth",
+      "claw",
+      "claws",
+      "lower",
+      "upper",
+      "base",
+      "gun",
+      "lid",
+      "door",
+      "fx",
+      "skin",
+      "shell",
+      "fur",
+      "spine",
+      "neck",
+      "hand",
+      "hands",
+      "foot",
+      "feet",
+      "back",
+      "pack",
+      "bag",
+      "belt",
+      "cape",
+      "coat",
+      "suit",
+      "dress",
+      "pants",
+      "shirt",
+      "jacket",
+      "scarf",
+      "mouth",
+      "horn",
+      "horns",
+      "beard",
+      "crown",
+      "brain",
+      "dome",
+      "light",
+      "lights",
+      "damaged",
+      "broken",
+      "dead",
+      "burnt",
+      "dirty",
+      "clean",
+      "knee",
+      "hip",
+      "shoulder",
+      "humanoid",
+      "plate",
+      "pieces",
+      "liner",
+      "backpack",
+      "radio",
+      "parasitic",
+      "res",
+      "low",
+      "high",
+      "mesh",
+      "vertibird",
+      "decal",
+      "decals",
+      "mascot",
+      "animated",
+      "anim",
+      "railing",
+      "rail",
+      "rigged",
+      "emblem",
+      "logo",
+      "nozzle",
+      "barrel",
+      "trim",
+      "charge",
+      "charger",
+      "ascot",
+      "vandalized",
+      "pharm",
+      "pharma",
+      "bark",
+      "cob",
+      "ized"
+    ],
+    "noise": [
+      "atx",
+      "go",
+      "nif",
+      "flora",
+      "landscape",
+      "plants",
+      "dlc",
+      "mesh"
+    ]
+  },
+  "pickup": {
+    "categories": [
+      "Bobbleheads",
+      "Magazines",
+      "XP recipes",
+      "Plans",
+      "Pre-war food",
+      "Notes & holotapes",
+      "Plants (all)",
+      "Aid & food",
+      "Junk & misc",
+      "Junk: *",
+      "Weapons",
+      "Loot bags",
+      "Clothes lying around",
+      "All outfits (ground & display model)",
+      "Other: Misc items",
+      "Other: Notes & books",
+      "Other: Plants",
+      "Other: Weapons",
+      "Other: Ammo",
+      "Other: Keys",
+      "Other: Apparel on the ground"
+    ],
+    "entries": [
+      "event:gleaming depths (raid):fuel canister"
+    ],
+    "block": []
+  },
+  "presets": [],
+  "retirePresets": [],
+  "exclude": [],
+  "include": [],
+  "rename": [],
+  "translations": {}
+}
