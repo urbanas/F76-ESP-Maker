@@ -40,6 +40,7 @@ public static class Builder
             {
                 var st = project.StyleOf(e, cat);
                 var partLooks = project.PartLooks.GetValueOrDefault(e.Id);
+                bool pickOk = !e.NoIcon && Pickup.Allowed(cat.Name, e.Id); // the pick-up ball only on things you pick up (rules.json pickup)
                 if (!Shows(st) && partLooks is not { Count: > 0 })
                 {
                     // "show nothing" still claims the models, so a linked twin in another category (e.g. the same
@@ -90,7 +91,8 @@ public static class Builder
                                             modelMesh, modelMat,
                                             labelMat, s.LabelSize * labelRatio, s.LabelSize, s.Invisible && e.CanHide,
                                             motion, p => materials.TryGetValue(p, out var mb) ? Materials.BaseScale(mb) : 1f,
-                                            s.Stack, main ? arrowMat : null, s.ArrowWidth, copyMesh, copyMat, s.CopySize, s.IconScale / 100f, s.CopyScale / 100f);
+                                            s.Stack, main ? arrowMat : null, s.ArrowWidth, copyMesh, copyMat, s.CopySize, s.IconScale / 100f, s.CopyScale / 100f,
+                                            PickRange: pickOk ? s.PickRange : 0, PickDonor: s.PickRange > 0 && pickOk ? PickDonor(game) : null);
                 }
                 // invisible enemies: their shimmer's gradient in the glow colour (a game texture: into the texture archive)
                 if (e.Gradients != null && st.Glow)
@@ -120,6 +122,8 @@ public static class Builder
                     }
                     bool mainModel = own != null || beamModels == null || beamModels.Contains(model);
                     var opts = Options(look, mainModel, model);
+                    if (look.PickRange > 0 && pickOk && opts.PickDonor == null)
+                        log(Tf("  {0}: no pickup range - the game's {1} can't be used ({2})", e.Shown, Pickup.DonorModel, PickDonorError ?? "?"));
                     if (done.TryGetValue(path, out var by)) { log(Tf("  {0}: {1} is also selected as {2} - that look is used", e.Shown, model, by)); continue; }
                     // a hidden worn outfit: the bare body / hands go in its place (the outfit model is the body under it too)
                     var srcPath = path;
@@ -251,7 +255,26 @@ public static class Builder
         return new GlowMat(path, cut ?? -1); // its own additive alpha block, as the working glows
     }
 
-    static bool ChangesModel(Style s) => s.ShowsOwnXray || s.Glow || s.Beam || s.Arrow || s.Copy || s.Label || s.Invisible || Icons.Get(s.Icon) != null || Models3D.Get(s.Icon) != null;
+    static bool ChangesModel(Style s) => s.ShowsOwnXray || s.Glow || s.Beam || s.Arrow || s.Copy || s.Label || s.Invisible || s.PickRange > 0 || Icons.Get(s.Icon) != null || Models3D.Get(s.Icon) != null;
+
+    /// <summary>The "pick up from afar" donor collision (Pickup), read once from the game; null when it can't be used.</summary>
+    static byte[]? PickDonor(GameData game)
+    {
+        if (pickDonorRead) return pickDonor;
+        pickDonorRead = true;
+        try
+        {
+            var e = game.FindOriginal(Pickup.DonorModel) ?? game.Find(Pickup.DonorModel);
+            pickDonor = e != null ? Pickup.DonorBlob(e.Archive.ReadFile(e)) : null;
+            if (pickDonor == null) PickDonorError = e == null ? "model not found" : "unexpected collision layout";
+        }
+        catch (Exception ex) { pickDonor = null; PickDonorError = ex.Message; }
+        return pickDonor;
+    }
+    /// <summary>Why the pick-up ball can't be made (shown in the build log), or null.</summary>
+    public static string? PickDonorError;
+    static byte[]? pickDonor;
+    static bool pickDonorRead;
     static bool Shows(Style s) => ChangesModel(s) || s.Brighten;
 
     /// <summary>Brighter copies of the game materials a model uses, under the game's own paths. Always from the game's
@@ -317,7 +340,7 @@ public static class Builder
             if (!mats.ContainsKey(vpath)) mats[vpath] = Materials.GlowVariant(template, vc, st.GlowOpacity, st.GlowFx.Walls, method == "B", !st.GlowFill);
             // no blending block at all: keeping a cut-out part's own block hid the glow (its alpha test fails on the
             // see-through colour) - so animated cut-out parts glow whole
-            return new GlowMat(vpath, -1, 1);
+            return new GlowMat(vpath, -1, 1, Outline: !st.GlowFill && method == "B");
         }
         var material = part.Material;
         int at = material.IndexOf(@"materials\", StringComparison.OrdinalIgnoreCase);
@@ -349,7 +372,7 @@ public static class Builder
             var mask = CutMask(game, cut.Texture, files);
             mats[path] = Materials.CutoutGlow(template, c, st.GlowOpacity, st.GlowFx.Walls, mask ?? cut.Texture, cut.Ref, !st.GlowFill, white: mask != null);
         }
-        return new GlowMat(path, mats[path][0x29]);
+        return new GlowMat(path, mats[path][0x29], Outline: !st.GlowFill);
     }
 
     /// <summary>A cut-out texture as white with its own transparency (at most 256 px, like the game's lower mips), written

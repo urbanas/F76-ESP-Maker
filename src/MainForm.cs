@@ -51,6 +51,13 @@ public sealed class MainForm : Form
     readonly ToolStripMenuItem keepItem = new(Tr("Keep other mods' changes"));
     /// <summary>Which game install is used (Steam or Microsoft Store / Game Pass) - click to pick another.</summary>
     readonly ToolStripMenuItem gameItem = new(Tr("Game folder..."));
+    /// <summary>Options: item fixes (Rules.cs) - check online at start, check now, load a file, and which ones are in use.</summary>
+    readonly ToolStripMenuItem onlineItem = new(Tr("Check online for item fixes at start")) { CheckOnClick = true };
+    readonly ToolStripMenuItem rulesInfo = new() { Enabled = false };
+    /// <summary>The link at the right of the status bar: "Restart to use them" after new item fixes, "Nexus page" for a
+    /// new version.</summary>
+    readonly LinkLabel notice = new() { Dock = DockStyle.Right, AutoSize = true, Visible = false, Padding = new Padding(0, 0, 8, 0) };
+    Action noticeClick = () => { };
     readonly TextBox search = new() { PlaceholderText = Tr("Search all items..."), Width = 190, Margin = new Padding(3, 6, 3, 3) };
     /// <summary>Filter chips over the list (what is shown, with how many): All / Selected / Own look / Has parts.</summary>
     readonly Seg filterChips = new(Tr("All"), Tr("Selected"), Tr("Own look"), Tr("Has parts")) { Selected = 0, Margin = new Padding(8, 6, 6, 3) };
@@ -361,7 +368,33 @@ public sealed class MainForm : Form
             hoverLink = null;
             list.Cursor = Cursors.Default;
         };
-        list.MouseClick += (_, e) =>
+        // a click on a row: Wine / Proton (Steam Deck) doesn't reliably send the list's click notice, so the press is
+        // remembered here and handled on whichever comes first, the click or the release (user, 2026-11-16)
+        MouseEventArgs? press = null;
+        list.MouseDown += (_, e) =>
+        {
+            press = e.Clicks == 1 ? e : null;
+            // right-click on a row that isn't picked yet: pick it (Windows does, Wine may not), so the menu has something
+            if (e.Button == MouseButtons.Right && RowAt(e.Location) is ListViewItem rli && !rli.Selected)
+            {
+                if (Control.ModifierKeys == Keys.None) list.SelectedItems.Clear();
+                rli.Selected = rli.Focused = true;
+            }
+        };
+        void RowClicked()
+        {
+            if (press is not MouseEventArgs e) return;
+            press = null;
+            if (e.Button == MouseButtons.Left && Control.ModifierKeys == Keys.None && RowAt(e.Location) is ListViewItem pick && !pick.Selected)
+            {
+                list.SelectedItems.Clear();
+                pick.Selected = pick.Focused = true;
+            }
+            RowClick(e);
+        }
+        list.MouseClick += (_, _) => RowClicked();
+        list.MouseUp += (_, _) => BeginInvoke(RowClicked);
+        void RowClick(MouseEventArgs e)
         {
             var hitItem = RowAt(e.Location);
             // a category found by the search: open it
@@ -388,7 +421,7 @@ public sealed class MainForm : Form
             // a plain click anywhere else on the row (not its tick box): the look pop-up opens; once open it follows the picked row
             if (e.X >= label.Left && Control.ModifierKeys == Keys.None && lookPopup is not { Visible: true })
                 BeginInvoke(EditLookOfSelection);
-        };
+        }
         list.KeyDown += (_, e) =>
         {
             if (list.FocusedItem?.Tag is Category kc && e.KeyCode == Keys.Enter) { e.Handled = true; BeginInvoke(() => OpenCategory(kc)); return; }
@@ -409,14 +442,21 @@ public sealed class MainForm : Form
         rowMenu.Opening += (_, e) =>
         {
             var sel = SelectedEntries();
+            bool partRow = sel.Count == 0 && list.SelectedItems.Cast<ListViewItem>().Any(li => li.Tag is PartRow);
+            foreach (var mi in new[] { copyItem, pasteItem, sameItem, tickItem, untickItem }) mi.Visible = !partRow;
+            foreach (var sep in rowMenu.Items.OfType<ToolStripSeparator>()) sep.Visible = !partRow;
+            if (partRow) { editItem.Text = Tr("Edit look..."); return; } // a part row (one brahmin type): only its own look
             if (sel.Count == 0) { e.Cancel = true; return; }
             string n = sel.Count > 1 ? Tf(" {0} items", sel.Count) : "";
             editItem.Text = sel.Count > 1 ? Tf("Edit look of {0} items...", sel.Count) : Tr("Edit look...");
-            copyItem.Enabled = sel.Count == 1 && sel[0].Group == null;
+            copyItem.Enabled = sel.Count == 1 && Leaves(sel[0]).Any();
             copyItem.Text = copyItem.Enabled ? Tf("Copy look of {0}", sel[0].Name) : Tr("Copy look (click one item)");
             pasteItem.Enabled = copiedLook != null;
             pasteItem.Text = copiedLook != null ? Tf("Paste look of {0}{1}", copiedFrom, (sel.Count > 1 ? Tr(" onto") + n : "")) : Tr("Paste look (copy one first)");
-            sameItem.Enabled = sel.SelectMany(Leaves).Any(x => project.Overrides.ContainsKey(x.Id));
+            bool recipeRows = sel.All(x => x.Id.StartsWith("recipe:"));
+            sameItem.Text = recipeRows ? Tf("Use the {0} look", Loc.Name(Catalog.XpRecipes)) : Tr("Use the category's look");
+            sameItem.Enabled = recipeRows ? sel.SelectMany(Leaves).Any(x => !project.RecipeLooks.Contains(x.Id))
+                                          : sel.SelectMany(Leaves).Any(x => project.Overrides.ContainsKey(x.Id));
             tickItem.Text = Tr("Select") + n; untickItem.Text = Tr("Deselect") + n;
             tickItem.Enabled = sel.Any(x => !IsTicked(x) || IsPartial(x));
             untickItem.Enabled = sel.Any(IsTicked);
@@ -555,7 +595,9 @@ public sealed class MainForm : Form
                 Item(Tr("Add presets..."), RunPresets),
                 Item(Tr("Colour by priority..."), PriorityColours)),
             Menu(Tr("&View"), darkItem, compactItem, languageMenu, new ToolStripSeparator(), logItem),
-            Menu(Tr("&Options"), Item(Tr("Mod manager..."), OpenModManager), new ToolStripSeparator(), keepItem, gameItem),
+            Menu(Tr("&Options"), Item(Tr("Mod manager..."), OpenModManager), new ToolStripSeparator(), keepItem, gameItem,
+                new ToolStripSeparator(), onlineItem, Item(Tr("Check for item fixes now"), () => _ = CheckRules(true)),
+                Item(Tr("Load item fixes file..."), LoadRulesFile), rulesInfo),
             Menu(Tr("&Help"), Item(Tr("Show the tour..."), () => { using var t = new Tutorial(Font); t.ShowDialog(this); })),
         });
         MainMenuStrip = menuBar;
@@ -593,6 +635,12 @@ public sealed class MainForm : Form
         Controls.Add(logPanel);
         Controls.Add(bottom);
         Controls.Add(status);
+        status.Controls.Add(notice);
+        notice.LinkClicked += (_, _) => noticeClick();
+        onlineItem.Checked = settings.OnlineRules == true;
+        onlineItem.CheckedChanged += (_, _) => { settings.OnlineRules = onlineItem.Checked; settings.Save(); };
+        onlineItem.ToolTipText = Tr("When ESP Maker starts, it downloads one text file with item fixes from GitHub. Nothing is sent.");
+        ShowRulesInfo();
         Controls.Add(menuBar); // added last: docks above everything
         Load += (_, _) => { RestoreWindow(split); ApplyTheme(); ApplyDensity(); _ = LoadGameAsync(); };
         FormClosing += (_, _) => RememberWindow(split);
@@ -899,6 +947,7 @@ public sealed class MainForm : Form
             Log(Tf("Fallout 76 ({0}) in {1}; mods are listed in {2}.", game.Edition, game.GameFolder, game.IniPath));
             if (ticked > 0) Log(Tf("Your last setup was loaded: {0} item(s) selected.", ticked));
             Log(Tf("ESP Maker {0}", AppVersion));
+            Log(Tf("Item fixes: version {0} ({1}, {2}).", Rules.Current.Version, RulesSource(), Rules.Current.Updated));
             foreach (var note in StartNotes) Log(note);
             gameItem.Text = Tf("Game: {0} - change...", game.Edition);
             ShowInstallState();
@@ -911,15 +960,103 @@ public sealed class MainForm : Form
                 settings.Save();
                 BeginInvoke(() => { using (var t = new Tutorial(Font)) t.ShowDialog(this); RunPresets(); }); // then the presets to start from
             }
+            BeginInvoke(StartRulesCheck); // after the tour: the online question (once), then the check if allowed
         }
         catch (Exception ex) { Status(Tr("Error: ") + ex.Message); Log(ex.ToString()); }
+    }
+
+    // ---- item fixes (Rules.cs): online only with the user's consent, asked once
+
+    static string RulesSource() => Rules.Source switch { "downloaded" => Tr("downloaded"), "file" => Tr("from a file"), _ => Tr("built in") };
+
+    void ShowRulesInfo() => rulesInfo.Text = Tf("Item fixes in use: version {0} ({1})", Rules.Current.Version, RulesSource());
+
+    void StartRulesCheck()
+    {
+        if (Environment.GetCommandLineArgs().Length > 1) return; // dev and test commands never go online or ask
+        if (settings.OnlineRules == null)
+        {
+            bool yes = Box(Tr("Check online for item fixes when ESP Maker starts?\n\nIt downloads one small text file from GitHub - the lists of which models belong to which enemy, event and item - and sends nothing. Fixes then arrive without a new version.\n\nYou can change this any time in Options."),
+                           Text, MessageBoxButtons.YesNo) == DialogResult.Yes;
+            onlineItem.Checked = yes; // saves the setting
+            settings.OnlineRules = yes;
+            settings.Save();
+        }
+        if (settings.OnlineRules == true) _ = CheckRules(false);
+    }
+
+    /// <summary>One download of the item fixes; newer ones are saved and apply after a restart (status bar link).</summary>
+    async Task CheckRules(bool manual)
+    {
+        if (manual) Status(Tr("Checking for item fixes..."));
+        var (newer, fetched, note) = await Rules.CheckOnline();
+        if (newer != null)
+        {
+            Log(Tf("Item fixes version {0} ({1}) downloaded - they apply after a restart.", newer.Version, newer.Updated));
+            ShowNotice(Tf("New item fixes (version {0}) - restart to use them", newer.Version), () => OfferRestart(newer));
+        }
+        else if (note.Length > 0) Log(Tf("Couldn't check for item fixes: {0}", note));
+        else if (manual) Log(Tf("No newer item fixes - version {0} is in use.", Rules.Current.Version));
+        var latest = (fetched ?? Rules.Current).LatestApp;
+        if (latest != null && Rules.NewerThanApp(latest) && (manual || settings.LatestAppSeen != latest))
+        {
+            settings.LatestAppSeen = latest;
+            settings.Save();
+            Log(Tf("ESP Maker {0} is out: {1}", latest, Rules.NexusUrl));
+            if (newer == null) ShowNotice(Tf("ESP Maker {0} is out - open the Nexus page", latest), () => OpenUrl(Rules.NexusUrl));
+        }
+    }
+
+    void LoadRulesFile()
+    {
+        using var dlg = new OpenFileDialog { Title = Tr("Load item fixes file"), Filter = Tr("Item fixes") + " (*.json)|*.json" };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        if (Rules.Import(dlg.FileName, out var r) is string error) { Box(Tf("That file can't be used: {0}", error), Text); return; }
+        if (r!.Version <= Rules.Current.Version)
+        {
+            Box(Tf("That file has item fixes version {0} - version {1} is already in use.", r.Version, Rules.Current.Version), Text);
+            return;
+        }
+        if (!OfferRestart(r)) ShowNotice(Tf("New item fixes (version {0}) - restart to use them", r.Version), () => OfferRestart(r));
+    }
+
+    /// <summary>What the new item fixes change, then restart to use them (false = later).</summary>
+    bool OfferRestart(Rules r)
+    {
+        var changes = r.ChangesSince(Rules.Current.Version);
+        var text = Tf("Item fixes version {0}", r.Version) + (changes.Length > 0 ? " - " + Tr("what changed:") + "\n\n" + changes : "")
+                 + "\n\n" + Tr("Restart ESP Maker now to use them?");
+        if (Box(text, Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return false;
+        RestartForRules();
+        return true;
+    }
+
+    void ShowNotice(string text, Action click)
+    {
+        if (InvokeRequired) { BeginInvoke(() => ShowNotice(text, click)); return; }
+        notice.Text = text;
+        noticeClick = click;
+        notice.Visible = true;
+    }
+
+    void RestartForRules()
+    {
+        if (UseWaitCursor) { Box(Tr("Wait until the build is done, then restart."), Text); return; } // busy
+        Save();
+        Application.Restart();
+        Environment.Exit(0);
+    }
+
+    static void OpenUrl(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
     }
 
     void AddSectionNode(string section, IEnumerable<Category> sectionCats)
     {
         var sec = new TreeNode { Tag = section, NodeFont = SectionFont };
-        // categories with a sub-heading go under it (Events: Seasonal / Public events...), in Catalog.GroupOrder
-        foreach (var g in sectionCats.GroupBy(c => c.Group).OrderBy(g => g.Key == "" ? -1 : Array.IndexOf(Catalog.GroupOrder, g.Key)))
+        // categories with a sub-heading go under it (Events: Seasonal / Public events...), in Catalog.GroupRank order
+        foreach (var g in sectionCats.GroupBy(c => c.Group).OrderBy(g => g.Key == "" ? -1 : Catalog.GroupRank(g.Key)))
         {
             var parent = sec;
             if (g.Key != "") sec.Nodes.Add(parent = new TreeNode { Tag = new CatGroup(section, g.Key) });
@@ -1698,7 +1835,7 @@ public sealed class MainForm : Form
         {
             1 => sortDesc ? rows.OrderByDescending(e => e.Category, cmp) : rows.OrderBy(e => e.Category, cmp),
             2 => (sortDesc ? rows.OrderBy(e => project.Overrides.ContainsKey(e.Id)) : rows.OrderByDescending(e => project.Overrides.ContainsKey(e.Id)))
-                 .ThenBy(e => e.Group == null ? LookCell(e).Text : HasRows(e) || e.Group.FirstOrDefault() is not Entry g ? "" : LookCell(g).Text, cmp),
+                 .ThenBy(e => e.Group == null ? LookCell(e).Text : Leaves(e).FirstOrDefault() is Entry g ? LookCell(g).Text : "", cmp),
             3 => sortDesc ? rows.OrderByDescending(e => e.Spots) : rows.OrderBy(e => e.Spots),
             _ => sortDesc ? rows.OrderByDescending(e => e.Shown, cmp) : rows.OrderBy(e => e.Shown, cmp),
         };
@@ -1719,16 +1856,15 @@ public sealed class MainForm : Form
         }
         if (li.Tag is not Entry e) return;
         var cell = li.SubItems[2];
-        if (e.Group != null && !HasRows(e))
+        if (e.Group != null)
         {
-            // an ingredient (bush + item): the looks of its entries - one if they agree, else both
-            var looks = e.Group.Select(LookCell).Distinct().ToList();
+            // an ingredient (bush + item): the looks of its entries; a recipe: its ingredients' - one if they agree, else each
+            var looks = (HasRows(e) ? Leaves(e) : e.Group).Select(LookCell).Distinct().ToList();
             cell.Text = looks.Count == 1 ? looks[0].Text : string.Join(" / ", looks.Select(l => l.Text));
             cell.ForeColor = looks.Count > 0 ? looks[0].Colour : SystemColors.GrayText;
             cell.Tag = looks.Count > 1 ? looks : null; // drawn in parts, each in its own colour
             return;
         }
-        if (e.Group != null) { cell.Text = ""; return; } // a recipe: its ingredients show theirs
         (cell.Text, cell.ForeColor) = LookCell(e);
     }
 
@@ -2174,7 +2310,15 @@ public sealed class MainForm : Form
     {
         filling = true;
         foreach (ListViewItem li in list.Items)
-            if (li.Tag is Entry e) { SetTicked(e, on); SyncParts(e); }
+            if (li.Tag is Entry e)
+            {
+                SetTicked(e, on);
+                SyncParts(e);
+                // recipes: their ingredients get / lose the XP recipes look, as when ticked one by one (Check all skipped
+                // it - the XP recipes look then reached nothing, user 2026-11-16)
+                if (e.Group != null) foreach (var leaf in Leaves(e)) SetRecipeLook(leaf, on);
+                else if (!on) SetRecipeLook(e, false);
+            }
         foreach (ListViewItem li in list.Items) if (li.Tag is Entry e) li.Checked = IsTicked(e);
         filling = false;
         if (expanded.Count > 0) BeginInvoke(() => FillList(keepScroll: true)); // ingredient rows follow their recipes
@@ -2235,7 +2379,7 @@ public sealed class MainForm : Form
                                             out StyleEditor ed)
     {
         var dlg = Ui.Dialog(new Form { Text = title, FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent, Font = font, AutoScaleMode = AutoScaleMode.Font, ShowIcon = false });
-        ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = icons3D, Sketch = false, Compact = true };
+        ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = icons3D, PickOk = entries.Any(e => e.CanPick), Sketch = false, Compact = true };
         var side = new Panel { Dock = DockStyle.Left, Width = 340 };
         side.Controls.Add(ed);
         var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 90, Height = 30 };
@@ -2269,7 +2413,7 @@ public sealed class MainForm : Form
                                     string? focusPart = null, IReadOnlyDictionary<string, Style>? partLooks = null)
     {
         var dlg = Ui.Dialog(new Form { Text = picked.Count == 1 ? Tr("Look for: ") + picked[0].Name : Tf("Look for {0} items", picked.Count), FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent, Font = font, AutoScaleMode = AutoScaleMode.Font, ShowIcon = false });
-        ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = picked.All(e => e.NoIcon), Sketch = false, Compact = true };
+        ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = picked.All(e => e.NoIcon), PickOk = picked.Any(e => e.CanPick), Sketch = false, Compact = true };
         var side = new Panel { Dock = DockStyle.Left, Width = 340 }; // the settings keep their own height
         // the same tick as in the list: the parts and the look below only matter while it is ticked
         tick = new CheckBox
@@ -2315,6 +2459,8 @@ public sealed class MainForm : Form
     /// <summary>What the look panel shows: a category (nothing picked in the list), items, or one part.</summary>
     Category? inspCat;
     List<Entry> inspItems = new();
+    /// <summary>inspItems were picked from XP recipes rows: their "Same as" is the XP recipes look.</summary>
+    bool inspFromRecipe;
     PartRow? inspPart;
 
     /// <summary>Can be opened in the list: a recipe (its ingredients) or a thing made of several models (its parts).</summary>
@@ -2358,8 +2504,14 @@ public sealed class MainForm : Form
             string text = items.Count == 1
                 ? Tf("In {0}", Loc.Name(first.Category)) + (first.Models.Count > 1 ? Tf(" · {0} parts (► in the list opens them)", first.Models.Count) : "")
                 : string.Join(", ", items.Take(4).Select(e => e.Shown)) + (items.Count > 4 ? "..." : "") + Tr(" - changes go to all of them");
-            inspector.ShowLook(heading, text, tickState, catNames.Count == 1 ? Tf("Same as {0}", catNames[0]) : Tr("Same as their categories"),
-                               project.Overrides.ContainsKey(first.Id), project.StyleOf(first, CatOf(first)), items.All(e => e.NoIcon), null);
+            // picked from XP recipes (a recipe or its ingredient rows): "Same as" means the XP recipes look (user 2026-11-16)
+            inspFromRecipe = tags.OfType<Entry>().All(t => t.Id.StartsWith("recipe:"));
+            string same = inspFromRecipe ? Tf("Same as {0}", Loc.Name(Catalog.XpRecipes))
+                        : catNames.Count == 1 ? Tf("Same as {0}", catNames[0]) : Tr("Same as their categories");
+            bool own = inspFromRecipe ? items.Any(e => project.Overrides.ContainsKey(e.Id) && !project.RecipeLooks.Contains(e.Id))
+                                      : project.Overrides.ContainsKey(first.Id);
+            inspector.ShowLook(heading, text, tickState, same, own, project.StyleOf(first, CatOf(first)), items.All(e => e.NoIcon), null,
+                               items.Any(e => e.CanPick));
             inspector.View.Show(game, first, project.StyleOf(first, CatOf(first)), project.KeepOtherMods, project.OffParts.GetValueOrDefault(first.Id),
                                 SharedWith(first), IsTicked(first), null, project.PartLooks.GetValueOrDefault(first.Id));
             return;
@@ -2370,7 +2522,8 @@ public sealed class MainForm : Form
             // preview on: ticked things first, then the rest (recipes: their ingredients' entries)
             var entries = c.Entries.SelectMany(Leaves).Distinct().OrderByDescending(e => project.Selected.Contains(e.Id)).Take(500).ToList();
             inspector.ShowLook(c.Shown, Tr("The look of everything in this category. Click an item's look in the list to give it its own."),
-                               null, null, true, LookOf(c), c.Entries.Count > 0 && c.Entries.All(e => e.NoIcon), entries);
+                               null, null, true, LookOf(c), c.Entries.Count > 0 && c.Entries.All(e => e.NoIcon), entries,
+                               entries.Any(e => e.CanPick));
             return;
         }
         inspector.ShowEmpty(IsPicks ? Tr("Everything you selected, from all categories.\n\nClick an item to see and change its look.")
@@ -2399,7 +2552,13 @@ public sealed class MainForm : Form
         else if (inspCat is Category c)
         {
             project.CategoryStyles[c.Name] = look;
-            if (c.Groups) foreach (var id in project.RecipeLooks) project.Overrides[id] = look.Clone(); // recipe ingredients follow
+            if (c.Groups)
+            {
+                // ingredients of fully ticked recipes join (setups made with the old Check all have none), then all follow
+                foreach (var r in c.Entries.Where(r => HasRows(r) && Full(r)))
+                    foreach (var leaf in Leaves(r)) SetRecipeLook(leaf, true);
+                foreach (var id in project.RecipeLooks) project.Overrides[id] = look.Clone(); // recipe ingredients follow
+            }
         }
         else return;
         Save();
@@ -2440,6 +2599,7 @@ public sealed class MainForm : Form
                 if (own) project.Overrides.TryAdd(e.Id, project.StyleOf(e, CatOf(e)).Clone());
                 else { project.Overrides.Remove(e.Id); }
             foreach (var e in inspItems) project.RecipeLooks.Remove(e.Id);
+            if (!own && inspFromRecipe) foreach (var e in inspItems) SetRecipeLook(e, true); // back to the XP recipes look
             Save();
             RefreshColours();
         }
@@ -2533,8 +2693,14 @@ public sealed class MainForm : Form
             new("vending", Tr("Player vendors"), Tr("every CAMP vending machine: glow, a tall beam and a $ icon"), I("dollar", "#FFB347")),
             new("plants", Tr("Bright plants"), Tr("harvestable plants in their own colours, brighter - nothing added, not through walls"), I("herb", Catalog.PlantGreen)),
         };
+        // the item fixes can add presets (an event that's on) and take built-in ones away
+        tiles.RemoveAll(t => Rules.Current.RetirePresets.Contains(t.Key));
+        foreach (var p in Rules.Current.Presets.Where(p => tiles.All(t => t.Key != p.Key)))
+            tiles.Add(new(p.Key, Tr(p.Title), Tr(p.Note), p.Icon.StartsWith("model:") ? M(p.Icon, p.Color) : I(p.Icon, p.Color)));
         return tiles.Where(t => PresetEntries(t.Key).Count > 0).ToList();
     }
+
+    static PresetRule? RulePreset(string key) => Rules.Current.Presets.FirstOrDefault(p => p.Key == key);
 
     /// <summary>What a preset ticks.</summary>
     List<Entry> PresetEntries(string key)
@@ -2551,6 +2717,8 @@ public sealed class MainForm : Form
             "vending" => In(c => c.Name == Catalog.Vending).Where(e => e.Id.Contains("legendaryscrappingstation") == false),
             "plants" => In(c => c.Name == "Plants (all)"),
             "xp" => In(c => c.Groups),
+            _ when RulePreset(key) is PresetRule p => In(c => p.Categories.Contains(c.Name))
+                                                      .Concat(cats.SelectMany(c => c.Entries).Where(e => p.Entries.Contains(e.Id))).Distinct(),
             _ => Enumerable.Empty<Entry>(),
         }).ToList();
     }
@@ -2600,6 +2768,16 @@ public sealed class MainForm : Form
                     case "xp":
                         var xp = Look(c, st => { Glowing(st); st.Beam = false; Icon(st, "model:ramen", 15); });
                         foreach (var id in project.RecipeLooks) project.Overrides[id] = xp.Clone(); // the ingredients follow
+                        break;
+                    default:
+                        if (RulePreset(key) is not PresetRule p) break;
+                        Look(c, st =>
+                        {
+                            Glowing(st);
+                            st.GlowColor = p.Color;
+                            if (p.Beam > 0) Beam(st, p.Color, p.Beam); else st.Beam = false;
+                            if (p.Icon.Length > 0) Icon(st, p.Icon, p.IconSize);
+                        });
                         break;
                 }
         }
@@ -2681,8 +2859,9 @@ public sealed class MainForm : Form
     void CopyLook()
     {
         var sel = SelectedEntries();
-        if (sel.Count != 1 || sel[0].Group != null) return;
-        copiedLook = project.StyleOf(sel[0], CatOf(sel[0])).Clone();
+        if (sel.Count != 1 || Leaves(sel[0]).FirstOrDefault() is not Entry from) return;
+        // a recipe or ingredient row (a group): its first item's look (user 2026-11-16: copy was greyed on them)
+        copiedLook = project.StyleOf(from, CatOf(from)).Clone();
         copiedFrom = sel[0].Name;
         Log(Tf("Copied the look of {0} - right-click other items and Paste look (or Ctrl+V).", copiedFrom));
     }
@@ -2713,6 +2892,9 @@ public sealed class MainForm : Form
     {
         var picked = Picked();
         foreach (var e in picked) { project.Overrides.Remove(e.Id); project.RecipeLooks.Remove(e.Id); }
+        // picked from XP recipes rows: back to the XP recipes look instead of their own categories'
+        if (list.SelectedItems.Cast<ListViewItem>().Select(li => li.Tag).OfType<Entry>().All(x => x.Id.StartsWith("recipe:")))
+            foreach (var e in picked) SetRecipeLook(e, true);
         Save();
         RefreshColours();
     }
@@ -3133,6 +3315,29 @@ public sealed class MainForm : Form
             Check(project.CategoryStyles.GetValueOrDefault(Enemies.Marked) is { Beam: true, GlowFill: false, Icon: "model:crown" }, "legendary: outline, beam + crown");
             Check(project.CategoryStyles.GetValueOrDefault(Catalog.XpRecipes) is { Icon: "model:ramen" } && project.RecipeLooks.Count > 0 &&
                   project.RecipeLooks.All(id => project.Overrides[id].Icon == "model:ramen"), $"XP buffs: ingredients checked with the ramen ({project.RecipeLooks.Count})");
+            // Check all on XP recipes: the ingredients follow the XP recipes look (user 2026-11-16: they didn't)
+            project = Project.Fresh();
+            var xpCat = cats.First(c => c.Groups);
+            foreach (TreeNode sec in roots.ToList()) foreach (TreeNode n in CatNodes(sec)) if (n.Tag == xpCat) SelectNode(n);
+            TickShown(true);
+            Check(project.RecipeLooks.Count > 0, $"XP recipes Check all: ingredients get the XP look ({project.RecipeLooks.Count})");
+            list.SelectedItems.Clear(); ShowInspector();
+            Edited("#654321"); LookEdited();
+            Check(project.RecipeLooks.Count > 0 && project.RecipeLooks.All(id => project.Overrides[id].GlowColor == "#654321"), "XP recipes look edit reaches the ingredients");
+            var recipeRow = list.Items.Cast<ListViewItem>().FirstOrDefault(li => li.Tag is Entry { Group: not null } r && HasRows(r));
+            Check(recipeRow != null && recipeRow.SubItems[2].Text.Length > 0, "recipe row shows a look");
+            if (recipeRow?.Tag is Entry rr)
+            {
+                // a recipe's look: copy works on its row, Same as goes back to the XP recipes look
+                var leaves = Leaves(rr).ToList();
+                Pick(rr); Edited("#00FF00"); LookEdited(); Pick(rr);
+                Check(leaves.All(x => project.Overrides[x.Id].GlowColor == "#00FF00" && !project.RecipeLooks.Contains(x.Id)), "recipe edited: all its items get it as their own");
+                copiedLook = null; CopyLook();
+                Check(copiedLook?.GlowColor == "#00FF00", "copy look works on a recipe row");
+                OwnSwitched(false);
+                Check(leaves.All(x => project.RecipeLooks.Contains(x.Id) && project.Overrides[x.Id].GlowColor == "#654321"), "recipe Same as: back to the XP recipes look");
+            }
+            foreach (TreeNode sec in roots.ToList()) foreach (TreeNode n in CatNodes(sec)) if (n.Tag == bosses) SelectNode(n); // back for the next checks
 
             log.Add("build, import");
             Check(ModFiles("a,b").SequenceEqual(new[] { "ab.ba2", "ab - Textures.ba2" }), "name cleaned for the ini (no commas)");

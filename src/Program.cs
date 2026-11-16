@@ -29,6 +29,11 @@ public sealed class Settings
     public bool Compact { get; set; }
     /// <summary>View > Language: a game language code (Loc.Languages) or "auto" = the language the game runs in.</summary>
     public string Language { get; set; } = "auto";
+    /// <summary>Options > Check online for item fixes at start: null = not asked yet (asked once at start), false = the app
+    /// never connects by itself.</summary>
+    public bool? OnlineRules { get; set; }
+    /// <summary>The newest app version a "new version is out" notice was shown for (shown once per version).</summary>
+    public string? LatestAppSeen { get; set; }
 
     static string FilePath => AppPaths.File("settings.json");
 
@@ -53,6 +58,9 @@ static class Program
             Loc.StartUi(Environment.GetEnvironmentVariable("ESPMAKER_LANG") ?? st.Language, GameData.FindGameFolder(st.GameFolder));
         }
         catch { }
+        // the item rules: the newest valid of bundled, downloaded and next-to-the-exe (no network here)
+        var rulesNotes = new List<string>();
+        Rules.Load(rulesNotes.Add);
 #if DEVTOOLS // the dev and test commands (not in the release build: publish with -p:DevTools=false)
         // the test commands rewrite the setup they run on: never on a user's real data (only a portable test copy)
         if (args.Length > 0 && args[0].StartsWith("--") && !AppPaths.Portable)
@@ -87,6 +95,7 @@ static class Program
         if (args.Length is 3 or 4 && args[0] == "--preview") { Environment.Exit(SelfTest.Preview(args[1], args[2], args.Length == 4 ? args[3] : null)); return; }
         if (args.Length == 3 && args[0] == "--scene") { Environment.Exit(SelfTest.Scene(args[1], args[2])); return; }
         if (args.Length == 2 && args[0] == "--partnames") { Environment.Exit(SelfTest.PartNamesDump(args[1])); return; }
+        if (args.Length == 2 && args[0] == "--pickdonors") { Environment.Exit(SelfTest.PickDonors(args[1])); return; }
         if (args.Length == 3 && args[0] == "--findblock") { Environment.Exit(SelfTest.FindBlock(args[1], args[2])); return; }
         if (args.Length == 3 && args[0] == "--tex") { Environment.Exit(SelfTest.Tex(args[1], args[2])); return; }
         if (args.Length is 3 or 4 && args[0] == "--lookshot") { Environment.Exit(SelfTest.LookShot(args[1], args[2], args.Length == 4 ? args[3] : null)); return; }
@@ -152,6 +161,7 @@ static class Program
             return;
         }
         if (args.Length == 2 && args[0] == "--names") { Environment.Exit(SelfTest.Names(args[1])); return; }
+        if (args.Length is 2 or 3 && args[0] == "--rules-test") { Environment.Exit(SelfTest.RulesTest(args[1], args.Length == 3 ? args[2] : null)); return; }
         if (args.Length == 1 && args[0] == "--list"){ Environment.Exit(SelfTest.List()); return; }
         if (args.Length == 2 && args[0] == "--icons") { Environment.Exit(SelfTest.IconSheet(args[1])); return; }
         if (args.Length == 1 && args[0] == "--links") { Environment.Exit(SelfTest.Links()); return; }
@@ -188,6 +198,7 @@ static class Program
 #endif
         ApplicationConfiguration.Initialize();
         AppPaths.MoveOldFiles(note => MainForm.StartNotes.Add(note));
+        MainForm.StartNotes.AddRange(rulesNotes);
         Application.ThreadException += (_, e) =>
         {
             // the full error in the data folder, for reporting

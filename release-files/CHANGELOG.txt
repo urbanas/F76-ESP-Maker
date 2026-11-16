@@ -1,6 +1,28 @@
 ESP Maker - changes
 ===================
 
+2.5
+New: Pickup range
+- A new row in the item's look: "Pickup range" (Off / 2 / 4 / 6 m, or type up to 15 m). The item
+  gets an invisible ball around it: point at the ball and the game offers "Take", so you can
+  pick the item up from that far away. Only for things you can pick up (aid, food, junk,
+  collectibles, plants, event items...); greyed out elsewhere - hover for why.
+- The 3D preview shows the ball as a wire globe.
+- Plants and things that stay in the world after you take from them (a harvested plant) keep
+  their ball, and it can get in the way of using things right next to them.
+New: Item fixes online (only if you allow it)
+- Asked once: ESP Maker can check GitHub at start for a small text file with item fixes - which
+  models belong to which enemy, event and item. Fixes then arrive without a new version. Nothing
+  is sent. Options: turn it on or off, "Check for item fixes now", "Load item fixes file...".
+- New fixes apply after a restart (the notice at the bottom shows what changed).
+New
+- EVENTS -> Community: the pipe from the "Pipe is life" meme.
+Changed
+- Icon and Mini item sizes go up to 2000 % (was 500 %).
+Fixed
+- Outline glow didn't show on some models - mole miners glowed only on their face sacks and hands,
+  not the body. (Any outline glow on a model with vertex colours was affected.)
+
 2.4
 New: layers
 - The look window is now a stack of layers. Start from a preset, then "+ Add on top": Beam,

@@ -15,7 +15,7 @@ static class CatIcons
             case "JUNK":
                 return c.Group switch { "Metals" => "ingot", "Chemicals" => "flask", "Parts & tech" => "gear", "Materials" => "bricks", _ => "cube" };
             case "EVENTS":
-                return c.Group switch { "Seasonal" => "sparkle", "Raids & expeditions" => "shield", _ => "flag" };
+                return Rules.Current.Events.Groups.FirstOrDefault(g => g.Name == c.Group)?.Icon is { Length: > 0 } icon ? icon : "flag";
             case "ENEMIES":
                 return Has("robot") ? "robot"
                      : Has("boss") ? "crown"

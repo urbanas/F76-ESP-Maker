@@ -157,7 +157,9 @@ sealed class LookPanel : UserControl
     /// <param name="ticked">The tick to show; null = no tick (a category).</param>
     /// <param name="sameAs">"Same as Bosses" - the look it can follow; null = no switch (a category has its own look).</param>
     /// <param name="previewOn">Items to choose the preview from (a category); null = no choice.</param>
-    public void ShowLook(string heading, string text, CheckState? ticked, string? sameAs, bool isOwn, Style look, bool icons3D, List<Entry>? previewOn)
+    /// <param name="pickOk">The pick-up ball can be set (Entry.CanPick).</param>
+    public void ShowLook(string heading, string text, CheckState? ticked, string? sameAs, bool isOwn, Style look, bool icons3D, List<Entry>? previewOn,
+                         bool pickOk = true)
     {
         loading = true;
         title.Text = heading;
@@ -173,6 +175,7 @@ sealed class LookPanel : UserControl
         backLink.Text = Tf("use {0} again", whose);
         backLink.Visible = !follows;
         Editor.Icons3D = icons3D;
+        Editor.PickOk = pickOk;
         Editor.Value = look;
         Editor.Enabled = true;
         pickRow.Visible = previewOn is { Count: > 0 };

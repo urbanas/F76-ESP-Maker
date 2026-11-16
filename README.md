@@ -13,7 +13,11 @@ Above the item you stack layers in any order: a beam into the sky, an arrow, a f
 
 The app speaks all 13 of the game's languages (**View → Language**). Item, enemy and category names come from your game's own text. The window text was translated with AI help, so some wording may be off; corrections are welcome.
 
-ESP Maker builds the mod (`.ba2`) and installs it for you. It only changes how things look on your own PC. The result is a normal `.ba2` mod listed in your custom ini, like any other Fallout 76 mod.
+**Pickup range** (on things you can pick up) puts an invisible ball around the item, so you can take it from up to 15 m away. It is off unless you turn it on. Use it at your own risk: it lets you take things from further away than the game normally allows, and the game's servers can see that.
+
+ESP Maker builds the mod (`.ba2`) and installs it for you. It only changes files on your own PC. The result is a normal `.ba2` mod listed in your custom ini, like any other Fallout 76 mod.
+
+**Item fixes online (only if you allow it):** the app asks once whether it may check this repository at start for [rules/rules.json](rules/rules.json). That file lists which models belong to which enemy, event and item, so fixes arrive without a new version. It downloads only that file and sends nothing. You can change this in **Options**.
 
 ## Download
 

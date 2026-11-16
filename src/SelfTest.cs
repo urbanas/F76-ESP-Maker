@@ -118,6 +118,32 @@ public static class SelfTest
         return 0;
     }
 
+    /// <summary>Dev: every game model whose collision can be a pick-up donor (compound of 8-corner boxes), most pieces first.</summary>
+    public static int PickDonors(string file)
+    {
+        var (game, _, _) = Load(s => { });
+        var found = new List<(int N, int Size, string Name)>();
+        var marker = Encoding.ASCII.GetBytes("bhkPhysicsSystem");
+        foreach (var a in Directory.GetFiles(game.DataFolder, "SeventySix - *Meshes*.ba2"))
+        {
+            var arch = Ba2Archive.Open(a);
+            foreach (var e in arch.Entries.Where(e => e.Name.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)))
+            {
+                try
+                {
+                    var d = arch.ReadFile(e);
+                    if (d.AsSpan(0, Math.Min(d.Length, 4096)).IndexOf(marker) < 0) continue;
+                    var blob = Pickup.DonorBlob(d);
+                    if (blob != null) found.Add((Pickup.Pieces(blob), blob.Length, e.Name));
+                }
+                catch { }
+            }
+        }
+        File.WriteAllLines(file, found.OrderByDescending(f => f.N).ThenBy(f => f.Size).Select(f => $"{f.N}\t{f.Size}\t{f.Name}"));
+        Console.WriteLine($"{found.Count} donors -> {file}");
+        return 0;
+    }
+
     /// <summary>Dev: game models holding a block type (e.g. a controller) - how often each value of the block's last
     /// uint (a controller's "controlled variable") is used, with example files.</summary>
     public static int FindBlock(string type, string file)
@@ -369,16 +395,73 @@ public static class SelfTest
     }
 
     /// <summary>--list: every category and entry with its models.</summary>
+    /// <summary>--rules-test &lt;rules.json&gt;: builds the catalog with the rules in use and with the file's, and writes what
+    /// changes to selftest\rules-test.txt ("~ Bosses: Brahmin: 7 -> 2 models"). Last line "changes: N", or "ERROR ...".</summary>
+    public static int RulesTest(string file, string? oldFile = null)
+    {
+        var report = Path.Combine(Dir, "rules-test.txt");
+        var (rules, error) = Rules.Parse(File.ReadAllText(file));
+        if (rules == null) { File.WriteAllText(report, "ERROR " + error + Environment.NewLine); return 1; }
+        // the rules to compare with: a given file (what is online now), else the ones in use
+        if (oldFile != null)
+        {
+            var (old0, error0) = Rules.Parse(File.ReadAllText(oldFile));
+            if (old0 == null) { File.WriteAllText(report, "ERROR in the old file: " + error0 + Environment.NewLine); return 1; }
+            Rules.Use(old0, oldFile);
+        }
+        var (game, idx, before) = Load(_ => { });
+        bool Exists(string m) => game.Find(@"meshes\" + m) != null;
+        var (old, oldSource) = (Rules.Current, Rules.Source);
+        Rules.Use(rules, "file");
+        var after = EventCatalog.BuildAll(idx, Exists, game.AllPaths);
+        Rules.Use(old, oldSource);
+        var sb = new StringBuilder($"rules v{old.Version} ({oldSource}) -> v{rules.Version} ({file}){Environment.NewLine}");
+        int changes = 0;
+        void Say(string s) { sb.AppendLine(s); changes++; }
+        static Dictionary<string, Entry> Entries(List<Category> cats) =>
+            cats.SelectMany(c => c.Entries).GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
+        var (a, b) = (Entries(before), Entries(after));
+        foreach (var c in after.Where(c => before.All(o => o.Name != c.Name))) Say($"+ category {c.Name} ({c.Entries.Count})");
+        foreach (var c in before.Where(c => after.All(o => o.Name != c.Name))) Say($"- category {c.Name}");
+        foreach (var c in after)
+            if (before.FirstOrDefault(o => o.Name == c.Name) is Category o &&
+                (o.Group != c.Group || o.Description != c.Description || o.DefaultStyle.GlowColor != c.DefaultStyle.GlowColor))
+                Say($"~ category {c.Name}: group, colour or description");
+        foreach (var (id, e) in b.Where(x => !a.ContainsKey(x.Key))) Say($"+ {e.Category}: {e.Name} ({e.Models.Count} models)");
+        foreach (var (id, e) in a.Where(x => !b.ContainsKey(x.Key))) Say($"- {e.Category}: {e.Name}");
+        foreach (var (id, e) in b.Where(x => a.ContainsKey(x.Key)))
+        {
+            var o = a[id];
+            var added = e.Models.Except(o.Models).ToList();
+            var gone = o.Models.Except(e.Models).ToList();
+            if (added.Count + gone.Count > 0)
+                Say($"~ {e.Category}: {e.Name}: {o.Models.Count} -> {e.Models.Count} models" +
+                    string.Concat(added.Take(5).Select(m => $"{Environment.NewLine}      + {m}")) + string.Concat(gone.Take(5).Select(m => $"{Environment.NewLine}      - {m}")));
+            else if (o.Name != e.Name || o.Detail != e.Detail || !(o.BeamModels ?? new()).SetEquals(e.BeamModels ?? new())
+                     || string.Join("|", (o.PartNames ?? new()).OrderBy(p => p.Key)) != string.Join("|", (e.PartNames ?? new()).OrderBy(p => p.Key)))
+                Say($"~ {e.Category}: {e.Name}: name, detail, beam or part names");
+        }
+        sb.AppendLine($"changes: {changes}");
+        File.WriteAllText(report, sb.ToString());
+        return 0;
+    }
+
     public static int List()
     {
         var sb = new StringBuilder();
         var (_, _, cats) = Load(s => sb.AppendLine(s));
         foreach (var c in cats)
         {
-            sb.AppendLine($"== {c.Name} ({c.Entries.Count})");
+            sb.AppendLine($"== {c.Name} ({c.Entries.Count})  section={c.Section} group={c.Group} colour={c.DefaultStyle.GlowColor}  {c.Description}");
 
             foreach (var e in c.Entries)
+            {
                 sb.AppendLine($"   {e.Name}  <{e.Id}>  [{e.Detail}] spots={e.Spots}  models: {string.Join(", ", e.Models)}  names: {string.Join(" · ", e.ItemNames)}");
+                if (e.PreviewModel != null && e.PreviewModel != e.Models[0]) sb.AppendLine($"      preview: {e.PreviewModel}");
+                if (e.BeamModels is { Count: > 0 }) sb.AppendLine($"      beam: {string.Join(", ", e.BeamModels.Order())}");
+                if (e.PartNames is { Count: > 0 }) sb.AppendLine($"      parts: {string.Join(" | ", e.PartNames.OrderBy(p => p.Key).Select(p => p.Key + "=" + p.Value))}");
+                if (e.Group is { Count: > 0 }) sb.AppendLine($"      group: {string.Join(", ", e.Group.Select(g => g.Id))}");
+            }
         }
         File.WriteAllText(Path.Combine(Dir, "list.txt"), sb.ToString());
         return 0;

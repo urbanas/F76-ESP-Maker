@@ -5,7 +5,7 @@
   "latestApp": "2.5",
   "updated": "2026-11-16",
   "changes": [
-    { "version": 2, "text": [ "Pick-up ball now also offered for the Fuel Canister (Gleaming Depths raid)" ] }
+    { "version": 2, "text": [ "Pickup range now also offered for the Fuel Canister (Gleaming Depths raid)" ] }
   ],
   "enemies": {
     "kinds": [
@@ -424,7 +424,7 @@
       { "name": "Seasonal", "icon": "sparkle" },
       { "name": "Public events", "icon": "flag" },
       { "name": "Raids & expeditions", "icon": "shield" },
-      { "name": "Secrets", "icon": "flag" }
+      { "name": "Community", "icon": "flag" }
     ],
     "all": [
       {
@@ -723,12 +723,12 @@
         ]
       },
       {
-        "name": "Secrets",
-        "group": "Secrets",
+        "name": "Community",
+        "group": "Community",
         "prefixes": "(?!)",
         "ownModels": "(?!)",
         "color": "#C080FF",
-        "description": "Hidden objects and easter eggs in the world, such as the pipe from the \"Pipe is life\" meme.",
+        "description": "Things the Fallout 76 community made famous, such as the pipe from the \"Pipe is life\" meme.",
         "picks": [
           {
             "name": "Pipe (\"Pipe is life\")",

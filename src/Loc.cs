@@ -70,6 +70,13 @@ public static class Loc
         try { return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(s); } catch { return null; }
     }
 
+    /// <summary>Translations the item rules bring (names of events added after this version): language -> English -> text.</summary>
+    public static void AddUi(Dictionary<string, Dictionary<string, string>>? tables)
+    {
+        if (tables == null || UiLang == "en" || !tables.TryGetValue(UiLang, out var t)) return;
+        foreach (var (english, text) in t) if (text.Length > 0) ui.TryAdd(english, text);
+    }
+
     /// <summary>The window's text in its language (English when the table has no entry).</summary>
     public static string Tr(string english) => ui.TryGetValue(english, out var t) && t.Length > 0 ? t : english;
 

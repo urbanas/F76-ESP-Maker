@@ -144,6 +144,10 @@ public sealed class Style : IJsonOnDeserialized
     /// <summary>The item's own parts are hidden in the game (the hidden flag); what the look adds (glow, marker, icon,
     /// name) still shows. Still there to pick up and bump into. Not on creatures.</summary>
     public bool Invisible { get; set; }
+    /// <summary>"Pick up from afar" (Nexus request, 2026-11-16): radius in metres of an invisible sphere round the item that
+    /// the game's pick-up aim hits (you walk through it); 0 = off. The item becomes static (doesn't fall or get knocked
+    /// about). Not on creatures / worn outfits. See Pickup.</summary>
+    public int PickRange { get; set; }
     // legacy (2.1 and the first motion build): one setting for the whole look, spread over the sections on reading,
     // never written (the getters give the default)
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int HideAfter { get => 0; set { foreach (var x in AllFx) x.HideAfter = value; } }
@@ -223,6 +227,8 @@ public sealed class Entry
     public bool Worn;
     /// <summary>The Invisible look applies: not on creatures, but on worn clothes.</summary>
     public bool CanHide => !NoIcon || Worn;
+    /// <summary>The pick-up ball applies: something you pick up, harvest or open where it lies (Pickup.Allowed).</summary>
+    public bool CanPick => !NoIcon && Pickup.Allowed(Category, Id);
     /// <summary>Worn clothes: the bare model shown in a part's place when the look hides it (an outfit model is also the
     /// body under it - hiding it hid the whole character). Body parts → the bare body, gloves → bare hands; "" = the part
     /// stays visible (it takes the hair or head slot: hiding it would leave no hair / head). Not listed = just hidden.</summary>
@@ -244,6 +250,9 @@ public sealed class Entry
     /// <summary>Spots in the world where something with these models is placed or can spawn; -1 = not counted
     /// (enemies). 0 = only ever in inventories - never visible in the world (a dropped item becomes a loot bag).</summary>
     public int Spots = -1;
+    /// <summary>The model the 3D view opens on (the most placed one; null = the first). Ties keep the first, so parts of
+    /// one thing (all from the same records) keep their order.</summary>
+    public string? PreviewModel;
     /// <summary>Editor ids of the records using the models (Everything else only: searchable there).</summary>
     public List<string>? EditorIds;
 
@@ -281,7 +290,7 @@ public sealed class Category
     public List<Entry> Entries = new();
     /// <summary>Heading the category is listed under.</summary>
     public string Section = "ITEMS";
-    /// <summary>Sub-heading inside the section ("" = none), e.g. "Seasonal" in EVENTS; listed in <see cref="Catalog.GroupOrder"/>.</summary>
+    /// <summary>Sub-heading inside the section ("" = none), e.g. "Seasonal" in EVENTS; ordered by <see cref="Catalog.GroupRank"/>.</summary>
     public string Group = "";
     /// <summary>Its entries are groups of other entries (XP recipes). Its look goes to the entries a recipe ticks, as their
     /// own look (Project.RecipeLooks).</summary>
@@ -382,10 +391,11 @@ public static class Catalog
     /// <summary>Old "xpplant:..." ids -> the plant models they lit (to move old setups to Plants (all)).</summary>
     public static readonly Dictionary<string, HashSet<string>> OldXpPlantModels = new();
 
-    static readonly HashSet<string> XpEffects = new(StringComparer.OrdinalIgnoreCase) { "FortifyXPBonusFood", "FortifyIntelligenceFood" };
+    static HashSet<string> XpEffects => (xpEffects?.From == Rules.Current ? xpEffects : xpEffects = (Rules.Current, new(Rules.Current.Catalog.XpEffects, StringComparer.OrdinalIgnoreCase))).Value.Set;
+    static (Rules From, HashSet<string> Set)? xpEffects;
 
     /// <summary>Editor IDs of cut / test / backup records - their names are hidden when the model has better ones.</summary>
-    static readonly Regex Junk = new(@"^(zz|DEL_|CUT_|BACKUP|Test|DEBUG|DUPLICATE|xx)", RegexOptions.IgnoreCase);
+    static Regex Junk => Rules.Rx(Rules.Current.Catalog.Junk);
 
     /// <summary>Item colours, from the hues no enemy colour uses (enemies: red/orange, yellow, teal,
     /// blue, purple, pink): nothing glows white; 120-165 deg green and 225-265 deg blue-violet are free.</summary>
@@ -834,7 +844,12 @@ public static class Catalog
     public static void CountSpots(IEnumerable<Entry> entries, Dictionary<string, List<EsmRecord>> byModel, Dictionary<uint, int> spots)
     {
         foreach (var e in entries)
+        {
             e.Spots = e.Models.SelectMany(m => byModel.GetValueOrDefault(m) ?? new()).Distinct().Sum(r => spots.GetValueOrDefault(r.FormId));
+            // the 3D view opens on the model met most often (Sugar Bombs: the dirty box, not the rarer clean one - user 2026-11-16)
+            if (e.Models.Count > 1)
+                e.PreviewModel = e.Models.OrderByDescending(m => (byModel.GetValueOrDefault(m) ?? new()).Sum(r => spots.GetValueOrDefault(r.FormId))).First();
+        }
     }
 
     public const string Vending = "Vending machines";
@@ -931,15 +946,7 @@ public static class Catalog
                         OutfitsGroundName = "All outfits (ground & display model)", OutfitsWornName = "All outfits (worn - wearers glow)";
 
     /// <summary>Pre-war food (Fallout wiki list, 2026-11).</summary>
-    static readonly string[] PreWarFoods =
-    {
-        "Blamco Brand Mac and Cheese", "Bubblegum", "Cajun Rice & Beans", "Canned Coffee", "Canned Dog Food", "Canned Meat Stew",
-        "Cola Perk Bubblegum", "Cotton Candy Bites", "Cram", "Dandy Boy Apples", "Fancy Lads Snack Cakes", "Fasnacht Donut",
-        "Funnel Cake", "Grape Perk Bubblegum", "Gum Drops", "Halloween Candy", "Imitation Seafood", "InstaMash", "Mystery Candy",
-        "Noodle Cup", "Nuka Victory Candy", "Nuka-Cola Candy", "Nuka-Cola Quantum Candy", "Perfect Bubblegum", "Perfectly Preserved Pie",
-        "Perk Bubblegum", "Popcorn", "Pork n' Beans", "Potato Crisps", "Preserved InstaMash", "Rudy's Canned Pozole", "Salisbury Steak",
-        "Strawberry Perk Bubblegum", "Sugar Bombs", "Vegetarian Ham", "Watermelon Perk Bubblegum", "Yum Yum Deviled Eggs",
-    };
+    static List<string> PreWarFoods => Rules.Current.Catalog.PreWarFoods;
 
     /// <summary>What's left when someone dies or drops things: the paper bag, creature meat piles, robot scrap piles and
     /// the loot bag skins players pick (Atom Shop / Scoreboard). Never placed in the world: spots unknown.</summary>
@@ -1095,9 +1102,17 @@ public static class Catalog
     /// <summary>Section of the advanced "Everything else" categories (always shown; was an option until 2.0).</summary>
     public const string AllSection = "ALL";
 
-    /// <summary>The sub-headings inside a section, in the order the tree shows them.</summary>
-    public static readonly string[] GroupOrder =
-        { "Seasonal", "Public events", "Raids & expeditions", "Metals", "Chemicals", "Parts & tech", "Materials", "Other" };
+    /// <summary>A sub-heading's place inside its section. Events' come from the item rules (Rules.Events.Groups), junk's
+    /// are fixed. Not listed = last.</summary>
+    public static int GroupRank(string group)
+    {
+        int i = Rules.Current.Events.Groups.FindIndex(g => g.Name == group);
+        if (i >= 0) return i;
+        i = Array.IndexOf(JunkGroups, group);
+        return i >= 0 ? 1000 + i : int.MaxValue;
+    }
+
+    static readonly string[] JunkGroups = { "Metals", "Chemicals", "Parts & tech", "Materials", "Other" };
 
     /// <summary>A scrap component's kind (the junk section's sub-heading).</summary>
     static string JunkKind(string comp) => comp.ToLowerInvariant() switch
@@ -1112,7 +1127,7 @@ public static class Catalog
     public const string OtherPrefix = "Other: ", OldOtherPrefix = "All: ";
     /// <summary>Loose things only count where they are placed; activators, containers and furniture stay (events spawn them).</summary>
     static bool PlacedOnly(string[] types) => !types.Any(t => t is "ACTI" or "CONT" or "FURN");
-    static readonly Regex NothingDrawn = new(@"^markers\\|loadmarker|dummy|invisible|activatorvolume|^armor\\raider01\\static\.nif$|_startlights\.nif$|^clothes\\hats\\gomininghelmet\.nif$|^effects\\splinesparks", RegexOptions.IgnoreCase);
+    static Regex NothingDrawn => Rules.Rx(Rules.Current.Catalog.NothingDrawn);
 
     /// <summary>Every named game object whose model no other category uses, one entry per model, sorted only by record
     /// type - nothing hand-picked. Items that never lie in the world are left out (they can't show their model); activators,
@@ -1202,7 +1217,7 @@ public static class Catalog
         }
         return c;
     }
-    static readonly Regex CampId = new(@"CAMP|Workshop|^ATX_|^SCORE_", RegexOptions.IgnoreCase);
+    static Regex CampId => Rules.Rx(Rules.Current.Catalog.CampId);
 
     /// <summary>Things built in a CAMP (collectors, extractors, generators, purifiers, turrets, signs, displays...): the
     /// activators / containers / furniture whose editor id says CAMP, workshop, Atomic Shop or Scoreboard - one entry per

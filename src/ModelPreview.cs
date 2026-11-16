@@ -885,6 +885,8 @@ static class PreviewRenderer
                 foreach (var p in parts.Where(p => p.Kind is PartKind.Solid or PartKind.Blend))
                     Draw(p, cam, color, depth, null, light, Color.White, 1f, true, pt, ghost: lk.XrayScale);
         }
+        // the pick-up ball (not on creatures / worn outfits: the build leaves them without one)
+        if (st.PickRange > 0 && !scene.Parts.Any(p => p.Skinned)) PickBall(cam, color, scene, st.PickRange * StyleEditor.UnitsPerMetre);
 
         if (x != null && VisionMatrix.TryGetValue(x.Vision, out var m))
             for (int i = 0; i < w * h * 3; i += 3)
@@ -933,7 +935,29 @@ static class PreviewRenderer
         return (dx * c.Right.X + dy * c.Right.Y + dz * c.Right.Z, dx * c.Up.X + dy * c.Up.Y + dz * c.Up.Z, dx * c.Fwd.X + dy * c.Fwd.Y + dz * c.Fwd.Z);
     }
 
-    static void Line(Cam c, float[] color, (float X, float Y, float Z) from, (float X, float Y, float Z) to, float k)
+    /// <summary>"Pick up from afar" (Style.PickRange): the invisible pick-up ball as a wire globe round the item's middle,
+    /// where the build puts it (NifPatch.AddPickup) - drawn over everything, it is a guide.</summary>
+    static void PickBall(Cam c, float[] color, PreviewScene s, float radius)
+    {
+        var (cx, cy, cz) = ((s.Min.X + s.Max.X) / 2, (s.Min.Y + s.Max.Y) / 2, (s.Min.Z + s.Max.Z) / 2);
+        var tint = (0.35f, 0.85f, 1f);
+        const int seg = 48;
+        (float, float, float) P(float lat, float lon) =>
+            (cx + radius * MathF.Cos(lat) * MathF.Cos(lon), cy + radius * MathF.Cos(lat) * MathF.Sin(lon), cz + radius * MathF.Sin(lat));
+        for (int i = -2; i <= 2; i++) // circles of latitude every 30 degrees
+        {
+            float lat = i * MathF.PI / 6;
+            for (int j = 0; j < seg; j++) Line(c, color, P(lat, j * 2 * MathF.PI / seg), P(lat, (j + 1) * 2 * MathF.PI / seg), i == 0 ? 0.7f : 0.45f, tint);
+        }
+        for (int j = 0; j < 8; j++) // meridians every 45 degrees
+        {
+            float lon = j * MathF.PI / 4;
+            for (int i = 0; i < seg / 2; i++)
+                Line(c, color, P(-MathF.PI / 2 + i * MathF.PI / (seg / 2), lon), P(-MathF.PI / 2 + (i + 1) * MathF.PI / (seg / 2), lon), 0.45f, tint);
+        }
+    }
+
+    static void Line(Cam c, float[] color, (float X, float Y, float Z) from, (float X, float Y, float Z) to, float k, (float R, float G, float B)? tint = null)
     {
         var a = ToView(c, from);
         var b = ToView(c, to);
@@ -946,7 +970,7 @@ static class PreviewRenderer
         int steps = (int)MathF.Ceiling(Math.Max(Math.Abs(dx), Math.Abs(dy)));
         if (steps == 0 || steps > 4 * (c.W + c.H)) return; // (a square right at the camera)
         // the lines in the light of the sky (dark at night), fading into fog
-        var (lr, lg, lb) = c.Sky.Sky == Sky.Studio ? (0.62f, 0.68f, 0.64f) : (0.55f * c.Sky.Sun.R, 0.58f * c.Sky.Sun.G, 0.52f * c.Sky.Sun.B);
+        var (lr, lg, lb) = tint ?? (c.Sky.Sky == Sky.Studio ? (0.62f, 0.68f, 0.64f) : (0.55f * c.Sky.Sun.R, 0.58f * c.Sky.Sun.G, 0.52f * c.Sky.Sun.B));
         for (int s = 0; s < steps; s++) // the end point is the next square's start
         {
             int x = (int)(sx0 + dx * s / steps), y = (int)(sy0 + dy * s / steps);
@@ -1901,7 +1925,7 @@ sealed class ModelView : UserControl
     (string? Model, List<string>? Gun, bool PartOff) Target()
     {
         if (fixedTarget is { } t) return t;
-        var model = picked ?? entry!.Models.FirstOrDefault();
+        var model = picked ?? entry!.PreviewModel ?? entry.Models.FirstOrDefault();
         var off = OffParts;
         // a weapon with no part picked: the whole gun (its parts left in the mod)
         var gun = entry!.Assembled && picked == null ? entry.Models.Where(m => !off.Contains(m)).ToList() : null;
@@ -2724,7 +2748,10 @@ sealed class ModelView : UserControl
                                       : PreviewRenderer.Orbit(yaw, pitch, target, dist);
                 (shotEye, shotLook) = (at, look);
                 var took = System.Diagnostics.Stopwatch.StartNew();
-                frame = PreviewRenderer.Render(scene, shown, canvas.Width / s, canvas.Height / s, at, look, 40, free ? 2 : Math.Max(0.5f, dist * 0.005f), guide,
+                // no pick-up ball where the build won't make one (Entry.CanPick)
+                var drawnLook = shown;
+                if (entry is { CanPick: false } && shown.PickRange > 0) { drawnLook = shown.Clone(); drawnLook.PickRange = 0; }
+                frame = PreviewRenderer.Render(scene, drawnLook, canvas.Width / s, canvas.Height / s, at, look, 40, free ? 2 : Math.Max(0.5f, dist * 0.005f), guide,
                                                isBig ? extras : null, anim.Enabled ? (float)animClock.Elapsed.TotalSeconds : -1);
                 // animating: full quality, fewer pictures a second when one takes long (a big view)
                 if (anim.Enabled && s == 1) anim.Interval = Math.Clamp((int)(took.ElapsedMilliseconds * 1.5), 50, 400);

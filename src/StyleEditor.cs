@@ -22,9 +22,9 @@ public sealed class StyleEditor : UserControl
     readonly NumericUpDown iconStrength = new() { Minimum = 10, Maximum = 300, Increment = 10, Width = 55 };
     readonly NumericUpDown labelStrength = new() { Minimum = 10, Maximum = 300, Increment = 10, Width = 55 };
     readonly NumericUpDown copyStrength = new() { Minimum = 10, Maximum = 300, Increment = 10, Width = 55 };
-    readonly NumericUpDown iconSize = new() { Minimum = 10, Maximum = 500, Increment = 10, Width = 55 }; // % of the item's size
-    readonly NumericUpDown copySize = new() { Minimum = 10, Maximum = 500, Increment = 10, Width = 55 }; // % of the item's size
-    readonly NumericUpDown labelSize = new() { Minimum = 10, Maximum = 500, Increment = 10, Width = 55 };
+    readonly NumericUpDown iconSize = new() { Minimum = 10, Maximum = 2000, Increment = 10, Width = 68 }; // % of the item's size
+    readonly NumericUpDown copySize = new() { Minimum = 10, Maximum = 2000, Increment = 10, Width = 68 }; // % of the item's size
+    readonly NumericUpDown labelSize = new() { Minimum = 10, Maximum = 2000, Increment = 10, Width = 68 }; // cm (like Mini item's 20 m)
     readonly TextBox labelText = new() { Width = 170, PlaceholderText = Tr("the item's name") };
     readonly CheckBox labelCat = new() { Text = Tr("Start with the category"), AutoSize = true };
     readonly NumericUpDown brightStrength = new() { Minimum = 25, Maximum = 300, Increment = 25, Width = 55 };
@@ -419,6 +419,10 @@ public sealed class StyleEditor : UserControl
     readonly List<FxRows> fxRows = new();
     FxRows glowFx = null!, beamFx = null!, arrowFx = null!, iconFx = null!, copyFx = null!, labelFx = null!;
     readonly CheckBox invisibleBox = new() { Text = Tr("Invisible - only what you add shows"), AutoSize = true };
+    /// <summary>"Pick up from afar": the pick-up sphere's radius in metres (Style.PickRange), 0 = off.</summary>
+    readonly NumericUpDown pickRange = new() { Minimum = 0, Maximum = 15, Increment = 1, Width = 48 };
+    Control[] pickRow = Array.Empty<Control>();
+    static readonly string PickWhy = Tr("Pick it up from further away: an invisible ball round the item (shown in the 3D view) that the game's aim hits - you walk straight through it.\nYou reach about 2 m past the ball's edge. The item stays where it is placed (it doesn't fall or get knocked about).\nInside the ball it may be picked instead of a door or box next to it - keep it small near those.");
 
     void BuildCards()
     {
@@ -545,6 +549,8 @@ public sealed class StyleEditor : UserControl
         glowFx = Fx(itemSection, st => st.GlowFx);
         xrayRows.AddRange(Row(itemSection, Tr("Strength"), Steps(xrayStrength, strength, new[] { 50, 100, 200 }), xrayStrength, Unit("%")));
         xrayStrength.ValueChanged += (_, _) => { if (loading) return; style.XrayStrength = (int)xrayStrength.Value; Edited(); };
+        pickRow = Row(itemSection, Tr("Pickup range"), Steps(pickRange, new[] { Tr("Off"), "2 m", "4 m", "6 m" }, new[] { 0, 2, 4, 6 }), pickRange, Unit("m"));
+        foreach (var c in pickRow) fxTips.SetToolTip(c, PickWhy);
         Wide(itemSection, invisibleBox); // last in the section (user, 2026-11-09)
         swatches.Picked += c =>
         {
@@ -885,6 +891,12 @@ public sealed class StyleEditor : UserControl
         xrayStrength.Value = Math.Clamp(style.XrayStrength, 25, 300);
         foreach (var (seg, box, _, values) in steps) seg.Selected = Array.IndexOf(values, (int)box.Value);
         invisibleBox.Checked = style.Invisible;
+        // creatures / worn outfits: no pick-up ball (greyed with the reason, like the motions)
+        foreach (var c in pickRow)
+        {
+            c.Enabled = pickOk;
+            fxTips.SetToolTip(c, pickOk ? PickWhy : Tr("Only on things you pick up, harvest or open where they lie - not on enemies, people, CAMP items, containers, doors or furniture (they would lose their solid shape)."));
+        }
         labelCat.Checked = style.LabelCategory;
         int p = PresetOf(); // the preset the look matches is lit (none when it matches none)
         foreach (var t in presetTiles) t.Selected = t.Index == p;
@@ -992,13 +1004,21 @@ public sealed class StyleEditor : UserControl
         set { icons3D = value; UpdateLook(); }
     }
 
+    /// <summary>The look is for things you pick up (Entry.CanPick): the pick-up ball row is usable; greyed otherwise.</summary>
+    public bool PickOk
+    {
+        get => pickOk;
+        set { pickOk = value; UpdateLook(); }
+    }
+    bool pickOk = true;
+
     /// <summary>Left from the old small sketch; the pop-up shows the real 3D preview.</summary>
     public bool Sketch { get => false; set { } }
 
     public StyleEditor()
     {
         Height = 400;
-        foreach (var box in new[] { opacity, brightStrength, length, width, beamStrength, arrowWidth, iconStrength, labelStrength, copyStrength, iconSize, copySize, labelSize })
+        foreach (var box in new[] { opacity, brightStrength, length, width, beamStrength, arrowWidth, iconStrength, labelStrength, copyStrength, iconSize, copySize, labelSize, pickRange })
             box.ValueChanged += (_, _) => Commit();
         iconButton.FlatAppearance.BorderColor = Color.FromArgb(160, 160, 160);
         iconButton.Click += (_, _) => PickIcon();
@@ -1022,6 +1042,7 @@ public sealed class StyleEditor : UserControl
             copyStrength.Value = Math.Clamp(style.CopyStrength, 10, 300);
             iconSize.Value = Math.Clamp(style.IconScale, (int)iconSize.Minimum, (int)iconSize.Maximum);
             copySize.Value = Math.Clamp(style.CopyScale, (int)copySize.Minimum, (int)copySize.Maximum);
+            pickRange.Value = Math.Clamp(style.PickRange, 0, (int)pickRange.Maximum);
             if (labelText.Text != style.LabelText) labelText.Text = style.LabelText;
             labelSize.Value = Math.Clamp((decimal)Math.Round(style.LabelSize * 2 / UnitsPerCm), labelSize.Minimum, labelSize.Maximum);
             sameColor.Checked = style.GlowColor.Equals(style.BeamColor, StringComparison.OrdinalIgnoreCase);
@@ -1062,6 +1083,7 @@ public sealed class StyleEditor : UserControl
         style.CopyStrength = (int)copyStrength.Value;
         style.IconScale = (int)iconSize.Value; // % of the item's size
         style.CopyScale = (int)copySize.Value;
+        style.PickRange = (int)pickRange.Value;
         style.LabelSize = (float)labelSize.Value * UnitsPerCm / 2; // text height in cm -> half height in game units
         if (sameColor.Checked) style.BeamColor = style.GlowColor;
         UpdateLook();

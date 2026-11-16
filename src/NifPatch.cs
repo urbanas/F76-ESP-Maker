@@ -171,7 +171,9 @@ public sealed class NifFile
 
 /// <summary>Glow material for one part; TestRef >= 0 = cut-out part (alpha test with that threshold).</summary>
 /// <param name="AlphaMode">0 = its own additive blending block, 1 = none (the material blends), 2 = the part's own block.</param>
-public sealed record GlowMat(string Material, int TestRef = -1, int AlphaMode = 0);
+/// <param name="Outline">The material fades by view angle (falloff): the copy must not keep vertex colours - with them
+/// the game drew no outline at all on the mole miner body (in-game test 2026-11-16), filled glow was fine.</param>
+public sealed record GlowMat(string Material, int TestRef = -1, int AlphaMode = 0, bool Outline = false);
 
 /// <summary>What the patcher knows about a part that should glow.</summary>
 /// <param name="Material">The part's material file path from the model ("" if none).</param>
@@ -193,7 +195,9 @@ public sealed record PatchOptions(Func<GlowPart, GlowMat?>? GlowFor, string? Bea
                                   bool Invisible = false, Motion? Motion = null, Func<string, float>? ScaleOf = null,
                                   string[]? Stack = null, string? ArrowMaterial = null, float ArrowWidth = 3.5f,
                                   Mesh? Copy = null, string? CopyMaterial = null, float CopySize = 35,
-                                  float IconScale = 0, float CopyScale = 0);
+                                  float IconScale = 0, float CopyScale = 0, float PickRange = 0, byte[]? PickDonor = null);
+// PickRange: > 0 = "pick up from afar", the radius in metres of the invisible pick-up sphere (Pickup); PickDonor = the
+// donor's Havok data (Pickup.DonorBlob)
 // IconScale / CopyScale: > 0 = the icon / copy is that part of the item's size (1 = as big as the item), IconSize /
 // CopySize only when the item's size can't be measured
 
@@ -233,6 +237,48 @@ public static class NifPatch
     /// <summary>The level designers' placement guides (EditorMarker: a whole resource collector on the wood piles, blocks
     /// on crop plants and dig mounds). Not in the game normally, but one showed on a patched wood pile.</summary>
     public static bool IsEditorOnly(string part) => part.StartsWith("EditorMarker", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A shape's data without its vertex colours (4 bytes per vertex): vertex description at refs + 12
+    /// (size / offsets in 4-byte nibbles, flags from bit 44, colours = 0x20), then triangles, vertices, data size.
+    /// Unchanged when there are none or the layout isn't the expected one (vertices + triangles, then the rest).</summary>
+    static byte[] WithoutVertexColors(byte[] b, int r)
+    {
+        int vdAt = r + 12;
+        if (b.Length < vdAt + 18) return b;
+        ulong vd = BitConverter.ToUInt64(b, vdAt);
+        if (((vd >> 44) & 0x20) == 0) return b;
+        int size = (int)(vd & 0xF) * 4, colorOff = (int)((vd >> 24) & 0xF) * 4;
+        uint tris = BitConverter.ToUInt32(b, vdAt + 8);
+        int verts = BitConverter.ToUInt16(b, vdAt + 12);
+        uint dataSize = BitConverter.ToUInt32(b, vdAt + 14);
+        int data = vdAt + 18;
+        if (size < 8 || colorOff == 0 || dataSize != (ulong)verts * (ulong)size + tris * 6UL || data + dataSize > b.Length) return b;
+        // offsets after the colours move 4 bytes down; the colour offset goes, the size shrinks
+        ulong nd = vd & ~(0x20UL << 44);
+        for (int n = 2; n < 11; n++) // nibble 1 is the dynamic vertex size, not an offset
+        {
+            int sh = 4 * n;
+            ulong o = (vd >> sh) & 0xF;
+            if (n == 6) o = 0;
+            else if (o * 4 > (ulong)colorOff) o--;
+            nd = (nd & ~(0xFUL << sh)) | (o << sh);
+        }
+        nd = (nd & ~0xFUL) | (ulong)(size / 4 - 1);
+        int newSize = size - 4;
+        var o2 = new byte[b.Length - 4 * verts];
+        Array.Copy(b, o2, data);
+        BitConverter.TryWriteBytes(o2.AsSpan(vdAt), nd);
+        BitConverter.TryWriteBytes(o2.AsSpan(vdAt + 14), (uint)(verts * newSize + tris * 6));
+        for (int v = 0; v < verts; v++)
+        {
+            int src = data + v * size, dst = data + v * newSize;
+            Array.Copy(b, src, o2, dst, colorOff);
+            Array.Copy(b, src + colorOff + 4, o2, dst + colorOff, size - colorOff - 4);
+        }
+        int rest = data + verts * size;
+        Array.Copy(b, rest, o2, data + verts * newSize, b.Length - rest);
+        return o2;
+    }
 
     const ulong BeamVertexDesc = 0x0003B00005430206;
 
@@ -280,6 +326,8 @@ public static class NifPatch
             foreach (var k in kids)
                 if (k >= 0 && k < f.Blocks.Count && !skip.Contains(k)) { parent[k] = n; stack.Push(k); }
         }
+
+        string? pickNote = o.PickRange > 0 && o.PickDonor != null ? AddPickup(f, shapes, parent, origin, o.PickRange, o.PickDonor) : null;
 
         var glowAdded = new Dictionary<int, List<int>>();
         int glowCount = 0, skippedCutouts = 0;
@@ -357,6 +405,7 @@ public static class NifPatch
                 partShaders[GlowPart].Add((glowShader, glowMat.Material));
                 Put(copy, r + 4, glowShader);
                 Put(copy, r + 8, glowMat.AlphaMode switch { 1 => -1, 2 => alphaProp, _ => GlowAlpha(glowMat.TestRef) });
+                if (glowMat.Outline) copy = WithoutVertexColors(copy, r);
                 int shape = f.Add(f.TypeOf(s), copy);
                 if (!glowAdded.TryGetValue(attachTo, out var list)) glowAdded[attachTo] = list = new();
                 list.Add(shape);
@@ -375,7 +424,7 @@ public static class NifPatch
         // icon / model / item copy sized by the item (user, 2026-11-15: 100 % on a bobblehead isn't 100 % on a brahmin):
         // half the item's biggest side x the scale, 10 cm .. 5 m; the fixed size when the item's size is unknown.
         // Small items count as at least 75 cm (52.5 units; user 2026-11-15: bobblehead copies were too small)
-        float Scaled(float scale, float fixedHalf) => scale > 0 && itemSize > 1 ? Math.Clamp(Math.Max(itemSize, 52.5f) / 2 * scale, 3.5f, 175f) : fixedHalf;
+        float Scaled(float scale, float fixedHalf) => scale > 0 && itemSize > 1 ? Math.Clamp(Math.Max(itemSize, 52.5f) / 2 * scale, 3.5f, 1000f) /* <= 20 m wide (2000 % cap) */ : fixedHalf;
         o = o with { IconSize = Scaled(o.IconScale, o.IconSize), CopySize = Scaled(o.CopyScale, o.CopySize) };
         bool iconHere = (o.IconMaterial != null && !skinned) || (o.Icon3D != null && o.Icon3DMaterial != null) || (o.Model != null && o.ModelMaterial != null);
         bool Drawn(string k) => k switch
@@ -672,8 +721,63 @@ public static class NifPatch
                 }
             notes.Add($"item hidden ({hidden} part(s))");
         }
+        if (pickNote != null) notes.Add(pickNote);
         string note = string.Join(", ", notes);
         return new PatchResult(f.Write(), glowCount, beam, note);
+    }
+
+    /// <summary>"Pick up from afar": the model's root collision becomes a static, non-colliding body of the item's own box +
+    /// a sphere of <paramref name="metres"/> round it (Pickup); added on the root when the model has none.</summary>
+    static string AddPickup(NifFile f, List<int> shapes, Dictionary<int, int> parent, Dictionary<int, (float X, float Y, float Z)> origin,
+                            float metres, byte[] donor)
+    {
+        if (shapes.Any(s => BitConverter.ToInt32(f.Blocks[s].Data, NifFile.ShapeRefs(f.Blocks[s].Data)) >= 0))
+            return "no pick-up area (animated model)";
+        BeamBase(f, shapes, parent, origin, 0, out _, out var box);
+        const float U = Pickup.UnitsPerHavok;
+        var (lo, hi) = box is var (x0, y0, z0, x1, y1, z1) && x1 >= x0
+            ? ((x0 / U, y0 / U, z0 / U), (x1 / U, y1 / U, z1 / U)) : ((-0.1f, -0.1f, 0f), (0.1f, 0.1f, 0.2f));
+        byte[] blob;
+        try { blob = Pickup.Make(donor, lo, hi, metres * 70f / U); }
+        catch (Exception ex) { return "no pick-up area (" + ex.Message + ")"; }
+        var phys = new byte[4 + blob.Length];
+        BitConverter.TryWriteBytes(phys.AsSpan(0), blob.Length);
+        blob.CopyTo(phys, 4);
+        var root = (byte[])f.Blocks[0].Data.Clone();
+        int at = NifFile.AvObjectEnd(root) - 4, col = BitConverter.ToInt32(root, at);
+        if (f.TypeOf(col) == "bhkNPCollisionObject")
+        {
+            var cd = (byte[])f.Blocks[col].Data.Clone();
+            int data = BitConverter.ToInt32(cd, 6);
+            if (f.TypeOf(data) != "bhkPhysicsSystem") return "no pick-up area (unknown collision)";
+            f.Blocks[data] = ("bhkPhysicsSystem", phys);
+            BitConverter.TryWriteBytes(cd.AsSpan(10), 0); // body 0
+            f.Blocks[col] = (f.Blocks[col].Type, cd);
+        }
+        else if (col >= 0) return "no pick-up area (unknown collision)";
+        else
+        {
+            // none on the root: a new one (collision object before its data, like the game's own models). Plants keep it
+            // after harvest - tested 2026-11-16: putting it in the switch's growing branch didn't help (the game doesn't
+            // drop a hidden branch's collision); user: expected, noted in the description.
+            var cd = new byte[14];
+            int newCol = f.Add("bhkNPCollisionObject", cd);
+            int newPhys = f.Add("bhkPhysicsSystem", phys);
+            Put(cd, 0, 0);                                     // target: the root
+            BitConverter.TryWriteBytes(cd.AsSpan(4), (ushort)0x80);
+            Put(cd, 6, newPhys);
+            Put(root, at, newCol);
+            f.Blocks[0] = (f.Blocks[0].Type, root);
+        }
+        // a static body: BSX without the Havok bit (as the game's static food)
+        for (int k = 0; k < f.Blocks.Count; k++)
+            if (f.Blocks[k].Type == "BSXFlags")
+            {
+                var b = (byte[])f.Blocks[k].Data.Clone();
+                Put(b, 4, BitConverter.ToInt32(b, 4) & ~0x40);
+                f.Blocks[k] = ("BSXFlags", b);
+            }
+        return $"pick-up area {metres:0.#} m";
     }
 
     /// <summary>Where the beam starts, in the space of the node it hangs from: centred over the item's visible
@@ -682,8 +786,15 @@ public static class NifPatch
     /// <param name="size">The item's biggest side (width, depth or height) in game units; 0 when unknown.</param>
     static (float X, float Y, float Z) BeamBase(NifFile f, List<int> shapes, Dictionary<int, int> parent,
                                                 Dictionary<int, (float X, float Y, float Z)> origin, int beamParent, out float size)
+        => BeamBase(f, shapes, parent, origin, beamParent, out size, out _);
+
+    /// <param name="box">The visible parts' box in model space (min x, y, z, max x, y, z); max below min when unknown.</param>
+    static (float X, float Y, float Z) BeamBase(NifFile f, List<int> shapes, Dictionary<int, int> parent,
+                                                Dictionary<int, (float X, float Y, float Z)> origin, int beamParent, out float size,
+                                                out (float X0, float Y0, float Z0, float X1, float Y1, float Z1) box)
     {
         size = 0;
+        box = (0, 0, 0, -1, -1, -1);
         float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue, top = float.MinValue, bottom = float.MaxValue;
         foreach (int s in shapes)
         {
@@ -721,6 +832,7 @@ public static class NifPatch
         }
         if (top == float.MinValue || top > 2000 || maxX - minX > 4000 || maxY - minY > 4000) return (0, 0, 0); // nothing sensible (effects etc.)
         size = Math.Max(maxX - minX, Math.Max(maxY - minY, top - Math.Max(bottom, top - 4000)));
+        box = (minX, minY, Math.Max(bottom, top - 4000), maxX, maxY, top);
         var p = origin.GetValueOrDefault(beamParent);
         return ((minX + maxX) / 2 - p.X, (minY + maxY) / 2 - p.Y, Math.Max(0, top) - p.Z);
     }

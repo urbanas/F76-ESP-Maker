@@ -12,126 +12,25 @@ public static class Enemies
     public const string Humans = "Human enemies";
     public const string Bosses = "Bosses", Marked = "Legendary & bounty enemies";
 
-    /// <summary>Category by race keyword, first match wins.</summary>
-    static readonly (string Category, string[] Keywords, string Color, string Description)[] Kinds =
-    {
-        ("Robots", new[] { "ActorTypeRobot", "ActorTypeTurret" }, Palette.Robots.Hex, "Robots and turrets. Robots are built from parts; every part glows, the beam rises from the torso."),
-        ("Scorched", new[] { "ActorTypeScorched" }, Palette.Scorched.Hex, "Scorched and Scorchbeasts. Their outfits are Scorched-only; clothing they share with players is left out so you don't glow yourself."),
-        ("Super Mutants", new[] { "ActorTypeSuperMutant", "ActorTypeSuperMutantBehemoth" }, Palette.Mutants.Hex, "Super Mutants and Behemoths, with their armor pieces."),
-        ("Feral Ghouls", new[] { "ActorTypeFeralGhoul" }, Palette.Ghouls.Hex, "Feral ghouls, glowing ones and their outfits."),
-        ("Cryptids", new[] { "ActorTypeCryptid" }, Palette.Cryptids.Hex, "Mothman, Snallygaster, Grafton Monster, Flatwoods Monster and other cryptids."),
-        ("Insects & bugs", new[] { "ActorTypeBug" }, Palette.Bugs.Hex, "Bloatflies, bloodbugs, stingwings, radroaches, ants, crickets..."),
-        ("Mirelurks & crabs", new[] { "ActorTypeMirelurk", "ActorTypeMirelurkKing", "ActorTypeArthropods" }, Palette.Water.Hex, "Mirelurks, hunters, kings, hermit crabs, radscorpions..."),
-        ("Hostile animals", new[] { "ActorTypeAnimal" }, Palette.Hunters.Hex, "Animals that attack - wolves, yao guai, mole rats, mongrels, attack dogs..."),
-        // filled from the line above: animals the game tags docile or livestock (no keyword matches this one)
-        ("Harmless animals", new[] { "" }, Palette.Docile.Hex, "Animals that don't attack - brahmin, radstags, chickens, rabbits, foxes, squirrels..."),
-        ("Other creatures", new[] { "ActorTypeCreature" }, Palette.Others.Hex, "Every other creature."),
-    };
-
-    /// <summary>Races that aren't enemies (pets, humans, test and cut content).</summary>
-    static readonly Regex SkipRace = new(@"^(CAMPPets_|CUT_|DEL_|zz|Dev|DLC05ArmorRack|PowerArmor|Human|Main_Human|Ghoul|GHL_|Lost(Healer)?Race|Fisherman|P62_|ATX_COMP_|Dummy|RedRocketRobot|DogCollectron|MechTest|SQ_|DogmeatRace|CatRace|CatPetRace|GhoulChild|SCORE_|DLC01WorkshopWallLight|TurretWorkshop)", RegexOptions.IgnoreCase);
-
-    /// <summary>Files that aren't the creature's body: effects, skeletons, projectiles, severed-limb pieces... and the
-    /// Wendigo scout outfit (an unused skin: wendigos wear no clothes in game - user, 2026-11-11), and creature hats (user,
-    /// 2026-11-15: Brahmin listed 5 hats under it besides its 2 bodies).</summary>
-    static readonly Regex NotBody = new(@"(characterassets\\hats\\|wendigoscoutoutfit|dummyfxskin|skeleton|\\_rig\\|fx|explosion|projectile|hazard|muzzle|morphs\\|replace|dest\.nif|dest\d|lite\.nif|light|overheat|particles|attack|despawn|intro|landingeffects|standin|dummyweapon|chargeao|chargestealth|dest(chest|[lr]arm|head)|legdest|headdest|mps|encryptedfire)", RegexOptions.IgnoreCase);
-
-    /// <summary>Small attached parts: they glow, but don't get a beam (one beam per creature).</summary>
-    /// <summary>Skin add-ons drawn on top of the body (alien glass helmet, bloodbug hair, mole rat sores...).</summary>
-    static readonly Regex SkinExtra = new(@"(glass|hair|sores|nosering|mohawk|fur[._]|flower|vine|spikes|corpse|cordycep|collar)", RegexOptions.IgnoreCase);
-
-    static readonly Regex NoBeam = new(@"(hand|head|hat|glasses|backpack|glove|helmet|mask|eye|crown|mouth|horns|tie|bowtie|ascot|smock|chains|headband|arm|leg|decal|armor|armour|plate|eggs)", RegexOptions.IgnoreCase);
-
-    /// <summary>Robots: part file name word -> species. Torso parts carry the beam.</summary>
-    static readonly (string Name, string Pattern)[] RobotParts =
-    {
-        ("Protectron", "protectron"),
-        ("Assaultron", "assaultron"),
-        ("Sentry Bot", "sentry"),
-        ("Mr. Handy", @"(handy|gutsy|rose_|sawhand|flamethrowerhand|pincherhand|armstypea|mobsterhat)"),
-        ("Robobrain", "robobrain"),
-    };
-
-    /// <summary>EN06: every part of its NPC record (RD01_Enc01_GuardianBot) plus the base it rises from. Most are files other
-    /// robots use too, so they are listed there as well (SharedRobotParts) and selected together (Entry.LinkParts).</summary>
-    static readonly Dictionary<string, string> GuardianParts = new()
-    {
-        [@"actors\createabot\guardianbot\torsoguardianbot.nif"] = "Torso",
-        [@"actors\createabot\guardianbottop.nif"] = "Top",
-        [@"actors\createabot\guardianbot\guardianbotbase.nif"] = "Base",
-        [@"actors\createabot\guardianbot\guardianbotdoors01.nif"] = "Base doors",
-        [@"actors\robot\parts\headsentrytype1.nif"] = "Head (shared)",
-        [@"actors\robot\parts\headsentrytype1armor.nif"] = "Head armor (shared)",
-        [@"actors\robot\parts\sentryfrontarmor.nif"] = "Front armor (shared)",
-        [@"actors\robot\parts\sentrytoparmor.nif"] = "Top armor (shared)",
-        [@"actors\robot\parts\armleftsentrybot.nif"] = "Left arm (shared)",
-        [@"actors\robot\parts\armrightsentrybot.nif"] = "Right arm (shared)",
-        [@"actors\robot\parts\armleftsentryarmor.nif"] = "Left arm armor (shared)",
-        [@"actors\robot\parts\armrightsentryarmor.nif"] = "Right arm armor (shared)",
-        [@"actors\robot\parts\sentryleftshoulderclustergrenadelauncher.nif"] = "Left shoulder launcher (shared)",
-        [@"actors\robot\parts\sentryrightshoulderclustergrenadelauncher.nif"] = "Right shoulder launcher (shared)",
-        [@"actors\dlc01\robot\parts\robots_handleftautomaticlaser.nif"] = "Left laser hand (shared)",
-        [@"actors\dlc01\robot\parts\robots_handrightautomaticlaser.nif"] = "Right laser hand (shared)",
-    };
-
-    /// <summary>The robots using EN06's shared parts, from the part lists of their NPC records.</summary>
-    static readonly (string Robot, string[] Parts)[] SharedRobotParts =
-    {
-        ("Sentry Bot", new[] { "armleftsentrybot", "armrightsentrybot", "armleftsentryarmor", "armrightsentryarmor", "headsentrytype1", "headsentrytype1armor", "sentryfrontarmor", "sentrytoparmor",
-                               "sentryleftshoulderclustergrenadelauncher", "sentryrightshoulderclustergrenadelauncher", "robots_handleftautomaticlaser", "robots_handrightautomaticlaser" }),
-        ("Robobrain", new[] { "armleftsentrybot", "armrightsentrybot", "armleftsentryarmor", "armrightsentryarmor", "headsentrytype1", "sentryfrontarmor", "sentrytoparmor" }),
-        ("Protectron", new[] { "armleftsentryarmor", "armrightsentryarmor", "headsentrytype1armor", "sentryfrontarmor", "sentrytoparmor", "robots_handrightautomaticlaser" }),
-        ("Mr. Handy", new[] { "armrightsentryarmor" }),
-    };
-
-    /// <summary>Bosses with models of their own (meshes\ paths; folders end with \). Missing files are skipped.</summary>
-    static readonly (string Name, string[] Models)[] BossModels =
-    {
-        ("Scorchbeast Queen", new[] { @"actors\scorchbeast\characterassets\scorchbeastqueen.nif" }),
-        ("Earle Williams (Wendigo Colossus)", new[] { @"actors\wendigocolossus\characterassets\wendigocolossus.nif", @"actors\wendigocolossus\characterassets\wendigocolossus_boss.nif" }),
-        ("Ultracite Terror", new[] { @"actors\scorchtongue\characterassets\scorchtongue.nif", @"actors\scorchtonguebody\characterassets\scorchtonguebody.nif", @"actors\scorchtonguetail\characterassets\scorchtonguetail.nif", @"actors\scorchtonguetail\scorchtonguetail.nif" }),
-        ("Ultracite Abomination", new[] { @"actors\ultraciteabomination\characterassets\ultraciteabomination.nif" }),
-        ("Storm Goliaths", new[] { @"actors\stormboss\characterassets\stormboss.nif", @"actors\stormboss\parts\" }),
-        ("Mirelurk Queen", new[] { @"actors\mirelurkqueen\characterassets\mirelurkqueen.nif", @"actors\mirelurkqueen\characterassets\mirelurkqueen_parasitic.nif" }),
-        ("Wise Mothman", new[] { @"actors\mothman\characterassets\mothmanmeshexportroot_wise.nif", @"actors\mothman\characterassets\mothmanmeshexportroot_wise_equinox.nif" }),
-        ("Rust King", new[] { @"actors\supermutant\rustking\characterassets\rustkingbody01.nif", @"actors\supermutant\rustking\characterassets\rustkingarmour01.nif", @"actors\supermutant\rustking\characterassets\rustkingcrown01.nif", @"actors\supermutant\rustking\characterassets\rustkinghead01.nif", @"actors\supermutant\rustking\characterassets\rustkingeye01.nif", @"actors\supermutant\rustking\characterassets\rustkingmouth01.nif", @"actors\supermutant\rustking\characterassets\rustkingheadmeatcap.nif" }),
-        ("Behemoth (boss)", new[] { @"actors\supermutantbehemoth\boss\supermutantbehemothboss.nif" }),
-        ("Bigfoot", new[] { @"actors\supermutantbehemoth\bigfoot\characterassets\supermutantbehemoth_bigfoot.nif" }),
-        ("Overgrown Tank", new[] { @"actors\supermutant\overgrown\overgrowntank.nif", @"actors\supermutant\overgrown\overgrowntankflowres.nif" }),
-        ("Guardian (EN06)", GuardianParts.Keys.ToArray()),
-        ("Imposter Sheepsquatch", new[] { @"actors\createabot\characterassets\sheepsquatchfanaticoutfit.nif" }),
-        ("Jersey Devil", new[] { @"actors\jerseydevil\characterassets\jerseydevil.nif" }),
-        ("Blue Devil", new[] { @"actors\deathclaw\bluedevil\bluedevil.nif", @"actors\deathclaw\bluedevil\bluedevil_main.nif" }),
-    };
-
-    /// <summary>Human enemies share the human body with players, so they are found by what only
-    /// they wear: model folders, the parts that carry the beam, and a note when players can wear it too.</summary>
-    static readonly (string Name, string[] Folders, string Beam, string Note)[] HumanGroups =
-    {
-        ("Lost", new[] { @"actors\storm_lost\", @"clothes\vaultarmourlost\", @"clothes\vaultsuitburntlost\" }, @"eyes\.nif$", "faces, eyes and Lost-only armour"),
-        ("Rust Kingdom raiders", new[] { @"clothes\rustkingdomraiders\" }, @"(chest|rustraider_[abc]_[mf]\.nif)", "their own armour"),
-        ("Raiders", new[] { @"clothes\raider\", @"clothes\raider04_fashion\", @"clothes\raider06_ski\" }, "", "players wearing these outfits glow too"),
-        ("Gas-mask raiders", new[] { @"atx\clothes\gasmaskraider\" }, "", "players wearing this outfit glow too"),
-        ("Blood Eagle mercs", new[] { @"atx\clothes\bloodeaglemerc_charmer\" }, "", "players wearing this outfit glow too"),
-        // Cult Outfit = the robes most cultist enemies wear (Outfit_Cultist levelled lists); the rest is random armour
-        // pastor outfit, wood armour and the sack hood come from the cultist lists and (apart from a few corpses) no other
-        // NPC wears them; the leather / metal armour and under-armour also in those lists are left out - hundreds of
-        // raiders, settlers and players wear them
-        ("Cultists", new[] { @"clothes\cultist", @"clothes\cultoutfit\", @"clothes\pastor\", @"armor\wood\", @"armor\raidermodarmor\headgear1" }, "",
-         "players wearing cultist robes, the pastor outfit, wood armour or the sack hood glow too"),
-        ("Communists", new[] { @"atx\clothes\communist" }, "", "players wearing these outfits glow too"),
-        ("Fanatics", new[] { @"atx\clothes\atx_fanatic", @"actors\powerarmor\fanaticspa\" }, "", "players wearing these outfits glow too"),
-    };
-
-    /// <summary>Readable outfit names for the parts list (folder names run words together).</summary>
-    static readonly Dictionary<string, string> OutfitNames = new()
-    {
-        ["cultistadept"] = "Cultist Adept robes", ["cultistelder"] = "Cultist Elder robes", ["cultistincarnatehelmet"] = "Cultist Incarnate",
-        ["cultistneophyte"] = "Cultist Neophyte robes", ["cultoutfit"] = "Cult outfit", ["pastor"] = "Pastor outfit", ["wood"] = "Wood armour",
-        ["raidermodarmor"] = "Sack hood", ["vaultarmourlost"] = "Lost vault armour", ["vaultsuitburntlost"] = "Lost burnt vault suit",
-        ["rustkingdomraiders"] = "Rust Kingdom armour", ["gasmaskraider"] = "Gas-mask raider", ["bloodeaglemerc_charmer"] = "Blood Eagle merc",
-        ["fanaticspa"] = "Fanatic power armour", ["storm_lost"] = "Lost face",
-    };
+    // the lists live in rules.json (Rules.cs: EnemyRules says what each one is for). Notes kept from the code:
+    // NotBody - the Wendigo scout outfit is an unused skin (user, 2026-11-11); creature hats are left out (user, 2026-11-15:
+    //   Brahmin listed 5 hats besides its 2 bodies). "Harmless animals" has no keyword: filled from Hostile animals
+    //   (docile / livestock). Guardian (EN06) = every part of RD01_Enc01_GuardianBot plus its base; most parts are shared
+    //   with other robots (SharedRobotParts, from their NPC records) and selected together (Entry.LinkParts).
+    //   Cultists: the Cult Outfit = the robes most cultist enemies wear; pastor outfit, wood armour and the sack hood come
+    //   from the cultist lists (no other NPC wears them); the leather / metal armour in those lists is left out.
+    static EnemyRules R => Rules.Current.Enemies;
+    static List<KindRule> Kinds => R.Kinds;
+    static Regex SkipRace => Rules.Rx(R.SkipRace);
+    static Regex NotBody => Rules.Rx(R.NotBody);
+    static Regex SkinExtra => Rules.Rx(R.SkinExtra);
+    static Regex NoBeam => Rules.Rx(R.NoBeam);
+    static List<NamePattern> RobotParts => R.RobotParts;
+    static Dictionary<string, string> GuardianParts => R.GuardianParts;
+    static List<SharedParts> SharedRobotParts => R.SharedRobotParts;
+    static List<NamedModels> BossModels => R.BossModels;
+    static List<HumanGroup> HumanGroups => R.HumanGroups;
+    static Dictionary<string, string> OutfitNames => R.OutfitNames;
 
     /// <summary>A human enemy's part as "Outfit - piece (female)": the outfit from the folder, the piece and body type from
     /// the file name (clothes\pastor\foutfit.nif = "Pastor outfit - outfit (female)").</summary>
@@ -168,8 +67,8 @@ public static class Enemies
     }
 
     /// <summary>Not what others see: first-person arms, dropped-item models.</summary>
-    static readonly Regex HumanSkip = new(@"(go\.nif$|_go_|^go_|1st|_fp\.nif$|_1p\.nif$)", RegexOptions.IgnoreCase);
-    static readonly Regex HumanNoBeam = new(@"(helmet|hat|glove|hood|mask|eye|mouth|facebones|arm|leg|scarf|bag)", RegexOptions.IgnoreCase);
+    static Regex HumanSkip => Rules.Rx(R.HumanSkip);
+    static Regex HumanNoBeam => Rules.Rx(R.HumanNoBeam);
 
     public static List<Category> Build(GameIndex idx, Func<string, bool> exists, IReadOnlyCollection<string> gameFiles)
     {
@@ -220,7 +119,7 @@ public static class Enemies
             var words = (race.Keywords ?? new()).Select(k => kw.GetValueOrDefault(k) ?? "").ToHashSet(StringComparer.OrdinalIgnoreCase);
             if ((words.Contains("ActorTypeNPC") || words.Contains("ActorTypeHuman")) && !words.Contains("ActorTypeScorched")) continue;
             var kind = Kinds.FirstOrDefault(k => k.Keywords.Any(words.Contains));
-            if (kind.Category == null) continue;
+            if (kind == null) continue;
             var category = kind.Category;
             if (category == "Hostile animals" && (words.Contains("ActorTypeDocile") || words.Contains("ActorTypeLivestock"))) category = "Harmless animals";
             var key = (category, race.Name.Trim());
@@ -298,7 +197,7 @@ public static class Enemies
             }
             // not one-off location quest characters (LC097_R_Vargas: a suited executive filed under the Mirelurk Spawn race
             // gave mirelurk spawn a suit and a trilby - user, 2026-11-11)
-            foreach (var npc in npcsByRace.Where(n => races.Contains(n.Key)).SelectMany(n => n.Value).Where(n => !Regex.IsMatch(n.EditorId, @"^LC\d+_")))
+            foreach (var npc in npcsByRace.Where(n => races.Contains(n.Key)).SelectMany(n => n.Value).Where(n => !Rules.Rx(R.LocationNpc).IsMatch(n.EditorId)))
                 Expand(npc.Product, 0);
             var clothes = new List<string>();
             foreach (var armo in worn.Select(w => idx.ById[w]))
@@ -339,7 +238,7 @@ public static class Enemies
         var partFiles = meshFiles.Where(f => (f.Contains(@"\robot\parts\") || f.Contains(@"\createabot\")) && !NotBody.IsMatch(f) && !used.Contains(f)).ToList();
         foreach (var (name, pattern) in RobotParts)
         {
-            var rx = new Regex(pattern, RegexOptions.IgnoreCase);
+            var rx = Rules.Rx(pattern);
             var files = partFiles.Where(f => rx.IsMatch(Path.GetFileName(f)) || rx.IsMatch(Path.GetDirectoryName(f) ?? "")).Where(exists).ToList();
             if (files.Count == 0) continue;
             partFiles.RemoveAll(files.Contains);
@@ -381,11 +280,7 @@ public static class Enemies
             Description = Tr("The game attaches an aura effect to legendary enemies and to Burning Springs bounty targets. The beam is added to that effect, so it follows the enemy - whatever kind it is. Glow has no effect here (the aura has no solid parts); the game's own aura stays."),
             DefaultStyle = new Style { Glow = false, Beam = true, GlowColor = "#FFD700", BeamColor = "#FFD700", BeamLength = 2100 },
         };
-        foreach (var (name, models) in new (string, string[])[]
-                 {
-                     ("Legendary enemies", new[] { @"effects\shaderparticles\legendaryradiationfxsp.nif", @"effects\shaderparticles\legendaryradiation_b_fxsp.nif" }),
-                     ("Bounty targets (Burning Springs)", new[] { @"effects\shaderparticles\burn_bountyhunt_casterparticles.nif" }),
-                 })
+        foreach (var (name, models) in R.MarkedModels)
         {
             var files = models.Where(exists).ToList();
             if (files.Count > 0)
@@ -404,7 +299,7 @@ public static class Enemies
             var files = allMeshes.Where(f => folders.Any(f.StartsWith) && !NotBody.IsMatch(f) && !HumanSkip.IsMatch(Path.GetFileName(f)) && exists(f))
                                  .Distinct().OrderBy(f => f).ToList();
             if (files.Count == 0) continue;
-            var beamRx = beam.Length > 0 ? new Regex(beam, RegexOptions.IgnoreCase) : null;
+            var beamRx = beam.Length > 0 ? Rules.Rx(beam) : null;
             var body = files.Where(f => beamRx?.IsMatch(Path.GetFileName(f)) ?? !HumanNoBeam.IsMatch(Path.GetFileName(f))).ToHashSet();
             humans.Entries.Add(new Entry
             {

@@ -9,18 +9,9 @@ namespace ItemFinder;
 public static class PartNames
 {
     /// <summary>Words the game's names don't have but model files use.</summary>
-    static readonly string[] ExtraWords =
-    {
-        "body", "head", "mask", "helmet", "hat", "hood", "outfit", "costume", "arm", "arms", "leg", "legs", "left", "right", "torso",
-        "chest", "tail", "wing", "wings", "eye", "eyes", "glow", "glove", "gloves", "boot", "boots", "hair", "face", "jaw", "teeth",
-        "claw", "claws", "lower", "upper", "base", "gun", "lid", "door", "fx", "skin", "shell", "fur", "spine", "neck", "hand", "hands",
-        "foot", "feet", "back", "pack", "bag", "belt", "cape", "coat", "suit", "dress", "pants", "shirt", "jacket", "scarf", "mouth",
-        "horn", "horns", "beard", "crown", "brain", "dome", "light", "lights", "damaged", "broken", "dead", "burnt", "dirty", "clean",
-        "knee", "hip", "shoulder", "humanoid", "plate", "pieces", "liner", "backpack", "radio", "parasitic", "res", "low", "high", "mesh",
-        "vertibird", "decal", "decals", "mascot", "animated", "anim", "railing", "rail", "rigged", "emblem", "logo", "nozzle", "barrel", "trim", "charge", "charger", "ascot", "vandalized", "pharm", "pharma", "bark", "cob", "ized",
-    };
+    static List<string> ExtraWords => Rules.Current.PartNames.ExtraWords;
     /// <summary>File-name words that say nothing to a player.</summary>
-    static readonly HashSet<string> Noise = new() { "atx", "go", "nif", "flora", "landscape", "plants", "dlc", "mesh" };
+    static List<string> Noise => Rules.Current.PartNames.Noise;
     static readonly Regex Tokens = new(@"[a-z]+|[0-9]+", RegexOptions.Compiled);
 
     public static void NameAll(GameIndex idx, IEnumerable<Category> cats)
