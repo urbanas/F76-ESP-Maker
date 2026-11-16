@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "version": 1,
+  "version": 2,
   "minApp": "2.5",
   "latestApp": "2.5",
   "updated": "2026-11-16",
   "changes": [
-    { "version": 1, "text": [ "Pick-up ball now also offered for the Fuel Canister (Gleaming Depths raid)" ] }
+    { "version": 2, "text": [ "Pick-up ball now also offered for the Fuel Canister (Gleaming Depths raid)" ] }
   ],
   "enemies": {
     "kinds": [
