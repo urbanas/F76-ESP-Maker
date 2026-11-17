@@ -173,7 +173,9 @@ public sealed class NifFile
 /// <param name="AlphaMode">0 = its own additive blending block, 1 = none (the material blends), 2 = the part's own block.</param>
 /// <param name="Outline">The material fades by view angle (falloff): the copy must not keep vertex colours - with them
 /// the game drew no outline at all on the mole miner body (in-game test 2026-11-16), filled glow was fine.</param>
-public sealed record GlowMat(string Material, int TestRef = -1, int AlphaMode = 0, bool Outline = false);
+/// <param name="NoVertexColors">The copy drops its vertex colours anyway (a wind-sway plant keeps wind data in the vertex
+/// alpha, which made its glow see-through).</param>
+public sealed record GlowMat(string Material, int TestRef = -1, int AlphaMode = 0, bool Outline = false, bool NoVertexColors = false);
 
 /// <summary>What the patcher knows about a part that should glow.</summary>
 /// <param name="Material">The part's material file path from the model ("" if none).</param>
@@ -410,7 +412,7 @@ public static class NifPatch
                 partShaders[GlowPart].Add((glowShader, glowMat.Material));
                 Put(copy, r + 4, glowShader);
                 Put(copy, r + 8, glowMat.AlphaMode switch { 1 => -1, 2 => alphaProp, _ => GlowAlpha(glowMat.TestRef) });
-                if (glowMat.Outline) copy = WithoutVertexColors(copy, r);
+                if (glowMat.Outline || glowMat.NoVertexColors) copy = WithoutVertexColors(copy, r);
                 int shape = f.Add(f.TypeOf(s), copy);
                 if (!glowAdded.TryGetValue(attachTo, out var list)) glowAdded[attachTo] = list = new();
                 list.Add(shape);

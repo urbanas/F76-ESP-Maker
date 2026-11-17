@@ -59,7 +59,10 @@ public static class Builder
                     // game, only a fill (2026-11-05) - they get the fill whatever the look says
                     Style? filled = s.GlowFill || e.NoIcon ? null : s.Clone();
                     if (filled != null) filled.GlowFill = true;
-                    Func<GlowPart, GlowMat?>? glowFor = s.Glow ? part => GlowFor(part.Skinned && filled != null ? filled : s, part, game, template, materials, cutouts, files)
+                    // a "brightGlow" plant keeps its wind data in the vertex alpha: on the glow copy that made it see-through
+                    // (Razorgrain showed nothing in game) - its copy goes without vertex colours
+                    Func<GlowPart, GlowMat?>? glowFor = s.Glow ? part => GlowFor(part.Skinned && filled != null ? filled : s, part, game, template, materials, cutouts, files) is GlowMat gm
+                                                                         ? gm with { NoVertexColors = gm.NoVertexColors || BreaksBright(part.Material) } : null
                                                       : s.ShowsOwnXray ? part => XrayFor(part, s.XrayScale, game, template, materials) : null;
                     var chosen = Icons.Get(s.Icon);
                     bool use3D = e.NoIcon || s.Icon3D; // creatures can only show the 3D shape
@@ -313,6 +316,13 @@ public static class Builder
             else log(Tf("  {0}: {1} can't be brightened", item, key));
         }
         return tree;
+    }
+
+    /// <summary>The part's material is on rules.json "brightGlow" (a wind-sway plant Bright breaks).</summary>
+    static bool BreaksBright(string material)
+    {
+        int at = material.IndexOf(@"materials\", StringComparison.OrdinalIgnoreCase);
+        return material.Length > 0 && Rules.Current.BreaksBright(Ba2Path.Normalize(at >= 0 ? material[at..] : @"materials\" + material));
     }
 
     /// <summary>Bright on a wind-sway plant: a fill glow in the plant's own (average) colour, as strong as the shine

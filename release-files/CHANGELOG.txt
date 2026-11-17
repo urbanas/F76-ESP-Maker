@@ -1,6 +1,12 @@
 ESP Maker - changes
 ===================
 
+2.5.2
+Fixed
+- Razorgrain's Fill glow (what Bright gives it since 2.5.1) didn't show in game: the plant keeps
+  its wind data in the vertex colours, which made the glow see-through. It shows now, and with
+  X-ray it shows through walls.
+
 2.5.1
 Fixed
 - Bright on Razorgrain drew it as broken mirror shards. Razorgrain now gets a Fill glow in its own
