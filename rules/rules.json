@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "version": 5,
+  "version": 6,
   "minApp": "2.5",
-  "latestApp": "2.5.2",
+  "latestApp": "2.5.3",
   "updated": "2026-11-17",
   "changes": [
     { "version": 5, "text": [ "ESP Maker 2.5.2 is out: the Razorgrain glow (Bright) now shows in game", "Loot spots: the Lucky Strike dig sites have their own row now instead of being part of Treasure map mounds - it selects together with EVENTS > Lucky Strike > Dig sites" ] },
