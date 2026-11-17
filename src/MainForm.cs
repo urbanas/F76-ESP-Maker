@@ -1487,10 +1487,10 @@ public sealed class MainForm : Form
         ApplyTheme();
         var at = settings.PopupAt is { Length: 2 } p ? new Point(p[0], p[1]) : (Point?)null;
         var area = PopupArea(at is { } a0 && Screen.AllScreens.Any(s => s.WorkingArea.Contains(a0)) ? Screen.FromPoint(a0).WorkingArea : Screen.FromRectangle(anchor).WorkingArea);
-        var size = settings.PopupSize is { Length: 2 } ps ? new Size(Math.Clamp(ps[0], 500, area.Width), Math.Clamp(ps[1], 400, area.Height))
+        var size = settings.PopupSize is { Length: 2 } ps ? new Size(Math.Clamp(ps[0], Math.Min(500, area.Width), area.Width), Math.Clamp(ps[1], Math.Min(400, area.Height), area.Height))
                                                            : new Size(Math.Min(LookPopupWidth, area.Width - 20), Math.Min(area.Height - 20, (int)(900 * DeviceDpi / 96f)));
         int x = anchor.Right + 6 + size.Width <= area.Right ? anchor.Right + 6 : Math.Max(area.Left, anchor.Left - size.Width - 6);
-        int y = Math.Clamp(anchor.Top - 40, area.Top + 10, area.Bottom - size.Height - 10);
+        int y = Math.Clamp(anchor.Top - 40, area.Top + 10, Math.Max(area.Top + 10, area.Bottom - size.Height - 10)); // a full-height pop-up made max < min
         if (at is { } a) // where it was dragged to, kept on the screen
         {
             x = Math.Clamp(a.X, area.Left, Math.Max(area.Left, area.Right - size.Width));

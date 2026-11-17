@@ -1,6 +1,11 @@
 ESP Maker - changes
 ===================
 
+2.5.3
+Fixed
+- Opening the look pop-up showed an error message ("'10' cannot be greater than -10") on a
+  small screen, or when the saved pop-up size was as tall as the screen.
+
 2.5.2
 Fixed
 - Razorgrain's Fill glow (what Bright gives it since 2.5.1) didn't show in game: the plant keeps
