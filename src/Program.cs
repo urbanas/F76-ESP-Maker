@@ -97,6 +97,7 @@ static class Program
         if (args.Length == 2 && args[0] == "--partnames") { Environment.Exit(SelfTest.PartNamesDump(args[1])); return; }
         if (args.Length == 2 && args[0] == "--pickdonors") { Environment.Exit(SelfTest.PickDonors(args[1])); return; }
         if (args.Length == 3 && args[0] == "--findblock") { Environment.Exit(SelfTest.FindBlock(args[1], args[2])); return; }
+        if (args.Length == 3 && args[0] == "--extract") { Environment.Exit(SelfTest.Extract(args[1], args[2])); return; }
         if (args.Length == 3 && args[0] == "--tex") { Environment.Exit(SelfTest.Tex(args[1], args[2])); return; }
         if (args.Length is 3 or 4 && args[0] == "--lookshot") { Environment.Exit(SelfTest.LookShot(args[1], args[2], args.Length == 4 ? args[3] : null)); return; }
         if (args.Length is 2 or 3 && args[0] == "--tour-pages")

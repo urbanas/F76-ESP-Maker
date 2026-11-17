@@ -1050,5 +1050,7 @@
 "{0} m": "{0} m",
 "{0} of {1}": "{0} / {1}",
 "▲ higher up": "▲ 上へ",
-"Use the {0} look": "{0} の見た目を使う"
+"Use the {0} look": "{0} の見た目を使う",
+"Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "一部の植物にはゲーム内で鮮やかが効かないため、代わりに自身の色の塗りつぶしグローになります。",
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: ゲーム内で鮮やかが効きません - 代わりに自身の色の塗りつぶしグローになります"
 }

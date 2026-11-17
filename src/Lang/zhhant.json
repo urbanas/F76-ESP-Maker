@@ -1051,5 +1051,7 @@
 "{0} of {1}": "{0} / {1}",
 "▲ higher up": "▲ 更高",
 "{0:0} cm": "{0:0} 公分",
-"Use the {0} look": "使用{0}的外觀"
+"Use the {0} look": "使用{0}的外觀",
+"Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "鮮亮在遊戲中對少數植物無效：它們會改為獲得自身顏色的填充發光。",
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: 鮮亮在遊戲中對其無效，因此改為自身顏色的填充發光"
 }

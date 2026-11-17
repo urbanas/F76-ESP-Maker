@@ -1050,5 +1050,7 @@
 "{0} m": "{0} m",
 "{0} of {1}": "{0} / {1}",
 "▲ higher up": "▲ 위로",
-"Use the {0} look": "{0} 모양 사용"
+"Use the {0} look": "{0} 모양 사용",
+"Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "일부 식물에는 게임에서 선명이 적용되지 않아, 대신 고유 색의 채우기 발광이 적용됩니다.",
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: 게임에서 선명이 적용되지 않아 대신 고유 색의 채우기 발광이 적용됩니다"
 }

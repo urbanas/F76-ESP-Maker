@@ -96,6 +96,16 @@ public static class SelfTest
     }
 
     /// <summary>--lookshot: opens the Item look window for an entry and saves a picture of it once the preview is drawn.</summary>
+    /// <summary>Dev: game files ('|' separated paths) copied out of the archives as they are (the winning copy).</summary>
+    public static int Extract(string paths, string outDir)
+    {
+        var (game, _, _) = Load(s => { });
+        Directory.CreateDirectory(outDir);
+        foreach (var path in paths.Split('|'))
+            if (game.Find(path) is { } e) File.WriteAllBytes(Path.Combine(outDir, Path.GetFileName(path)), e.Archive.ReadFile(e));
+        return 0;
+    }
+
     /// <summary>Dev: game textures to PNG (each pixel x 4 if small) with their size and alpha range in tex.log.</summary>
     public static int Tex(string paths, string outDir)
     {
@@ -835,6 +845,9 @@ public static class SelfTest
         Check(Materials.ReadEmissive(carrot) is { } gc && carrot[gc.Flag] == 0 && carrot[gc.GlowMap] == 0 && gc.GlowMap == carrot.Length - 24, "carrots have no glow");
         var bright = Materials.Brighten(carrot, 1.5f) ?? Array.Empty<byte>();
         Check(bright.Length == carrot.Length + 31 + 12 && bright[^24] == 1 && Encoding.ASCII.GetString(bright).Split("Carrot01_d.dds").Length == 3, "brightened carrot: colour texture as glow map, flag set");
+        var grain = Original(@"materials\landscape\plants\razorgrain01.bgsm");
+        Check(grain.Length > 0 && Rules.Bundled().BreaksBright(@"materials\landscape\plants\razorgrain01.bgsm")
+              && !Rules.Bundled().BreaksBright(@"materials\landscape\plants\carrot01.bgsm"), "razorgrain gets a fill glow for Bright (rules brightGlow), carrots don't");
         foreach (var path in game.AllPaths.Where(p => p.EndsWith(".bgsm", StringComparison.OrdinalIgnoreCase)))
         {
             if (game.FindOriginal(path) is not Ba2Entry entry) continue;

@@ -231,6 +231,7 @@ public static class Materials
     /// <summary>A game material whose own colour texture lights it up, like the game's own Rad Mothman eggs (their glow
     /// map is their colour texture), at <paramref name="strength"/> x full. A material with a glow map of its own
     /// keeps it, only stronger. Null when the material can't be read or has no colour texture.</summary>
+    /// <remarks>Not for rules.json "brightGlow" materials (the builder gives those a fill glow instead).</remarks>
     public static byte[]? Brighten(byte[] src, float strength)
     {
         if (ReadEmissive(src) is not Emissive e) return null;
@@ -255,6 +256,14 @@ public static class Materials
         m[ReadEmissive(m)!.GlowMap] = 1;
         return m;
     }
+
+    // Razorgrain (2026-11-17): Bright draws it as shattered mirror shards. Its material has the "tree" (wind-sway) flag
+    // (after the glow map flag: hair 1 byte, hair tint 12, then tree). Tree off = invisible (the wind data in the vertex
+    // alpha becomes see-through); tree + emissive without a map = no effect. Corn has the flag too and is fine with
+    // Bright, so it isn't the flag alone: the broken ones are listed in rules.json "brightGlow" (fill glow instead).
+
+    /// <summary>The colour texture's string (for the average colour of a "brightGlow" material).</summary>
+    public static string DiffuseOf(byte[] m) => System.Text.Encoding.ASCII.GetString(m, TextureStart, Math.Max(0, BitConverter.ToInt32(m, TextureLength) - 1));
 
     static byte[] Make(byte[] src, string texture, Color c, float scale, bool falloff, bool throughWalls, float? alpha)
     {

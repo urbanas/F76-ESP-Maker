@@ -1,6 +1,16 @@
 ESP Maker - changes
 ===================
 
+2.5.1
+Fixed
+- Bright on Razorgrain drew it as broken mirror shards. Razorgrain now gets a Fill glow in its own
+  colour instead (the look window and the build log say so). Corn and other plants keep Bright.
+- Chain-link fences (part of the junk pile model) glowed as a chessboard from a distance - fence
+  parts are no longer glowed or X-rayed.
+Changed
+- Harvestable logs, log piles and stumps use the same models as every fallen log and stump in the
+  world: their details now warn about that, and Select all leaves them out (tick them one by one).
+
 2.5
 New: Pickup range
 - A new row in the item's look: "Pickup range" (Off / 2 / 4 / 6 m, or type up to 15 m). The item

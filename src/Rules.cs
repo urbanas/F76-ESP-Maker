@@ -31,6 +31,10 @@ public sealed class Rules
     public PartNameRules PartNames { get; set; } = new();
     /// <summary>Where the pick-up ball is offered and built (Pickup.Allowed) - can be widened or narrowed online.</summary>
     public PickupRules Pickup { get; set; } = new();
+    /// <summary>Game materials (.bgsm paths "materials\...", any slashes / case) that Bright breaks in game (Razorgrain:
+    /// shattered mirror shards, 2026-11-17): a model using one gets a fill glow in its own colour instead.</summary>
+    public List<string> BrightGlow { get; set; } = new();
+    public bool BreaksBright(string material) => BrightGlow.Any(m => Ba2Path.Normalize(m).Equals(material, StringComparison.OrdinalIgnoreCase));
     /// <summary>Extra presets (More - Add presets), and the keys of built-in ones to take away (an event that is over).</summary>
     public List<PresetRule> Presets { get; set; } = new();
     public List<string> RetirePresets { get; set; } = new();

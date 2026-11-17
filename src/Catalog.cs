@@ -242,6 +242,9 @@ public sealed class Entry
     public bool LinkParts;
     /// <summary>Junk listed again under one of its other scrap components (not its main one).</summary>
     public bool JunkCopy;
+    /// <summary>Its models are also the ordinary scenery everywhere (harvestable logs and stumps = every fallen log):
+    /// the detail warns, and Select all leaves it out - only ticked one by one (user 2026-11-17).</summary>
+    public bool Scenery;
     /// <summary>Names for the parts list (model -> "Carrot (plant)"); file names otherwise.</summary>
     public Dictionary<string, string>? PartNames;
     /// <summary>A group of other entries (an XP recipe: its ingredients as they are listed in Plants, Aid &amp; food...).
@@ -741,6 +744,12 @@ public static class Catalog
                 var scraps = main != null ? Scraps(models) : new();
                 if (scraps.Count > 0) e.Detail = Tr("scraps into: ") + string.Join(", ", scraps) + (e.Detail.Length > 0 ? " · " + e.Detail : "");
                 e.Harvestable = types.Contains("FLOR");
+                // harvestable logs, log piles and stumps share their models with every plain fallen log and stump
+                if (e.Harvestable && models.All(m => m.Contains(@"landscape\trees\", StringComparison.OrdinalIgnoreCase)))
+                {
+                    e.Scenery = true;
+                    e.Detail = "⚠ " + Tr("lights up every log or stump in the world with this model, not just the harvestable ones") + (e.Detail.Length > 0 ? " · " + e.Detail : "");
+                }
                 e.Assembled = types.Contains("WEAP") && models.Count > 1;
                 into.Entries.Add(e);
                 // the same junk under each of its other components (own tick and look: Duct Tape for adhesive or for cloth)

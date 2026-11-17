@@ -2312,6 +2312,7 @@ public sealed class MainForm : Form
         foreach (ListViewItem li in list.Items)
             if (li.Tag is Entry e)
             {
+                if (on && e.Scenery && !IsTicked(e)) continue; // every fallen log in the world: tick it on purpose only
                 SetTicked(e, on);
                 SyncParts(e);
                 // recipes: their ingredients get / lose the XP recipes look, as when ticked one by one (Check all skipped

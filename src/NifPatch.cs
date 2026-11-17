@@ -234,6 +234,10 @@ public static class NifPatch
     /// glowed (a glow would show a blob around the barrel) and not drawn in the preview.</summary>
     public static bool IsRefraction(string part, string material) =>
         part.Contains("refraction", StringComparison.OrdinalIgnoreCase) || material.Contains("refraction", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Chain-link fence parts (the junk pile resource node has a fence in its model): their fine see-through
+    /// mesh turns into a glowing chessboard at a distance (cut-out on the low mips), and the fence isn't the thing to
+    /// find - never glowed / x-rayed (user report 2026-11-17).</summary>
+    public static bool IsFenceMesh(string material) => material.Contains("chainlink", StringComparison.OrdinalIgnoreCase);
     /// <summary>The level designers' placement guides (EditorMarker: a whole resource collector on the wood piles, blocks
     /// on crop plants and dig mounds). Not in the game normally, but one showed on a patched wood pile.</summary>
     public static bool IsEditorOnly(string part) => part.StartsWith("EditorMarker", StringComparison.OrdinalIgnoreCase);
@@ -363,7 +367,8 @@ public static class NifPatch
                 bool effectPart = f.TypeOf(shader) == "BSEffectShaderProperty";
                 string partName = f.Strings.ElementAtOrDefault(BitConverter.ToInt32(b, 0)) ?? "";
                 string effectMat = effectPart ? f.Strings.ElementAtOrDefault(BitConverter.ToInt32(f.Blocks[shader].Data, 0)) ?? "" : "";
-                if (IsRefraction(partName, f.Strings.ElementAtOrDefault(BitConverter.ToInt32(f.Blocks[shader].Data, 0)) ?? "")) continue;
+                string shaderMat = f.Strings.ElementAtOrDefault(BitConverter.ToInt32(f.Blocks[shader].Data, 0)) ?? "";
+                if (IsRefraction(partName, shaderMat) || IsFenceMesh(shaderMat)) continue;
                 // effect parts glow when they are the item itself: all of it is effects, or the part is glass (a Nuka-Cola
                 // bottle: labels + glass)
                 if (!(f.TypeOf(shader) == "BSLightingShaderProperty" ||

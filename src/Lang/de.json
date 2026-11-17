@@ -1051,5 +1051,7 @@
 "{0} m": "{0} m",
 "{0} of {1}": "{0} von {1}",
 "▲ higher up": "▲ weiter oben",
-"Use the {0} look": "Den Look von {0} verwenden"
+"Use the {0} look": "Den Look von {0} verwenden",
+"Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "Hell funktioniert im Spiel bei einigen Pflanzen nicht (Klingenkorn): Sie bekommen stattdessen ein Füllen-Leuchten in ihrer eigenen Farbe.",
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: Hell funktioniert darauf im Spiel nicht, daher bekommt es stattdessen ein Füllen-Leuchten in seiner eigenen Farbe"
 }

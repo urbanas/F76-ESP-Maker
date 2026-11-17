@@ -1,10 +1,11 @@
 {
   "schema": 1,
-  "version": 2,
+  "version": 3,
   "minApp": "2.5",
-  "latestApp": "2.5",
-  "updated": "2026-11-16",
+  "latestApp": "2.5.1",
+  "updated": "2026-11-17",
   "changes": [
+    { "version": 3, "text": [ "ESP Maker 2.5.1 is out: Bright on Razorgrain gives a Fill glow instead of broken mirror shards" ] },
     { "version": 2, "text": [ "Pickup range now also offered for the Fuel Canister (Gleaming Depths raid)" ] }
   ],
   "enemies": {
@@ -1372,6 +1373,9 @@
       "mesh"
     ]
   },
+  "brightGlow": [
+    "materials\\landscape\\plants\\razorgrain01.bgsm"
+  ],
   "pickup": {
     "categories": [
       "Bobbleheads",

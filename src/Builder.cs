@@ -113,7 +113,11 @@ public static class Builder
                     var own = partLooks?.GetValueOrDefault(model);
                     var look = own ?? st;
                     var path = @"meshes\" + model;
-                    if (look.Brighten) Brighten(e.Name, path, look, game, brightened, log);
+                    if (look.Brighten && Brighten(e.Name, path, look, game, brightened, log) is System.Drawing.Color treeColour)
+                    {
+                        look = TreeGlow(look, treeColour);
+                        log(Tf("  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead", e.Shown));
+                    }
                     if (!ChangesModel(look))
                     {
                         // brighten only: a linked twin may still put its own glow on the model
@@ -279,26 +283,62 @@ public static class Builder
 
     /// <summary>Brighter copies of the game materials a model uses, under the game's own paths. Always from the game's
     /// original: another mod's copy can be an older format (Oka's Plant Glow is v20) and already changed.</summary>
-    static void Brighten(string item, string path, Style st, GameData game, Dictionary<string, byte[]> brightened, Action<string> log)
+    /// <returns>For a model with a material Bright breaks in game (rules.json "brightGlow", Razorgrain): its colour
+    /// texture's average colour, for the fill glow it gets instead.</returns>
+    static System.Drawing.Color? Brighten(string item, string path, Style st, GameData game, Dictionary<string, byte[]> brightened, Action<string> log)
     {
         var src = game.FindOriginal(path) ?? game.Find(path);
-        if (src == null) return;
+        if (src == null) return null;
+        System.Drawing.Color? tree = null;
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try { NifPatch.Apply(src.Archive.ReadFile(src), new PatchOptions(p => { used.Add(p.Material); return null; }, null, 0, 0, false)); }
-        catch (Exception ex) { log(Tf("  {0}: couldn't read {1} ({2}) - not brightened", item, path, ex.Message)); return; }
+        catch (Exception ex) { log(Tf("  {0}: couldn't read {1} ({2}) - not brightened", item, path, ex.Message)); return null; }
         foreach (var material in used)
         {
             int at = material.IndexOf(@"materials\", StringComparison.OrdinalIgnoreCase);
             var key = Ba2Path.Normalize(at >= 0 ? material[at..] : @"materials\" + material);
             if (!key.EndsWith(".bgsm", StringComparison.OrdinalIgnoreCase) || brightened.ContainsKey(key)) continue;
             var entry = game.FindOriginal(key);
-            if ((entry != null ? Materials.Brighten(entry.Archive.ReadFile(entry), st.BrightenStrength / 100f) : null) is byte[] bright)
+            var mat = entry?.Archive.ReadFile(entry);
+            if (mat != null && Rules.Current.BreaksBright(key))
+            {
+                tree ??= AverageColour(game, Materials.DiffuseOf(mat)) ?? System.Drawing.Color.White;
+                continue;
+            }
+            if ((mat != null ? Materials.Brighten(mat, st.BrightenStrength / 100f) : null) is byte[] bright)
             {
                 brightened[key] = bright;
                 log(Tf("  {0}: {1} brightened", item, key));
             }
             else log(Tf("  {0}: {1} can't be brightened", item, key));
         }
+        return tree;
+    }
+
+    /// <summary>Bright on a wind-sway plant: a fill glow in the plant's own (average) colour, as strong as the shine
+    /// (100 % shine = the default glow strength); X-ray as Bright had it.</summary>
+    static Style TreeGlow(Style st, System.Drawing.Color colour)
+    {
+        var g = st.Clone();
+        g.Brighten = false;
+        g.Glow = g.GlowFill = true;
+        g.GlowColor = Materials.Hex(colour);
+        g.GlowOpacity = Math.Clamp(30 * st.BrightenStrength / 100, 5, 100);
+        return g;
+    }
+
+    /// <summary>Average colour of a texture's visible pixels (alpha over half), lifted so its brightest channel is full:
+    /// the glow colour of a wind-sway plant, which can't use its texture as glow map. Null = white.</summary>
+    static System.Drawing.Color? AverageColour(GameData game, string texture)
+    {
+        if (ModelPreview.LoadTexture(game, texture) is not Rgba t) return null;
+        long r = 0, g = 0, b = 0, n = 0;
+        for (int i = 0; i + 3 < t.Pixels.Length; i += 4)
+            if (t.Pixels[i + 3] > 127) { r += t.Pixels[i]; g += t.Pixels[i + 1]; b += t.Pixels[i + 2]; n++; }
+        if (n == 0) return null;
+        double max = Math.Max(1, Math.Max(r, Math.Max(g, b)) / (double)n);
+        int L(long v) => (int)Math.Clamp(v / (double)n / max * 255, 0, 255);
+        return System.Drawing.Color.FromArgb(L(r), L(g), L(b));
     }
 
     /// <summary>Models a build would change and roughly how big the .ba2 gets: each model's compressed size in the

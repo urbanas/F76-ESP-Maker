@@ -1052,5 +1052,7 @@
 "{0} m": "{0} m",
 "{0} of {1}": "{0} sur {1}",
 "▲ higher up": "▲ plus haut",
-"Use the {0} look": "Utiliser le style de {0}"
+"Use the {0} look": "Utiliser le style de {0}",
+"Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "Vif ne fonctionne pas sur quelques plantes en jeu : elles reçoivent à la place une lueur de remplissage dans leur propre couleur.",
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0} : Vif ne fonctionne pas dessus en jeu, il reçoit donc une lueur de remplissage dans sa propre couleur"
 }

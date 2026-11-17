@@ -1050,5 +1050,7 @@
 "{0} m": "{0} m",
 "{0} of {1}": "{0} de {1}",
 "▲ higher up": "▲ mais acima",
-"Use the {0} look": "Usar o visual de {0}"
+"Use the {0} look": "Usar o visual de {0}",
+"Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "Vivo não funciona em algumas plantas no jogo: elas recebem um brilho de preenchimento na própria cor.",
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: Vivo não funciona no jogo, então recebe um brilho de preenchimento na própria cor"
 }

@@ -1053,5 +1053,7 @@
 "{0} m": "{0} м",
 "{0} of {1}": "{0} из {1}",
 "▲ higher up": "▲ выше",
-"Use the {0} look": "Использовать оформление «{0}»"
+"Use the {0} look": "Использовать оформление «{0}»",
+"Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "«Яркий» не работает в игре на некоторых растениях: вместо него они получают свечение-заливку своего цвета.",
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: «Яркий» в игре на нём не работает, поэтому вместо него свечение-заливка своего цвета"
 }

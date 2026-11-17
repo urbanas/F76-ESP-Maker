@@ -533,7 +533,7 @@ public sealed class StyleEditor : UserControl
         const string timerNote = "\nA hide timer starts when the game loads the item, so it starts again when you come back to the area.";
 
         // 1 the item: a glow (outline / fill), or its own colours lit (bright); invisible
-        itemSection = new Section(Tr("The item"), Tr("Outline / Fill: a coloured light on the item. Bright: its own colours light up, day and night (not through walls).\nInvisible: the item disappears - only what you add shows; still there to pick up. Worn outfits vanish from whoever wears them, you too. Not on enemies.") + timerNote);
+        itemSection = new Section(Tr("The item"), Tr("Outline / Fill: a coloured light on the item. Bright: its own colours light up, day and night (not through walls).\nInvisible: the item disappears - only what you add shows; still there to pick up. Worn outfits vanish from whoever wears them, you too. Not on enemies.") + "\n" + Tr("Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.") + timerNote);
         Wide(itemSection, itemSeg);
         itemSeg.Picked += i =>
         {
