@@ -1,10 +1,11 @@
 {
   "schema": 1,
-  "version": 4,
+  "version": 5,
   "minApp": "2.5",
-  "latestApp": "2.5.1",
+  "latestApp": "2.5.2",
   "updated": "2026-11-17",
   "changes": [
+    { "version": 5, "text": [ "ESP Maker 2.5.2 is out: the Razorgrain glow (Bright) now shows in game", "Loot spots: the Lucky Strike dig sites have their own row now instead of being part of Treasure map mounds - it selects together with EVENTS > Lucky Strike > Dig sites" ] },
     { "version": 4, "text": [ "Treasure map mounds now also show the Lucky Strike dig sites (Excavator's, Prospector's and Miner's maps)" ] },
     { "version": 3, "text": [ "ESP Maker 2.5.1 is out: Bright on Razorgrain gives a Fill glow instead of broken mirror shards" ] },
     { "version": 2, "text": [ "Pickup range now also offered for the Fuel Canister (Gleaming Depths raid)" ] }
@@ -1410,7 +1411,7 @@
   "retirePresets": [],
   "exclude": [],
   "include": [
-    { "model": "setdressing\\ashlootmounds\\ashlootmound02.nif", "category": "Loot spots & event objects", "entry": "spot:treasure map mounds", "note": "Lucky Strike dig sites (Excavator's/Prospector's/Miner's maps) - user request 2026-11-17" }
+    { "model": "setdressing\\ashlootmounds\\ashlootmound02.nif", "category": "Loot spots & event objects", "entry": "Lucky Strike dig sites", "note": "own row in Loot spots, twin of EVENTS Lucky Strike > Dig sites - user request 2026-11-17" }
   ],
   "rename": [],
   "translations": {}
