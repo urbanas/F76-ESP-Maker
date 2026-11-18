@@ -1060,5 +1060,16 @@
 "Found in Data\\{0} - press Move to Data": "Найден в Data\\{0} – нажмите «Переместить в Data»",
 "Moved {0} to Data (was in {1}).": "{0} перемещён в Data (был в {1}).",
 "Move failed: ": "Не удалось переместить: ",
-"The game only loads archives that sit directly in the Data folder.": "Игра загружает только архивы, лежащие прямо в папке Data."
+"The game only loads archives that sit directly in the Data folder.": "Игра загружает только архивы, лежащие прямо в папке Data.",
+"Install mod...": "Установить мод...",
+"Install mod": "Установка мода",
+"Install": "Установить",
+"Installing {0} failed: {1}": "Не удалось установить {0}: {1}",
+"Installed {0} to {1}": "{0} установлен в {1}",
+"Installed {0} from {1}": "{0} установлен из {1}",
+"{0} has no .ba2 archive in it, so ESP Maker can't install it.\nIt may need a different install (see the mod's page). It holds:\n\n{1}": "В {0} нет архива .ba2, поэтому ESP Maker не может его установить.\nВозможно, нужен другой способ установки (см. страницу мода). Внутри:\n\n{1}",
+"You picked more than one file named {0}. These are usually alternative versions - pick only one of them.": "Выбрано несколько файлов с именем {0}. Обычно это альтернативные версии — выберите только одну.",
+"\n\nIt is a Vortex mod: Vortex may put its own version back when it deploys.": "\n\nЭто мод Vortex: при развёртывании Vortex может вернуть свою версию.",
+"{0} is already in Data. Replace it with the one from the download?": "{0} уже есть в Data. Заменить файлом из загрузки?",
+"{0} has {1} mod archives. Tick the ones to install - folders like \"Option A\" usually mean pick one.": "В {0} архивов мода: {1}. Отметьте те, что нужно установить — папки вроде «Option A» обычно означают выбор одного."
 }

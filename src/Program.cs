@@ -34,6 +34,8 @@ public sealed class Settings
     public bool? OnlineRules { get; set; }
     /// <summary>The newest app version a "new version is out" notice was shown for (shown once per version).</summary>
     public string? LatestAppSeen { get; set; }
+    /// <summary>Mod manager - Install mod...: the folder the last download was picked from.</summary>
+    public string? ModDownloads { get; set; }
 
     static string FilePath => AppPaths.File("settings.json");
 

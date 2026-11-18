@@ -1058,5 +1058,16 @@
 "Found in Data\\{0} - press Move to Data": "在 Data\\{0} 中找到——請按「移到 Data」",
 "Moved {0} to Data (was in {1}).": "已將 {0} 移到 Data（原在 {1}）。",
 "Move failed: ": "移動失敗：",
-"The game only loads archives that sit directly in the Data folder.": "遊戲只載入直接位於 Data 資料夾中的封存檔。"
+"The game only loads archives that sit directly in the Data folder.": "遊戲只載入直接位於 Data 資料夾中的封存檔。",
+"Install mod...": "安裝模組...",
+"Install mod": "安裝模組",
+"Install": "安裝",
+"Installing {0} failed: {1}": "安裝 {0} 失敗：{1}",
+"Installed {0} to {1}": "已將 {0} 安裝到 {1}",
+"Installed {0} from {1}": "已從 {1} 安裝 {0}",
+"{0} has no .ba2 archive in it, so ESP Maker can't install it.\nIt may need a different install (see the mod's page). It holds:\n\n{1}": "{0} 中沒有 .ba2 檔案，ESP Maker 無法安裝。\n它可能需要其他安裝方式（見模組頁面）。其中包含：\n\n{1}",
+"You picked more than one file named {0}. These are usually alternative versions - pick only one of them.": "你選擇了多個名為 {0} 的檔案。它們通常是不同版本——只選一個。",
+"\n\nIt is a Vortex mod: Vortex may put its own version back when it deploys.": "\n\n這是 Vortex 模組：Vortex 部署時可能會放回它自己的版本。",
+"{0} is already in Data. Replace it with the one from the download?": "{0} 已在 Data 中。要用下載的檔案取代嗎？",
+"{0} has {1} mod archives. Tick the ones to install - folders like \"Option A\" usually mean pick one.": "{0} 中有 {1} 個模組檔案。勾選要安裝的——像「Option A」這樣的資料夾通常表示只選一個。"
 }

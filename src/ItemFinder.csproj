@@ -30,4 +30,8 @@
     <EmbeddedResource Include="..\rules\rules.json" LogicalName="ItemFinder.rules.json" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="SharpCompress" Version="0.38.0" />
+  </ItemGroup>
+
 </Project>

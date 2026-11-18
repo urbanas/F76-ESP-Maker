@@ -1058,5 +1058,16 @@
 "Found in Data\\{0} - press Move to Data": "Gefunden in Data\\{0} – drücke „Nach Data verschieben“",
 "Moved {0} to Data (was in {1}).": "{0} nach Data verschoben (war in {1}).",
 "Move failed: ": "Verschieben fehlgeschlagen: ",
-"The game only loads archives that sit directly in the Data folder.": "Das Spiel lädt nur Archive, die direkt im Data-Ordner liegen."
+"The game only loads archives that sit directly in the Data folder.": "Das Spiel lädt nur Archive, die direkt im Data-Ordner liegen.",
+"Install mod...": "Mod installieren ...",
+"Install mod": "Mod installieren",
+"Install": "Installieren",
+"Installing {0} failed: {1}": "Installieren von {0} fehlgeschlagen: {1}",
+"Installed {0} to {1}": "{0} nach {1} installiert",
+"Installed {0} from {1}": "{0} aus {1} installiert",
+"{0} has no .ba2 archive in it, so ESP Maker can't install it.\nIt may need a different install (see the mod's page). It holds:\n\n{1}": "{0} enthält kein .ba2-Archiv, daher kann ESP Maker es nicht installieren.\nDer Mod braucht vielleicht eine andere Installation (siehe Mod-Seite). Enthalten ist:\n\n{1}",
+"You picked more than one file named {0}. These are usually alternative versions - pick only one of them.": "Du hast mehr als eine Datei namens {0} gewählt. Das sind meist alternative Versionen – wähle nur eine davon.",
+"\n\nIt is a Vortex mod: Vortex may put its own version back when it deploys.": "\n\nEs ist ein Vortex-Mod: Vortex legt beim Bereitstellen eventuell seine eigene Version zurück.",
+"{0} is already in Data. Replace it with the one from the download?": "{0} ist schon in Data. Durch die aus dem Download ersetzen?",
+"{0} has {1} mod archives. Tick the ones to install - folders like \"Option A\" usually mean pick one.": "{0} enthält {1} Mod-Archive. Hake die zu installierenden an – Ordner wie „Option A“ heißen meist: nur eins wählen."
 }

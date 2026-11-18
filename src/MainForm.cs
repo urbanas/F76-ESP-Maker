@@ -3081,7 +3081,7 @@ public sealed class MainForm : Form
     void OpenModManager()
     {
         if (game == null) { Box(Tr("Pick the game folder first (Options - Game folder...)."), Text); return; }
-        using var f = Ui.Dialog(new ModManager(game, Font, Log));
+        using var f = Ui.Dialog(new ModManager(game, Font, Log, settings));
         f.ShowDialog(this);
         if (!f.Saved) return;
         game.OwnInstalled.RemoveAll(n => !File.Exists(Path.Combine(game.DataFolder, n))); // deleted there

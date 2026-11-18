@@ -1057,5 +1057,16 @@
 "Found in Data\\{0} - press Move to Data": "Data\\{0} で見つかりました - 「Dataへ移動」を押してください",
 "Moved {0} to Data (was in {1}).": "{0} をDataへ移動しました（元の場所: {1}）。",
 "Move failed: ": "移動に失敗しました: ",
-"The game only loads archives that sit directly in the Data folder.": "ゲームはDataフォルダー直下にあるアーカイブだけを読み込みます。"
+"The game only loads archives that sit directly in the Data folder.": "ゲームはDataフォルダー直下にあるアーカイブだけを読み込みます。",
+"Install mod...": "MOD をインストール...",
+"Install mod": "MOD のインストール",
+"Install": "インストール",
+"Installing {0} failed: {1}": "{0} のインストールに失敗しました: {1}",
+"Installed {0} to {1}": "{0} を {1} にインストールしました",
+"Installed {0} from {1}": "{0} を {1} からインストールしました",
+"{0} has no .ba2 archive in it, so ESP Maker can't install it.\nIt may need a different install (see the mod's page). It holds:\n\n{1}": "{0} には .ba2 アーカイブが含まれていないため、ESP Maker ではインストールできません。\n別のインストール方法が必要かもしれません (MOD のページを参照)。中身:\n\n{1}",
+"You picked more than one file named {0}. These are usually alternative versions - pick only one of them.": "{0} という名前のファイルが複数選択されています。通常は別バージョンなので、1 つだけ選んでください。",
+"\n\nIt is a Vortex mod: Vortex may put its own version back when it deploys.": "\n\nこれは Vortex の MOD です: デプロイ時に Vortex が自分のバージョンに戻すことがあります。",
+"{0} is already in Data. Replace it with the one from the download?": "{0} は既に Data にあります。ダウンロードしたものと置き換えますか?",
+"{0} has {1} mod archives. Tick the ones to install - folders like \"Option A\" usually mean pick one.": "{0} には MOD アーカイブが {1} 個あります。インストールするものにチェックを入れてください - 「Option A」のようなフォルダーは通常 1 つだけ選ぶという意味です。"
 }

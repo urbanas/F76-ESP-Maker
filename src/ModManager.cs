@@ -36,9 +36,12 @@ sealed class ModManager : Form
     /// <summary>The list was saved (the main window refreshes its install state).</summary>
     public bool Saved { get; private set; }
 
-    public ModManager(GameData game, Font font, Action<string> log)
+    readonly Settings settings;
+
+    public ModManager(GameData game, Font font, Action<string> log, Settings settings)
     {
         this.game = game;
+        this.settings = settings;
         this.log = log;
         Text = Tr("ESP Maker - mod manager");
         Font = font;
@@ -68,6 +71,8 @@ sealed class ModManager : Form
             side.Controls.Add(b);
             return b;
         }
+        Side(Tr("Install mod..."), InstallPicked);
+        side.Controls.Add(new Label { Width = 130, Height = 10 });
         Side(Tr("▲  Up"), () => Move(-1));
         Side(Tr("▼  Down"), () => Move(1));
         Side(Tr("To the top"), () => Move(-mods.Count));
@@ -115,9 +120,19 @@ sealed class ModManager : Form
         };
         // drag a row onto another: it takes that row's place
         list.ItemDrag += (_, e) => { if (e.Item is ListViewItem it) list.DoDragDrop(it, DragDropEffects.Move); };
-        list.DragOver += (_, e) => e.Effect = e.Data?.GetDataPresent(typeof(ListViewItem)) == true ? DragDropEffects.Move : DragDropEffects.None;
+        // ...or drop downloaded mods (.zip / .7z / .rar / .ba2) from Explorer: installs them
+        list.DragOver += (_, e) => e.Effect =
+            e.Data?.GetDataPresent(typeof(ListViewItem)) == true ? DragDropEffects.Move
+            : e.Data?.GetData(DataFormats.FileDrop) is string[] fs && fs.Any(ModInstall.Supported) ? DragDropEffects.Copy
+            : DragDropEffects.None;
         list.DragDrop += (_, e) =>
         {
+            if (e.Data?.GetData(DataFormats.FileDrop) is string[] dropped)
+            {
+                var paths = dropped.Where(ModInstall.Supported).ToArray();
+                BeginInvoke(() => InstallFiles(paths)); // not inside Explorer's drag (it would hang until the dialogs close)
+                return;
+            }
             if (e.Data?.GetData(typeof(ListViewItem)) is not ListViewItem it || it.Tag is not Mod m) return;
             var at = list.PointToClient(new Point(e.X, e.Y));
             int to = list.GetItemAt(at.X, at.Y) is ListViewItem target ? target.Index : mods.Count - 1;
@@ -255,6 +270,63 @@ sealed class ModManager : Form
             log(Tr("Move failed: ") + ex.Message);
             MessageBox.Show(this, Tr("Move failed: ") + ex.Message, Text);
         }
+    }
+
+    void InstallPicked()
+    {
+        using var dlg = new OpenFileDialog { Title = Tr("Install mod"), Filter = ModInstall.Filter, Multiselect = true };
+        // the folder of the last pick; the first time Windows' Downloads
+        var start = settings.ModDownloads is string last && Directory.Exists(last) ? last
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        if (Directory.Exists(start)) dlg.InitialDirectory = start;
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        settings.ModDownloads = Path.GetDirectoryName(dlg.FileNames[0]);
+        settings.Save();
+        InstallFiles(dlg.FileNames);
+    }
+
+    /// <summary>Installs downloaded mods into Data and ticks them at the bottom of the list (they win over the others);
+    /// the ini is written on Save as usual.</summary>
+    void InstallFiles(string[] paths)
+    {
+        if (paths.Length == 0) return;
+        if (GameData.GameRunning) { MessageBox.Show(this, Tr("Close Fallout 76 first - the game locks its mods while it runs."), Text); return; }
+        Mod? last = null;
+        foreach (var p in paths)
+        {
+            List<string> names;
+            try
+            {
+                UseWaitCursor = true;
+                names = ModInstall.Install(this, game, p, log);
+            }
+            catch (Exception ex)
+            {
+                log(Tf("Installing {0} failed: {1}", Path.GetFileName(p), ex.Message));
+                MessageBox.Show(this, Tf("Installing {0} failed: {1}", Path.GetFileName(p), ex.Message), Text);
+                continue;
+            }
+            finally { UseWaitCursor = false; }
+            foreach (var n in names)
+            {
+                var old = mods.FindIndex(m => m.Name.Equals(n, StringComparison.OrdinalIgnoreCase));
+                if (old >= 0) mods.RemoveAt(old); // a replaced mod moves to the bottom too
+                var m = Info(n, true);
+                try
+                {
+                    var a = Ba2Archive.Open(Path.Combine(game.DataFolder, n));
+                    m.Files = a.Entries.Select(e => e.Name).ToHashSet();
+                    m.Own = GameData.IsOwn(a);
+                }
+                catch { m.Files = new(); }
+                mods.Add(m);
+                last = m;
+            }
+        }
+        if (last == null) return;
+        Saved = true;
+        Fill(last);
+        Changed();
     }
 
     Mod? Selected() => list.SelectedItems.Count > 0 ? list.SelectedItems[0].Tag as Mod : null;
