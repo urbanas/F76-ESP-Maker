@@ -385,7 +385,7 @@
 "Normal": "Normal",
 "Normal colour vision": "Vision normale des couleurs",
 "Normal rows": "Lignes normales",
-"Not in Data - untick to drop it from the list": "Pas dans Data - décochez pour le retirer de la liste",
+"File not found in Data folder - untick to drop it from the list": "Fichier introuvable dans le dossier Data – décoche pour le retirer de la liste",
 "Not selected - nothing of this lights up. Select a part (or the box at the top) to light it up.": "Non sélectionné - rien ne s'illumine. Choisissez une pièce (ou la case du haut) pour l'illuminer.",
 "Not selected - shown as it is in the game. Select it to see the look.": "Non sélectionné - affiché tel qu'il est dans le jeu. Sélectionnez-le pour voir le style.",
 "Note: ": "Remarque : ",
@@ -1054,5 +1054,10 @@
 "▲ higher up": "▲ plus haut",
 "Use the {0} look": "Utiliser le style de {0}",
 "Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "Vif ne fonctionne pas sur quelques plantes en jeu : elles reçoivent à la place une lueur de remplissage dans leur propre couleur.",
-"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0} : Vif ne fonctionne pas dessus en jeu, il reçoit donc une lueur de remplissage dans sa propre couleur"
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0} : Vif ne fonctionne pas dessus en jeu, il reçoit donc une lueur de remplissage dans sa propre couleur",
+"Move to Data": "Déplacer dans Data",
+"Found in Data\\{0} - press Move to Data": "Trouvé dans Data\\{0} – appuie sur « Déplacer dans Data »",
+"Moved {0} to Data (was in {1}).": "{0} déplacé dans Data (était dans {1}).",
+"Move failed: ": "Échec du déplacement : ",
+"The game only loads archives that sit directly in the Data folder.": "Le jeu ne charge que les archives placées directement dans le dossier Data."
 }

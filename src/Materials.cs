@@ -279,7 +279,9 @@ public static class Materials
         int d = tex.Length - oldLen;
         m[ZTest] = (byte)(throughWalls ? 0 : 1);
         m[ZWrite] = 0;
-        if (throughWalls) m[Soft + d] = 0; // soft-particle depth fade would erase it behind walls
+        // soft-particle depth fade off always: the copy lies on the item's own surface (depth gap 0), so the fade erased
+        // it completely when visible-through-walls was off (salt / pepper report, 2026-11-18), and behind walls when on
+        m[Soft + d] = 0;
         m[Lighting + d] = 0;
         if (!falloff) m[Falloff + d] = 0;
         if (alpha is float a) BitConverter.TryWriteBytes(m.AsSpan(Alpha), a);

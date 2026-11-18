@@ -144,8 +144,24 @@ static class Ui
     /// <summary>A dialog in the current theme: its controls when it loads (after they are all added), its title bar.</summary>
     public static T Dialog<T>(T f) where T : Form
     {
+        // dark: cloaked (hidden by Windows, still painting) until the first full paint, else its controls flash white
+        bool cloaked = false;
         f.Load += (_, _) => Apply(f);
-        f.HandleCreated += (_, _) => TitleBar(f);
+        f.HandleCreated += (_, _) =>
+        {
+            TitleBar(f);
+            if (!Dark) return;
+            int on = 1;
+            try { cloaked = DwmSetWindowAttribute(f.Handle, 13, ref on, 4) == 0; } catch { } // DWMWA_CLOAK
+        };
+        f.Shown += (_, _) =>
+        {
+            if (!cloaked) return;
+            cloaked = false;
+            f.Refresh();
+            int off = 0;
+            try { DwmSetWindowAttribute(f.Handle, 13, ref off, 4); } catch { }
+        };
         return f;
     }
 

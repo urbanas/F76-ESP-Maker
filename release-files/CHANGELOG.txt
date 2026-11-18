@@ -1,6 +1,14 @@
 ESP Maker - changes
 ===================
 
+2.5.4
+Fixed
+- A glow with "Visible through walls" turned off didn't show in game (found on Salt and Pepper),
+  and once it did, it flickered. Both fixed - rebuild your mod to get it.
+New
+- Mod Manager: an archive missing from the list but sitting in a subfolder of Data (where the game
+  never loads it, e.g. put there by a mod manager) is found - "Move to Data" puts it where it belongs.
+
 2.5.3
 Fixed
 - Opening the look pop-up showed an error message ("'10' cannot be greater than -10") on a

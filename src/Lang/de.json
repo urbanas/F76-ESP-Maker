@@ -385,7 +385,7 @@
 "Normal": "Normal",
 "Normal colour vision": "Normales Farbsehen",
 "Normal rows": "Normale Zeilen",
-"Not in Data - untick to drop it from the list": "Nicht in Data – abwählen, um ihn aus der Liste zu nehmen",
+"File not found in Data folder - untick to drop it from the list": "Datei nicht im Data-Ordner gefunden – abwählen, um sie aus der Liste zu nehmen",
 "Not selected - nothing of this lights up. Select a part (or the box at the top) to light it up.": "Nicht ausgewählt – nichts davon leuchtet. Wähle ein Teil (oder das Kästchen oben), um es leuchten zu lassen.",
 "Not selected - shown as it is in the game. Select it to see the look.": "Nicht ausgewählt – so gezeigt, wie es im Spiel ist. Wähle es aus, um den Look zu sehen.",
 "Note: ": "Hinweis: ",
@@ -1053,5 +1053,10 @@
 "▲ higher up": "▲ weiter oben",
 "Use the {0} look": "Den Look von {0} verwenden",
 "Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "Hell funktioniert im Spiel bei einigen Pflanzen nicht (Klingenkorn): Sie bekommen stattdessen ein Füllen-Leuchten in ihrer eigenen Farbe.",
-"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: Hell funktioniert darauf im Spiel nicht, daher bekommt es stattdessen ein Füllen-Leuchten in seiner eigenen Farbe"
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: Hell funktioniert darauf im Spiel nicht, daher bekommt es stattdessen ein Füllen-Leuchten in seiner eigenen Farbe",
+"Move to Data": "Nach Data verschieben",
+"Found in Data\\{0} - press Move to Data": "Gefunden in Data\\{0} – drücke „Nach Data verschieben“",
+"Moved {0} to Data (was in {1}).": "{0} nach Data verschoben (war in {1}).",
+"Move failed: ": "Verschieben fehlgeschlagen: ",
+"The game only loads archives that sit directly in the Data folder.": "Das Spiel lädt nur Archive, die direkt im Data-Ordner liegen."
 }

@@ -62,7 +62,7 @@ public static class Builder
                     // a "brightGlow" plant keeps its wind data in the vertex alpha: on the glow copy that made it see-through
                     // (Razorgrain showed nothing in game) - its copy goes without vertex colours
                     Func<GlowPart, GlowMat?>? glowFor = s.Glow ? part => GlowFor(part.Skinned && filled != null ? filled : s, part, game, template, materials, cutouts, files) is GlowMat gm
-                                                                         ? gm with { NoVertexColors = gm.NoVertexColors || BreaksBright(part.Material) } : null
+                                                                         ? gm with { NoVertexColors = gm.NoVertexColors || BreaksBright(part.Material), Lift = !s.GlowFx.Walls } : null
                                                       : s.ShowsOwnXray ? part => XrayFor(part, s.XrayScale, game, template, materials) : null;
                     var chosen = Icons.Get(s.Icon);
                     bool use3D = e.NoIcon || s.Icon3D; // creatures can only show the 3D shape

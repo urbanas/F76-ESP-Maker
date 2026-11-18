@@ -385,7 +385,7 @@
 "Normal": "Обычный",
 "Normal colour vision": "Обычное цветовосприятие",
 "Normal rows": "Обычные строки",
-"Not in Data - untick to drop it from the list": "Нет в Data — снимите отметку, чтобы убрать из списка",
+"File not found in Data folder - untick to drop it from the list": "Файл не найден в папке Data – снимите галочку, чтобы убрать его из списка",
 "Not selected - nothing of this lights up. Select a part (or the box at the top) to light it up.": "Не выбрано — ничего из этого не светится. Выберите часть (или флажок сверху), чтобы её подсветить.",
 "Not selected - shown as it is in the game. Select it to see the look.": "Не выбрано — показано как в игре. Выберите, чтобы увидеть оформление.",
 "Note: ": "Примечание: ",
@@ -1055,5 +1055,10 @@
 "▲ higher up": "▲ выше",
 "Use the {0} look": "Использовать оформление «{0}»",
 "Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "«Яркий» не работает в игре на некоторых растениях: вместо него они получают свечение-заливку своего цвета.",
-"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: «Яркий» в игре на нём не работает, поэтому вместо него свечение-заливка своего цвета"
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: «Яркий» в игре на нём не работает, поэтому вместо него свечение-заливка своего цвета",
+"Move to Data": "Переместить в Data",
+"Found in Data\\{0} - press Move to Data": "Найден в Data\\{0} – нажмите «Переместить в Data»",
+"Moved {0} to Data (was in {1}).": "{0} перемещён в Data (был в {1}).",
+"Move failed: ": "Не удалось переместить: ",
+"The game only loads archives that sit directly in the Data folder.": "Игра загружает только архивы, лежащие прямо в папке Data."
 }

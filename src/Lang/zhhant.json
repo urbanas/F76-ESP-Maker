@@ -385,7 +385,7 @@
 "Normal": "正常",
 "Normal colour vision": "正常色覺",
 "Normal rows": "普通行",
-"Not in Data - untick to drop it from the list": "不在 Data 中——取消勾選即可從清單中移除",
+"File not found in Data folder - untick to drop it from the list": "在 Data 資料夾中找不到檔案——取消勾選即可從清單中移除",
 "Not selected - nothing of this lights up. Select a part (or the box at the top) to light it up.": "未選擇——這裡沒有任何東西發光。選擇一個部件（或頂部的復選框）來點亮它。",
 "Not selected - shown as it is in the game. Select it to see the look.": "未選擇——按遊戲原樣顯示。選中它即可查看外觀。",
 "Note: ": "注意： ",
@@ -1053,5 +1053,10 @@
 "{0:0} cm": "{0:0} 公分",
 "Use the {0} look": "使用{0}的外觀",
 "Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "鮮亮在遊戲中對少數植物無效：它們會改為獲得自身顏色的填充發光。",
-"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: 鮮亮在遊戲中對其無效，因此改為自身顏色的填充發光"
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: 鮮亮在遊戲中對其無效，因此改為自身顏色的填充發光",
+"Move to Data": "移到 Data",
+"Found in Data\\{0} - press Move to Data": "在 Data\\{0} 中找到——請按「移到 Data」",
+"Moved {0} to Data (was in {1}).": "已將 {0} 移到 Data（原在 {1}）。",
+"Move failed: ": "移動失敗：",
+"The game only loads archives that sit directly in the Data folder.": "遊戲只載入直接位於 Data 資料夾中的封存檔。"
 }

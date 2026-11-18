@@ -175,7 +175,10 @@ public sealed class NifFile
 /// the game drew no outline at all on the mole miner body (in-game test 2026-11-16), filled glow was fine.</param>
 /// <param name="NoVertexColors">The copy drops its vertex colours anyway (a wind-sway plant keeps wind data in the vertex
 /// alpha, which made its glow see-through).</param>
-public sealed record GlowMat(string Material, int TestRef = -1, int AlphaMode = 0, bool Outline = false, bool NoVertexColors = false);
+/// <param name="Lift">Depth-tested glow (visible through walls off): the copy's vertices move out along their normals,
+/// or it sits at the item's own depth and flickers with it (salt / pepper, in-game test 2026-11-18).</param>
+public sealed record GlowMat(string Material, int TestRef = -1, int AlphaMode = 0, bool Outline = false, bool NoVertexColors = false,
+                             bool Lift = false);
 
 /// <summary>What the patcher knows about a part that should glow.</summary>
 /// <param name="Material">The part's material file path from the model ("" if none).</param>
@@ -243,6 +246,38 @@ public static class NifPatch
     /// <summary>The level designers' placement guides (EditorMarker: a whole resource collector on the wood piles, blocks
     /// on crop plants and dig mounds). Not in the game normally, but one showed on a patched wood pile.</summary>
     public static bool IsEditorOnly(string part) => part.StartsWith("EditorMarker", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Moves every vertex out along its normal (in place): a depth-tested glow copy lying exactly on the item
+    /// z-fights with it. 0.6 % of the shape's size, at least 0.1 units (1.4 mm): enough at distance, invisible up close.
+    /// Positions are 3 halfs or 3 floats at the vertex start, normals 3 unsigned bytes at nibble 4 (flag 0x8).</summary>
+    static void LiftAlongNormals(byte[] b, int r)
+    {
+        int vdAt = r + 12;
+        if (b.Length < vdAt + 18) return;
+        ulong vd = BitConverter.ToUInt64(b, vdAt);
+        int attrs = (int)((vd >> 44) & 0xFFF);
+        int size = (int)(vd & 0xF) * 4, nOff = (int)((vd >> 16) & 0xF) * 4;
+        if ((attrs & 0x1) == 0 || (attrs & 0x8) == 0 || size == 0 || nOff == 0) return;
+        bool full = (attrs & 0x400) != 0;
+        int verts = BitConverter.ToUInt16(b, vdAt + 12), data = vdAt + 18;
+        if (data + verts * size > b.Length) return;
+        float Get(int p, int k) => full ? BitConverter.ToSingle(b, p + 4 * k) : (float)BitConverter.UInt16BitsToHalf(BitConverter.ToUInt16(b, p + 2 * k));
+        void Set(int p, int k, float v)
+        {
+            if (full) BitConverter.TryWriteBytes(b.AsSpan(p + 4 * k), v);
+            else BitConverter.TryWriteBytes(b.AsSpan(p + 2 * k), BitConverter.HalfToUInt16Bits((Half)v));
+        }
+        float lo = float.MaxValue, hi = float.MinValue;
+        for (int v = 0; v < verts; v++)
+            for (int k = 0; k < 3; k++) { float x = Get(data + v * size, k); lo = Math.Min(lo, x); hi = Math.Max(hi, x); }
+        float dist = Math.Max(0.1f, (hi - lo) * 0.006f);
+        for (int v = 0; v < verts; v++)
+        {
+            int p = data + v * size;
+            for (int k = 0; k < 3; k++)
+                Set(p, k, Get(p, k) + (b[p + nOff + k] / 255f * 2 - 1) * dist);
+        }
+    }
 
     /// <summary>A shape's data without its vertex colours (4 bytes per vertex): vertex description at refs + 12
     /// (size / offsets in 4-byte nibbles, flags from bit 44, colours = 0x20), then triangles, vertices, data size.
@@ -413,6 +448,7 @@ public static class NifPatch
                 Put(copy, r + 4, glowShader);
                 Put(copy, r + 8, glowMat.AlphaMode switch { 1 => -1, 2 => alphaProp, _ => GlowAlpha(glowMat.TestRef) });
                 if (glowMat.Outline || glowMat.NoVertexColors) copy = WithoutVertexColors(copy, r);
+                if (glowMat.Lift && skin < 0) LiftAlongNormals(copy, r);
                 int shape = f.Add(f.TypeOf(s), copy);
                 if (!glowAdded.TryGetValue(attachTo, out var list)) glowAdded[attachTo] = list = new();
                 list.Add(shape);

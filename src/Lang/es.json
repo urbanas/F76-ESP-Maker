@@ -385,7 +385,7 @@
 "Normal": "Normal",
 "Normal colour vision": "Visión normal del color",
 "Normal rows": "Filas normales",
-"Not in Data - untick to drop it from the list": "No está en Data - desmárcalo para quitarlo de la lista",
+"File not found in Data folder - untick to drop it from the list": "Archivo no encontrado en la carpeta Data: desmárcalo para quitarlo de la lista",
 "Not selected - nothing of this lights up. Select a part (or the box at the top) to light it up.": "No seleccionado - nada de esto se ilumina. Elige una pieza (o la casilla de arriba) para iluminarla.",
 "Not selected - shown as it is in the game. Select it to see the look.": "No seleccionado - se muestra como en el juego. Selecciónalo para ver el estilo.",
 "Note: ": "Nota: ",
@@ -1052,5 +1052,10 @@
 "▲ higher up": "▲ más arriba",
 "Use the {0} look": "Usar el estilo de {0}",
 "Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "Vivo no funciona en algunas plantas en el juego: reciben en su lugar un brillo de relleno en su propio color.",
-"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: Vivo no funciona en el juego, así que recibe un brillo de relleno en su propio color"
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: Vivo no funciona en el juego, así que recibe un brillo de relleno en su propio color",
+"Move to Data": "Mover a Data",
+"Found in Data\\{0} - press Move to Data": "Encontrado en Data\\{0}: pulsa Mover a Data",
+"Moved {0} to Data (was in {1}).": "{0} movido a Data (estaba en {1}).",
+"Move failed: ": "Error al mover: ",
+"The game only loads archives that sit directly in the Data folder.": "El juego solo carga los archivos que están directamente en la carpeta Data."
 }

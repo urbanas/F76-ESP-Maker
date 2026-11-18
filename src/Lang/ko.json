@@ -385,7 +385,7 @@
 "Normal": "정상",
 "Normal colour vision": "정상 색각",
 "Normal rows": "보통 행",
-"Not in Data - untick to drop it from the list": "Data에 없음 - 체크 해제하면 목록에서 빠짐",
+"File not found in Data folder - untick to drop it from the list": "Data 폴더에서 파일을 찾을 수 없습니다 - 체크를 해제하면 목록에서 빠집니다",
 "Not selected - nothing of this lights up. Select a part (or the box at the top) to light it up.": "선택 안 됨 - 아무것도 빛나지 않습니다. 부품 (또는 위의 상자)을 골라 빛나게 하세요.",
 "Not selected - shown as it is in the game. Select it to see the look.": "선택 안 됨 - 게임 그대로 표시합니다. 선택하면 모양이 보입니다.",
 "Note: ": "참고: ",
@@ -1052,5 +1052,10 @@
 "▲ higher up": "▲ 위로",
 "Use the {0} look": "{0} 모양 사용",
 "Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "일부 식물에는 게임에서 선명이 적용되지 않아, 대신 고유 색의 채우기 발광이 적용됩니다.",
-"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: 게임에서 선명이 적용되지 않아 대신 고유 색의 채우기 발광이 적용됩니다"
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: 게임에서 선명이 적용되지 않아 대신 고유 색의 채우기 발광이 적용됩니다",
+"Move to Data": "Data로 이동",
+"Found in Data\\{0} - press Move to Data": "Data\\{0}에서 찾음 - 'Data로 이동'을 누르세요",
+"Moved {0} to Data (was in {1}).": "{0}을(를) Data로 이동했습니다({1}에 있었음).",
+"Move failed: ": "이동 실패: ",
+"The game only loads archives that sit directly in the Data folder.": "게임은 Data 폴더 바로 안에 있는 아카이브만 불러옵니다."
 }

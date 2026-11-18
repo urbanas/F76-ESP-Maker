@@ -385,7 +385,7 @@
 "Normal": "Normalny",
 "Normal colour vision": "Normalne widzenie barw",
 "Normal rows": "Normalne wiersze",
-"Not in Data - untick to drop it from the list": "Brak w Data – odznacz, aby usunąć z listy",
+"File not found in Data folder - untick to drop it from the list": "Nie znaleziono pliku w folderze Data – odznacz, aby usunąć go z listy",
 "Not selected - nothing of this lights up. Select a part (or the box at the top) to light it up.": "Nie wybrano – nic z tego nie świeci. Wybierz część (lub pole u góry), aby ją podświetlić.",
 "Not selected - shown as it is in the game. Select it to see the look.": "Nie wybrano – pokazane tak jak w grze. Wybierz, aby zobaczyć wygląd.",
 "Note: ": "Uwaga: ",
@@ -1052,5 +1052,10 @@
 "▲ higher up": "▲ wyżej",
 "Use the {0} look": "Użyj wyglądu: {0}",
 "Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.": "Jaskrawy nie działa w grze na kilku roślinach: zamiast tego dostają poświatę wypełnienia we własnym kolorze.",
-"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: Jaskrawy nie działa na tym w grze, więc dostaje poświatę wypełnienia we własnym kolorze"
+"  {0}: Bright doesn't work on it in game, so it gets a Fill glow in its own colour instead": "  {0}: Jaskrawy nie działa na tym w grze, więc dostaje poświatę wypełnienia we własnym kolorze",
+"Move to Data": "Przenieś do Data",
+"Found in Data\\{0} - press Move to Data": "Znaleziono w Data\\{0} – naciśnij Przenieś do Data",
+"Moved {0} to Data (was in {1}).": "Przeniesiono {0} do Data (był w {1}).",
+"Move failed: ": "Przenoszenie nie powiodło się: ",
+"The game only loads archives that sit directly in the Data folder.": "Gra wczytuje tylko archiwa leżące bezpośrednio w folderze Data."
 }

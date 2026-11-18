@@ -12,6 +12,8 @@ sealed class ModManager : Form
     {
         public string Name = "";
         public bool On, Missing, Link, Own;
+        /// <summary>Missing from Data but a file with this name sits in a subfolder of Data (the game doesn't load it there).</summary>
+        public string? FoundAt;
         public long Size;
         public DateTime Changed;
         public HashSet<string>? Files;
@@ -23,11 +25,12 @@ sealed class ModManager : Form
     readonly ListView list = new()
     {
         Dock = DockStyle.Fill, View = View.Details, CheckBoxes = true, FullRowSelect = true, HideSelection = false,
-        MultiSelect = false, AllowDrop = true, HeaderStyle = ColumnHeaderStyle.Nonclickable,
+        MultiSelect = false, AllowDrop = true, HeaderStyle = ColumnHeaderStyle.Nonclickable, ShowItemToolTips = true,
     };
     readonly Label note = new() { Dock = DockStyle.Fill, ForeColor = Color.DimGray, TextAlign = ContentAlignment.MiddleLeft };
     readonly Button save = new() { Text = Tr("Save"), AutoSize = true, Height = 34, Enabled = false };
-    bool loading, dirty;
+    Button moveToData = null!;
+    bool loading, dirty, shown;
     /// <summary>The list as the ini has it (what "nothing changed" means).</summary>
     List<string> original = new();
     /// <summary>The list was saved (the main window refreshes its install state).</summary>
@@ -71,6 +74,9 @@ sealed class ModManager : Form
         Side(Tr("To the bottom"), () => Move(mods.Count));
         Side("Open Data folder", () => Process.Start("explorer.exe", game.DataFolder));
         Side("Open ini folder", () => Process.Start("explorer.exe", Path.GetDirectoryName(game.IniPath)!));
+        moveToData = Side(Tr("Move to Data"), MoveToData);
+        moveToData.Enabled = false;
+        list.SelectedIndexChanged += (_, _) => moveToData.Enabled = Selected()?.FoundAt != null;
         side.Controls.Add(new Label { Width = 130, Height = 18 });
         Side(Tr("Delete mod..."), Delete).ForeColor = Color.Firebrick;
 
@@ -95,7 +101,8 @@ sealed class ModManager : Form
 
         list.ItemChecked += (_, e) =>
         {
-            if (loading || e.Item.Tag is not Mod m || m.On == e.Item.Checked) return; // the list also raises this when it first shows its rows
+            // the list also raises this for every row while it is first created (each queued a whole refill: ~1 s at opening)
+            if (loading || !shown || e.Item.Tag is not Mod m || m.On == e.Item.Checked) return;
             m.On = e.Item.Checked;
             Changed();
             BeginInvoke(() => Fill(m)); // not while the list is in its own event
@@ -128,7 +135,7 @@ sealed class ModManager : Form
             if (r == DialogResult.Cancel) e.Cancel = true;
             else if (r == DialogResult.Yes && !Save()) e.Cancel = true;
         };
-        Shown += async (_, _) => { await Task.Run(ReadFiles); Fill(Selected()); };
+        Shown += async (_, _) => { shown = true; await Task.Run(ReadFiles); Fill(Selected()); };
 
         LoadMods();
     }
@@ -161,6 +168,7 @@ sealed class ModManager : Form
     /// <summary>Background: each archive's file list (for "Shares files with") and whether ESP Maker built it.</summary>
     void ReadFiles()
     {
+        FindInSubfolders();
         foreach (var m in mods.ToList())
         {
             if (m.Missing) continue;
@@ -171,6 +179,81 @@ sealed class ModManager : Form
                 m.Own = GameData.IsOwn(a);
             }
             catch { m.Files = new(); }
+        }
+        // which mods share files, once, here off the window's thread (comparing every pair's lists took seconds)
+        var read = mods.Where(m => m.Files != null && !m.Missing).ToList();
+        var owners = new Dictionary<string, List<Mod>>();
+        foreach (var m in read)
+            foreach (var f in m.Files!)
+                if (owners.TryGetValue(f, out var l)) l.Add(m); else owners[f] = new List<Mod> { m };
+        var counts = new Dictionary<(Mod, Mod), int>();
+        foreach (var l in owners.Values)
+            if (l.Count > 1)
+                foreach (var a in l)
+                    foreach (var b in l)
+                        if (a != b) counts[(a, b)] = counts.GetValueOrDefault((a, b)) + 1;
+        shared = new(counts, read.ToHashSet()); // one swap: the window may be showing the list meanwhile
+    }
+
+    sealed record Overlaps(Dictionary<(Mod, Mod), int> Counts, HashSet<Mod> Indexed);
+    Overlaps shared = new(new(), new());
+
+    /// <summary>Files two mods both have (counted in ReadFiles; a mod read later is compared here, once).</summary>
+    int Same(Mod a, Mod b)
+    {
+        var (counts, indexed) = shared;
+        if (counts.TryGetValue((a, b), out var n)) return n;
+        if (indexed.Contains(a) && indexed.Contains(b)) return 0;
+        n = a.Files!.Count(b.Files!.Contains);
+        counts[(a, b)] = n;
+        return n;
+    }
+
+    /// <summary>Missing mods: look for a file with the same name anywhere under Data (e.g. a mod manager
+    /// deployed it into Data\SomeMod\, where the game never loads it).</summary>
+    void FindInSubfolders()
+    {
+        var missing = mods.Where(m => m.Missing).ToList();
+        if (missing.Count == 0) return;
+        try
+        {
+            var opt = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, MatchCasing = MatchCasing.CaseInsensitive };
+            var found = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in Directory.EnumerateFiles(game.DataFolder, "*.ba2", opt))
+                if (!string.Equals(Path.GetDirectoryName(f), Path.TrimEndingDirectorySeparator(game.DataFolder), StringComparison.OrdinalIgnoreCase))
+                    found.TryAdd(Path.GetFileName(f), f);
+            foreach (var m in missing)
+                if (found.TryGetValue(m.Name, out var at)) m.FoundAt = at;
+        }
+        catch { }
+    }
+
+    /// <summary>Moves the picked mod's file from its subfolder straight into Data, where the game loads it.</summary>
+    void MoveToData()
+    {
+        if (Selected() is not Mod m || m.FoundAt == null) return;
+        if (GameData.GameRunning) { MessageBox.Show(this, Tr("Close Fallout 76 first - the game locks its mods while it runs."), Text); return; }
+        try
+        {
+            var from = m.FoundAt;
+            File.Move(from, Path.Combine(game.DataFolder, m.Name)); // a Vortex link moves as a link
+            log(Tf("Moved {0} to Data (was in {1}).", m.Name, Path.GetRelativePath(game.DataFolder, Path.GetDirectoryName(from)!)));
+            var fresh = Info(m.Name, m.On);
+            try
+            {
+                var a = Ba2Archive.Open(Path.Combine(game.DataFolder, m.Name));
+                fresh.Files = a.Entries.Select(e => e.Name).ToHashSet();
+                fresh.Own = GameData.IsOwn(a);
+            }
+            catch { fresh.Files = new(); }
+            mods[mods.IndexOf(m)] = fresh;
+            Saved = true;
+            Fill(fresh);
+        }
+        catch (Exception ex)
+        {
+            log(Tr("Move failed: ") + ex.Message);
+            MessageBox.Show(this, Tr("Move failed: ") + ex.Message, Text);
         }
     }
 
@@ -185,14 +268,23 @@ sealed class ModManager : Form
         foreach (var m in mods)
         {
             string what = m.Name + (m.Own ? Tr("   (ESP Maker)") : "") + (m.Link ? Tr("   (Vortex)") : "");
+            string info = m.Missing
+                ? m.FoundAt != null
+                    ? Tf("Found in Data\\{0} - press Move to Data", Path.GetRelativePath(game.DataFolder, Path.GetDirectoryName(m.FoundAt)!))
+                    : Tr("File not found in Data folder - untick to drop it from the list")
+                : Shares(m);
             var it = new ListViewItem(new[]
             {
                 m.On && !m.Missing ? (++n).ToString() : "",
                 what,
                 m.Missing ? "" : Kb(m.Size),
                 m.Missing ? "" : m.Changed.ToString("yyyy-MM-dd"),
-                m.Missing ? Tr("Not in Data - untick to drop it from the list") : Shares(m),
+                info,
             }) { Checked = m.On, Tag = m };
+            // the whole row on hover: long names and notes don't fit their columns
+            it.ToolTipText = m.FoundAt != null
+                ? what + "\n" + info + "\n" + Tr("The game only loads archives that sit directly in the Data folder.")
+                : what + (info is "" or "..." ? "" : "\n" + info);
             if (m.Missing) it.ForeColor = Ui.ToTheme(Color.Firebrick);
             else if (!m.On) it.ForeColor = Ui.ToTheme(Color.Gray);
             list.Items.Add(it);
@@ -200,6 +292,7 @@ sealed class ModManager : Form
         }
         list.EndUpdate();
         if (select != null && list.SelectedItems.Count > 0) list.SelectedItems[0].EnsureVisible();
+        moveToData.Enabled = Selected()?.FoundAt != null;
         loading = false;
         ShowNote();
     }
@@ -217,7 +310,7 @@ sealed class ModManager : Form
         foreach (var o in mods)
         {
             if (o == m || o.Files == null || o.Missing) continue;
-            int same = m.Files.Count(o.Files.Contains);
+            int same = Same(m, o);
             if (same == 0) continue;
             var t = $"{o.Name} ({same})";
             if (!m.On || !o.On) off.Add(t);
