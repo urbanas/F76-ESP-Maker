@@ -12,6 +12,9 @@ sealed class ModManager : Form
     {
         public string Name = "";
         public bool On, Missing, Link, Own;
+        /// <summary>A Vortex mod that is off in Vortex (so not in Data): ticking turns it on in Vortex, whose next deploy
+        /// puts it in the game. Also Missing (no file to read).</summary>
+        public bool VortexOff;
         /// <summary>Missing from Data but a file with this name sits in a subfolder of Data (the game doesn't load it there).</summary>
         public string? FoundAt;
         public long Size;
@@ -31,6 +34,9 @@ sealed class ModManager : Form
     readonly Button save = new() { Text = Tr("Save"), AutoSize = true, Height = 34, Enabled = false };
     Button moveToData = null!;
     bool loading, dirty, shown;
+    /// <summary>Vortex's mods (read while it was closed): ticks / deletes of Vortex mods are done in Vortex too,
+    /// or its next deploy would undo them.</summary>
+    (string Profile, List<Vortex.Mod> Mods)? vortex;
     /// <summary>The list as the ini has it (what "nothing changed" means).</summary>
     List<string> original = new();
     /// <summary>The list was saved (the main window refreshes its install state).</summary>
@@ -81,7 +87,13 @@ sealed class ModManager : Form
         Side("Open ini folder", () => Process.Start("explorer.exe", Path.GetDirectoryName(game.IniPath)!));
         moveToData = Side(Tr("Move to Data"), MoveToData);
         moveToData.Enabled = false;
-        list.SelectedIndexChanged += (_, _) => moveToData.Enabled = Selected()?.FoundAt != null;
+        Button? toVortex = Vortex.ManagesGame ? Side(Tr("Hand to Vortex"), HandToVortex) : null;
+        if (toVortex != null) toVortex.Enabled = false;
+        list.SelectedIndexChanged += (_, _) =>
+        {
+            moveToData.Enabled = Selected()?.FoundAt != null;
+            if (toVortex != null) toVortex.Enabled = Selected() is { Missing: false, Link: false };
+        };
         side.Controls.Add(new Label { Width = 130, Height = 18 });
         Side(Tr("Delete mod..."), Delete).ForeColor = Color.Firebrick;
 
@@ -150,7 +162,23 @@ sealed class ModManager : Form
             if (r == DialogResult.Cancel) e.Cancel = true;
             else if (r == DialogResult.Yes && !Save()) e.Cancel = true;
         };
-        Shown += async (_, _) => { shown = true; await Task.Run(ReadFiles); Fill(Selected()); };
+        Shown += async (_, _) =>
+        {
+            shown = true;
+            var vortexRead = Vortex.ManagesGame && !Vortex.Running ? Task.Run(Vortex.ReadMods) : null;
+            await Task.Run(ReadFiles);
+            Fill(Selected());
+            if (vortexRead == null || (vortex = await vortexRead) is not { } v || IsDisposed) return;
+            // Vortex mods that are off: listed at the bottom so they can be ticked on from here
+            foreach (var vm in v.Mods.Where(x => !x.Enabled))
+                foreach (var a in vm.Archives)
+                {
+                    var row = mods.FirstOrDefault(o => o.Name.Equals(a, StringComparison.OrdinalIgnoreCase));
+                    if (row == null) mods.Add(new Mod { Name = a, Missing = true, VortexOff = true });
+                    else if (row.Missing) row.VortexOff = true;
+                }
+            Fill(Selected());
+        };
 
         LoadMods();
     }
@@ -291,6 +319,25 @@ sealed class ModManager : Form
     {
         if (paths.Length == 0) return;
         if (GameData.GameRunning) { MessageBox.Show(this, Tr("Close Fallout 76 first - the game locks its mods while it runs."), Text); return; }
+        if (Vortex.ManagesGame)
+        {
+            var r = MessageBox.Show(this, Tr("Vortex manages your mods, and when it deploys it removes mods copied in by hand from the game's mod list.\n\nInstall through Vortex?\n\nYes = Vortex installs it (recommended)\nNo = ESP Maker copies it into Data"),
+                Tr("Install mod"), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question, settings.UseVortex ? MessageBoxDefaultButton.Button1 : MessageBoxDefaultButton.Button2);
+            if (r == DialogResult.Cancel) return;
+            if ((r == DialogResult.Yes) != settings.UseVortex) { settings.UseVortex = r == DialogResult.Yes; settings.Save(); }
+            if (r == DialogResult.Yes)
+            {
+                UseWaitCursor = true;
+                bool ready = Vortex.ReadyForInstall(this, log); // Vortex on Fallout 76, not another game
+                UseWaitCursor = false;
+                if (!ready) return;
+                foreach (var p in paths)
+                    try { Vortex.Install(ModInstall.IsBa2(p) ? Vortex.Pack(new[] { p }, Path.GetFileNameWithoutExtension(p)) : p, log); }
+                    catch (Exception ex) { log(Tf("Installing {0} failed: {1}", Path.GetFileName(p), ex.Message)); MessageBox.Show(this, Tf("Installing {0} failed: {1}", Path.GetFileName(p), ex.Message), Text); }
+                MessageBox.Show(this, Tr("Finish the install in Vortex. Vortex puts the mod in the game and keeps it in the mod list."), Tr("Install mod"));
+                return;
+            }
+        }
         Mod? last = null;
         foreach (var p in paths)
         {
@@ -339,8 +386,10 @@ sealed class ModManager : Form
         int n = 0;
         foreach (var m in mods)
         {
-            string what = m.Name + (m.Own ? Tr("   (ESP Maker)") : "") + (m.Link ? Tr("   (Vortex)") : "");
-            string info = m.Missing
+            string what = m.Name + (m.Own ? Tr("   (ESP Maker)") : "") + (m.Link || m.VortexOff ? Tr("   (Vortex)") : "");
+            string info = m.VortexOff
+                ? m.On ? Tr("Turned on in Vortex on Save - Vortex adds it to the game when it deploys") : Tr("Off in Vortex - tick to turn it on")
+                : m.Missing
                 ? m.FoundAt != null
                     ? Tf("Found in Data\\{0} - press Move to Data", Path.GetRelativePath(game.DataFolder, Path.GetDirectoryName(m.FoundAt)!))
                     : Tr("File not found in Data folder - untick to drop it from the list")
@@ -357,7 +406,8 @@ sealed class ModManager : Form
             it.ToolTipText = m.FoundAt != null
                 ? what + "\n" + info + "\n" + Tr("The game only loads archives that sit directly in the Data folder.")
                 : what + (info is "" or "..." ? "" : "\n" + info);
-            if (m.Missing) it.ForeColor = Ui.ToTheme(Color.Firebrick);
+            if (m.VortexOff) it.ForeColor = Ui.ToTheme(m.On ? Color.SteelBlue : Color.Gray);
+            else if (m.Missing) it.ForeColor = Ui.ToTheme(Color.Firebrick);
             else if (!m.On) it.ForeColor = Ui.ToTheme(Color.Gray);
             list.Items.Add(it);
             if (m == select) { it.Selected = true; it.Focused = true; }
@@ -399,7 +449,7 @@ sealed class ModManager : Form
     {
         var lines = new List<string>();
         if (GameData.GameRunning) lines.Add("Fallout 76 is running: a saved list is used the next time the game starts.");
-        if (mods.Any(m => m.Link)) lines.Add("Vortex manages some of these mods - Vortex may write its own order back when it deploys.");
+        if (mods.Any(m => m.Link)) lines.Add(Tr("Vortex manages some of these mods - when it deploys, it keeps only its own mods in the list. Use Hand to Vortex for the others."));
         note.Text = string.Join("\n", lines);
         note.ForeColor = Ui.ToTheme(GameData.GameRunning ? Color.Firebrick : Color.DimGray);
     }
@@ -418,25 +468,40 @@ sealed class ModManager : Form
 
     void Changed()
     {
-        dirty = !Current().SequenceEqual(original, StringComparer.OrdinalIgnoreCase);
+        dirty = !Current().SequenceEqual(original, StringComparer.OrdinalIgnoreCase) || mods.Any(m => m.VortexOff && m.On);
         save.Enabled = dirty;
     }
 
-    /// <summary>The ticked mods in order: what Save writes to the ini.</summary>
-    List<string> Current() => mods.Where(m => m.On).Select(m => m.Name).ToList();
+    /// <summary>The ticked mods in order: what Save writes to the ini. Vortex mods being turned on aren't in Data yet
+    /// (Vortex's deploy adds them to the list itself).</summary>
+    List<string> Current() => mods.Where(m => m.On && !(m.VortexOff && !original.Contains(m.Name, StringComparer.OrdinalIgnoreCase))).Select(m => m.Name).ToList();
 
     /// <summary>Deletes the picked mod's file from Data for good and takes it out of the ini (after asking).</summary>
     void Delete()
     {
         if (Selected() is not Mod m) { MessageBox.Show(this, Tr("Pick a mod in the list first."), Text); return; }
+        if (m.VortexOff) { MessageBox.Show(this, Tf("{0} is already off in Vortex and not in the game. To delete it for good, remove it in Vortex.", m.Name), Tr("Delete mod")); return; }
         if (!m.Missing && GameData.GameRunning) { MessageBox.Show(this, Tr("Close Fallout 76 first - the game locks its mods while it runs."), Text); return; }
         var ask = m.Missing
             ? Tf("{0} is not in Data. Take it out of {1}?", m.Name, game.IniName)
             : Tf("Delete {0} ({1}) from the Data folder for good and take it out of {2}?\n\nThis can't be undone.", m.Name, Kb(m.Size), game.IniName);
-        if (m.Link) ask += Tr("\n\nThis is a Vortex mod: deleting removes only Vortex's link, and Vortex puts it back when it deploys. To get rid of it, remove it in Vortex instead.");
+        Vortex.Mod? owner = null;
+        if (m.Link)
+        {
+            if (Vortex.Running) { MessageBox.Show(this, Tr("This is a Vortex mod. Close Vortex first - ESP Maker then turns it off in Vortex too (otherwise Vortex puts it back when it deploys)."), Tr("Delete mod")); return; }
+            owner = vortex is { } v ? Vortex.Owner(v.Mods, m.Name) : null;
+            ask = owner != null
+                ? Tf("{0} is a Vortex mod. Turn it off in Vortex and take it out of the game?\n\nIt stays in Vortex's mod list (off) - remove it there to delete it for good.", m.Name)
+                : ask + Tr("\n\nThis is a Vortex mod: deleting removes only Vortex's link, and Vortex puts it back when it deploys. To get rid of it, remove it in Vortex instead.");
+        }
         if (MessageBox.Show(this, ask, Tr("Delete mod"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
         try
         {
+            if (owner != null && !Vortex.SetEnabled(vortex!.Value.Profile, new[] { (owner.Id, false) }, log))
+            {
+                MessageBox.Show(this, Tr("Vortex didn't take the change - nothing was deleted. Turn the mod off in Vortex instead."), Tr("Delete mod"));
+                return;
+            }
             game.Uninstall(new[] { m.Name }, log);
             int at = mods.IndexOf(m);
             mods.Remove(m);
@@ -452,9 +517,64 @@ sealed class ModManager : Form
         }
     }
 
+    /// <summary>A mod copied in by hand becomes a Vortex mod: packed (with its " - Textures" archive), taken out of
+    /// Data + ini, and installed by Vortex - so Vortex's deploy no longer drops it from the ini.</summary>
+    void HandToVortex()
+    {
+        if (Selected() is not { Missing: false, Link: false } m) return;
+        if (GameData.GameRunning) { MessageBox.Show(this, Tr("Close Fallout 76 first - the game locks its mods while it runs."), Text); return; }
+        var names = new List<string> { m.Name };
+        var tex = Path.GetFileNameWithoutExtension(m.Name) + " - Textures.ba2";
+        if (mods.FirstOrDefault(o => o.Name.Equals(tex, StringComparison.OrdinalIgnoreCase)) is { Missing: false, Link: false } t) names.Add(t.Name);
+        if (MessageBox.Show(this, Tf("Hand {0} to Vortex?\n\nESP Maker packs it, takes it out of Data and starts Vortex's install. Confirm it in Vortex - Vortex then puts it back in the game and keeps it in the mod list (also after deploys).", string.Join(" + ", names)),
+                Tr("Hand to Vortex"), MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        UseWaitCursor = true;
+        bool ready = Vortex.ReadyForInstall(this, log); // Vortex on Fallout 76, not another game
+        UseWaitCursor = false;
+        if (!ready) return;
+        try
+        {
+            var zip = Vortex.Pack(names.Select(n => Path.Combine(game.DataFolder, n)), Path.GetFileNameWithoutExtension(m.Name));
+            game.Uninstall(names, log);
+            mods.RemoveAll(o => names.Contains(o.Name, StringComparer.OrdinalIgnoreCase));
+            original.RemoveAll(n => names.Contains(n, StringComparer.OrdinalIgnoreCase));
+            Saved = true;
+            Fill(null);
+            Changed();
+            Vortex.Install(zip, log);
+        }
+        catch (Exception ex)
+        {
+            log(Tr("Hand to Vortex failed: ") + ex.Message);
+            MessageBox.Show(this, Tr("Hand to Vortex failed: ") + ex.Message, Text);
+        }
+    }
+
     bool Save()
     {
         var names = Current();
+        // Vortex mods ticked on / off: the same in Vortex, or its next deploy undoes it
+        var flipped = mods.Where(m => (m.Link && m.On != original.Contains(m.Name, StringComparer.OrdinalIgnoreCase)) || (m.VortexOff && m.On)).ToList();
+        if (flipped.Count > 0)
+        {
+            if (Vortex.Running)
+            {
+                var r = MessageBox.Show(this, Tr("Vortex is open. You turned Vortex mods on or off - Vortex undoes that when it deploys unless ESP Maker changes them in Vortex too.\n\nClose Vortex, then press Retry. Ignore saves anyway."),
+                    Text, MessageBoxButtons.AbortRetryIgnore, MessageBoxIcon.Warning);
+                if (r == DialogResult.Abort) return false;
+                if (r == DialogResult.Retry) return Save();
+            }
+            else
+            {
+                vortex ??= Vortex.ReadMods();
+                if (vortex is { } v)
+                {
+                    var changes = flipped.Select(m => (Owner: Vortex.Owner(v.Mods, m.Name), m.On)).Where(c => c.Owner != null && c.Owner.Enabled != c.On)
+                        .Select(c => (c.Owner!.Id, c.On)).Distinct().ToList();
+                    if (changes.Count > 0) { UseWaitCursor = true; Vortex.SetEnabled(v.Profile, changes, log); UseWaitCursor = false; }
+                }
+            }
+        }
         try
         {
             game.WriteArchiveList(names, log);

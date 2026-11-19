@@ -62,6 +62,9 @@ Options -> Mod manager (or the Mods button at the bottom of the left bar): every
 folder - tick to turn it on or off, drag to change the load order (lower wins), see which mods
 change the same files, delete a mod. Your ini is backed up before saving. "Install mod..." (or drag
 a downloaded .zip / .7z / .rar / .ba2 onto the list) puts a downloaded mod into Data for you.
+Vortex users: Vortex removes mods copied in by hand from the game's mod list when it deploys, so
+"Build & save" and "Install mod..." hand your mod to Vortex instead (confirm the install in
+Vortex). "Hand to Vortex" in the Mod manager does the same for a mod already in Data.
 Edit -> "Colour by priority..." colours your picks by how much they matter (white rare, gold worth
 a detour, green useful, red junk).
 

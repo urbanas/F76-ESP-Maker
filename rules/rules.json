@@ -1,10 +1,11 @@
 {
   "schema": 1,
-  "version": 7,
+  "version": 8,
   "minApp": "2.5",
-  "latestApp": "2.5.5",
+  "latestApp": "2.6",
   "updated": "2026-11-19",
   "changes": [
+    { "version": 8, "text": [ "ESP Maker 2.6 is out: Vortex support - your mod goes through Vortex, so Vortex no longer drops it from the game's mod list" ] },
     { "version": 7, "text": [ "ESP Maker 2.5.5 is out: new categories Nuked flora (Stable Flux) and Flux plants outside blast zones, and the Mod Manager installs mods from downloaded archives" ] },
     { "version": 5, "text": [ "ESP Maker 2.5.2 is out: the Razorgrain glow (Bright) now shows in game", "Loot spots: the Lucky Strike dig sites have their own row now instead of being part of Treasure map mounds - it selects together with EVENTS > Lucky Strike > Dig sites" ] },
     { "version": 4, "text": [ "Treasure map mounds now also show the Lucky Strike dig sites (Excavator's, Prospector's and Miner's maps)" ] },

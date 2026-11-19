@@ -36,6 +36,18 @@ public static class Builder
                        // the paper bag: its white junk look won and the loot bags never showed their own - user, 2026-11-10)
                        .ThenBy(x => CatchAll(x.Cat) ? 1 : 0)
                        .ThenBy(x => x.Entry.JunkCopy || x.Entry.LinkParts && x.Cat.Name == Enemies.Bosses ? 1 : 0).ToList();
+        // models a Bright look keeps without X-ray: another Bright look on the same model drops its X-ray too. The Plants
+        // preset gives the twins (Nuked flora, Aid & food) their own copy of Bright; those go first (own look), so turning
+        // X-ray off in Plants did nothing (Nexus report "bright always comes with xray", 2026-11-19)
+        var brightNoXray = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (cat, e) in work)
+        {
+            var st = project.StyleOf(e, cat);
+            var partLooks = project.PartLooks.GetValueOrDefault(e.Id);
+            foreach (var model in project.ModelsOf(e))
+                if ((partLooks?.GetValueOrDefault(model) ?? st) is { Brighten: true, Glow: false } lk && !lk.GlowFx.Walls)
+                    brightNoXray.Add(@"meshes\" + model);
+        }
         foreach (var (cat, e) in work)
             {
                 var st = project.StyleOf(e, cat);
@@ -116,6 +128,11 @@ public static class Builder
                     var own = partLooks?.GetValueOrDefault(model);
                     var look = own ?? st;
                     var path = @"meshes\" + model;
+                    if (look is { Brighten: true, Glow: false } && look.GlowFx.Walls && brightNoXray.Contains(path))
+                    {
+                        look = look.Clone();
+                        look.GlowFx.Walls = false;
+                    }
                     if (look.Brighten && Brighten(e.Name, path, look, game, brightened, log) is System.Drawing.Color treeColour)
                     {
                         look = TreeGlow(look, treeColour);
@@ -123,8 +140,9 @@ public static class Builder
                     }
                     if (!ChangesModel(look))
                     {
-                        // brighten only: a linked twin may still put its own glow on the model
-                        if (!look.Brighten) done.TryAdd(path, Tf("{0} in {1} (set to show nothing)", e.Shown, cat.Shown));
+                        // Bright without X-ray claims the model too: a linked twin's look (the Plants preset gives the twins
+                        // their own copy of Bright, X-ray on) put its X-ray back on (Nexus report 2026-11-19)
+                        done.TryAdd(path, look.Brighten ? Tf("{0} in {1}", e.Shown, cat.Shown) : Tf("{0} in {1} (set to show nothing)", e.Shown, cat.Shown));
                         continue;
                     }
                     bool mainModel = own != null || beamModels == null || beamModels.Contains(model);

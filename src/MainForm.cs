@@ -435,7 +435,11 @@ public sealed class MainForm : Form
         var pasteItem = new ToolStripMenuItem(Tr("Paste look"), null, (_, _) => PasteLook()) { ShortcutKeyDisplayString = Tr("Ctrl+V") };
         var tickItem = new ToolStripMenuItem(Tr("Select"), null, (_, _) => TickSelected(true));
         var untickItem = new ToolStripMenuItem(Tr("Deselect"), null, (_, _) => TickSelected(false));
-        var sameItem = new ToolStripMenuItem(Tr("Use the category's look"), null, (_, _) => { ResetColours(); ShowInspector(); });
+        var sameItem = new ToolStripMenuItem(Tr("Use the category's look"), null, (_, _) =>
+        {
+            if (SelectedPartRows() is { Count: > 0 } parts) { PartsBackToItem(parts); return; }
+            ResetColours(); ShowInspector();
+        });
         var editItem = new ToolStripMenuItem(Tr("Edit look..."), null, (_, _) => EditLookOfSelection()) { Font = new Font(Font, FontStyle.Bold) };
         rowMenu.Items.AddRange(new ToolStripItem[] { editItem, new ToolStripSeparator(), copyItem, pasteItem, sameItem, new ToolStripSeparator(), tickItem, untickItem });
         list.ContextMenuStrip = rowMenu;
@@ -443,9 +447,17 @@ public sealed class MainForm : Form
         {
             var sel = SelectedEntries();
             bool partRow = sel.Count == 0 && list.SelectedItems.Cast<ListViewItem>().Any(li => li.Tag is PartRow);
-            foreach (var mi in new[] { copyItem, pasteItem, sameItem, tickItem, untickItem }) mi.Visible = !partRow;
-            foreach (var sep in rowMenu.Items.OfType<ToolStripSeparator>()) sep.Visible = !partRow;
-            if (partRow) { editItem.Text = Tr("Edit look..."); return; } // a part row (one brahmin type): only its own look
+            foreach (var mi in new[] { copyItem, pasteItem, tickItem, untickItem }) mi.Visible = !partRow;
+            rowMenu.Items.OfType<ToolStripSeparator>().Last().Visible = !partRow;
+            if (partRow)
+            {
+                // a part row (one brahmin type): its own look, or back to the item's (was missing: a part look on the
+                // field carrot kept glowing through walls while the item said Bright, X-ray off - user 2026-11-19)
+                editItem.Text = Tr("Edit look...");
+                sameItem.Text = Tr("Use the item's look");
+                sameItem.Enabled = SelectedPartRows().Any(p => project.PartLooks.GetValueOrDefault(p.Entry.Id)?.ContainsKey(p.Model) == true);
+                return;
+            }
             if (sel.Count == 0) { e.Cancel = true; return; }
             string n = sel.Count > 1 ? Tf(" {0} items", sel.Count) : "";
             editItem.Text = sel.Count > 1 ? Tf("Edit look of {0} items...", sel.Count) : Tr("Edit look...");
@@ -2579,6 +2591,18 @@ public sealed class MainForm : Form
         }
     }
 
+    List<PartRow> SelectedPartRows() => list.SelectedItems.Cast<ListViewItem>().Select(li => li.Tag).OfType<PartRow>().ToList();
+
+    /// <summary>Right-click "Use the item's look" on part rows: their own looks go.</summary>
+    void PartsBackToItem(List<PartRow> parts)
+    {
+        foreach (var pr in parts)
+            if (project.PartLooks.TryGetValue(pr.Entry.Id, out var looks) && looks.Remove(pr.Model) && looks.Count == 0) project.PartLooks.Remove(pr.Entry.Id);
+        Save();
+        FillList(keepScroll: true);
+        ShowInspector();
+    }
+
     /// <summary>"Own look" / "Same as ...": an own look starts as a copy of the one it followed.</summary>
     void OwnSwitched(bool own)
     {
@@ -2998,16 +3022,20 @@ public sealed class MainForm : Form
     }
 
     /// <summary>The mod's name (a mod of this app with that name is replaced, another mod's file never) and whether to install it.</summary>
-    (string Name, bool Install)? AskSave()
+    (string Name, bool Install, bool Vortex)? AskSave()
     {
         var box = new ComboBox { Text = project.ModName, Width = 360, DropDownStyle = ComboBoxStyle.DropDown };
         var install = new CheckBox { Text = Tr("Install in the game"), AutoSize = true, Checked = true };
+        // Vortex drops hand-copied mods from the ini when it deploys: let Vortex install it instead
+        var vortex = new CheckBox { Text = Tr("Through Vortex (Vortex keeps it in the game's mod list)"), AutoSize = true, Checked = settings.UseVortex, Margin = new Padding(20, 0, 0, 0) };
+        install.CheckedChanged += (_, _) => vortex.Enabled = install.Checked;
         bool done = AskDialog(Tr("Build & save"), Tr("Build"), flow =>
         {
             flow.Controls.Add(new Label { Text = Tr("Mod name (its .ba2 file) - pick one of your mods to replace it:"), AutoSize = true });
             box.Items.AddRange(OwnMods().Select(n => (object)Path.GetFileNameWithoutExtension(n)).ToArray());
             flow.Controls.Add(box);
             flow.Controls.Add(install);
+            if (ItemFinder.Vortex.ManagesGame) flow.Controls.Add(vortex);
             return () =>
             {
                 var n = box.Text.Trim();
@@ -3020,7 +3048,8 @@ public sealed class MainForm : Form
                 return Box(Tf("Replace your mod {0}?", ArchiveName(n)), Text, MessageBoxButtons.YesNo) == DialogResult.Yes ? null : Tr("Pick another name.");
             };
         });
-        return done ? (box.Text.Trim(), install.Checked) : null;
+        if (done && ItemFinder.Vortex.ManagesGame && install.Checked && settings.UseVortex != vortex.Checked) { settings.UseVortex = vortex.Checked; settings.Save(); }
+        return done ? (box.Text.Trim(), install.Checked, install.Checked && vortex.Checked && ItemFinder.Vortex.ManagesGame) : null;
     }
 
     static bool IsOwnFile(string path)
@@ -3033,7 +3062,7 @@ public sealed class MainForm : Form
     {
         if (game == null) return;
         if (project.Selected.Count == 0) { Box(Tr("Select at least one item first."), Text); return; }
-        if (AskSave() is not var (name, install)) return;
+        if (AskSave() is not var (name, install, viaVortex)) return;
         project.ModName = name;
         Save();
         if (!install) { BuildFile(); return; }
@@ -3048,6 +3077,22 @@ public sealed class MainForm : Form
             var names = files.Select(Path.GetFileName).OfType<string>().ToList();
             // only this mod's files are replaced (e.g. a texture archive it no longer needs); other mods stay
             var stale = ModFiles(name).Where(n => !names.Contains(n, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (viaVortex)
+            {
+                UseWaitCursor = true;
+                bool ready = ItemFinder.Vortex.ReadyForInstall(this, Log); // Vortex on Fallout 76, not another game
+                UseWaitCursor = false;
+                if (!ready) return;
+                // a copy put in by hand earlier would clash with Vortex's link: take it out (Data + ini)
+                var manual = names.Concat(stale).Where(n => File.Exists(Path.Combine(game.DataFolder, n)) && !ItemFinder.Vortex.IsLink(Path.Combine(game.DataFolder, n))).ToList();
+                if (manual.Count > 0) game.Uninstall(manual, Log);
+                ItemFinder.Vortex.Install(ItemFinder.Vortex.Pack(files, name), Log);
+                game.OwnInstalled.RemoveAll(n => stale.Contains(n, StringComparer.OrdinalIgnoreCase) || names.Contains(n, StringComparer.OrdinalIgnoreCase));
+                game.OwnInstalled.AddRange(names);
+                ShowInstallState();
+                Box(Tf("{0} was handed to Vortex. Confirm the install in Vortex (if it asks: Replace the old version).\n\nVortex then puts it in the game and keeps it in the mod list.", ArchiveName(name)), Text);
+                return;
+            }
             game.Install(files, stale, Log);
             game.OwnInstalled.RemoveAll(n => stale.Contains(n, StringComparer.OrdinalIgnoreCase) || names.Contains(n, StringComparer.OrdinalIgnoreCase));
             game.OwnInstalled.AddRange(names);
@@ -3365,7 +3410,7 @@ public sealed class MainForm : Form
 
             log.Add("build & save dialog");
             // presses the dialog's main button; if that leaves it open (refused), its Cancel next
-            (string Name, bool Install)? Answer(string name)
+            (string Name, bool Install, bool Vortex)? Answer(string name)
             {
                 project.ModName = name;
                 var press = new System.Windows.Forms.Timer { Interval = 150 };

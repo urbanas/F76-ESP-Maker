@@ -741,6 +741,11 @@ public static class SelfTest
             g.Install(new[] { a }, Array.Empty<string>(), quiet);
             Check(List() == "sResourceArchive2List=Other.ba2,Another.ba2,Mine.ba2", "installed again: not listed twice");
             Check(File.ReadAllText(ini + ".before-espmaker") == text, "second install keeps the first backup");
+            Reset("[Archive]\r\nsResourceArchive2List=Other.ba2,Mine.ba2,Another.ba2\r\n");
+            g.Install(new[] { a, t }, Array.Empty<string>(), quiet);
+            Check(List() == "sResourceArchive2List=Other.ba2,Mine.ba2,Mine - Textures.ba2,Another.ba2", "moved by the player: keeps its place, new texture archive right after it: " + List());
+            Reset(text);
+            File.WriteAllText(Path.Combine(data, "Other.ba2"), "other");
             g.Install(new[] { a, t }, Array.Empty<string>(), quiet);
             g.Install(new[] { a }, new[] { "Mine - Textures.ba2" }, quiet);
             Check(!File.Exists(Path.Combine(data, "Mine - Textures.ba2")) && !List().Contains("Textures"), "texture archive no longer needed: gone from Data and ini");

@@ -36,6 +36,8 @@ public sealed class Settings
     public string? LatestAppSeen { get; set; }
     /// <summary>Mod manager - Install mod...: the folder the last download was picked from.</summary>
     public string? ModDownloads { get; set; }
+    /// <summary>Vortex manages the game: Build &amp; save / Install mod hand mods to Vortex (it drops hand-copied ones from the ini).</summary>
+    public bool UseVortex { get; set; } = true;
 
     static string FilePath => AppPaths.File("settings.json");
 
@@ -167,6 +169,14 @@ static class Program
         if (args.Length is 2 or 3 && args[0] == "--rules-test") { Environment.Exit(SelfTest.RulesTest(args[1], args.Length == 3 ? args[2] : null)); return; }
         if (args.Length == 1 && args[0] == "--list"){ Environment.Exit(SelfTest.List()); return; }
         if (args.Length == 2 && args[0] == "--icons") { Environment.Exit(SelfTest.IconSheet(args[1])); return; }
+        if (args.Length == 1 && args[0] == "--vortexmods")
+        {
+            // dev: Vortex's Fallout 76 mods as ESP Maker reads them (read-only; Vortex must be closed)
+            var r = Vortex.ReadMods();
+            Console.WriteLine(r == null ? "not read (Vortex open / missing)" : $"profile {r.Value.Profile}: {r.Value.Mods.Count} mods");
+            if (r != null) foreach (var m in r.Value.Mods) Console.WriteLine($"{(m.Enabled ? "on " : "off")} {m.Id} -> {string.Join(", ", m.Archives)}");
+            Environment.Exit(r == null ? 1 : 0); return;
+        }
         if (args.Length == 1 && args[0] == "--links") { Environment.Exit(SelfTest.Links()); return; }
         if (args.Length == 2 && args[0] == "--brightentest") { Environment.Exit(SelfTest.BrightenTest(args[1])); return; }
         if (args.Length is 1 or 2 && args[0] == "--stress") { Environment.Exit(SelfTest.Stress(args.Length == 2 ? args[1] : null)); return; }

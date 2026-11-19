@@ -257,8 +257,8 @@ public sealed class GameData
     /// <summary>Either version of the game is running (it locks its archives).</summary>
     public static bool GameRunning => Process.GetProcessesByName("Fallout76").Length > 0 || Process.GetProcessesByName("Project76_GamePass").Length > 0;
 
-    /// <summary>Copies the archives into Data, lists them at the end of sResourceArchive2List (so they win
-    /// over other mods) and removes stale files from an earlier build that are no longer produced.</summary>
+    /// <summary>Copies the archives into Data, lists new ones at the end of sResourceArchive2List (so they win
+    /// over other mods; already-listed ones keep their place) and removes stale files from an earlier build that are no longer produced.</summary>
     public void Install(IReadOnlyList<string> builtFiles, IReadOnlyList<string> staleNames, Action<string> log)
     {
         foreach (var f in builtFiles)
@@ -285,8 +285,16 @@ public sealed class GameData
         foreach (int i in listLines)
         {
             var list = ArchivesOn(lines[i]);
-            list.RemoveAll(n => staleNames.Contains(n, StringComparer.OrdinalIgnoreCase) || names.Contains(n, StringComparer.OrdinalIgnoreCase));
-            list.AddRange(names);
+            list.RemoveAll(n => staleNames.Contains(n, StringComparer.OrdinalIgnoreCase));
+            // already listed = keep the player's position (they may have moved it in the mod manager);
+            // a new name goes right after our last listed one, else at the end
+            foreach (var n in names)
+            {
+                int at = list.FindIndex(x => x.Equals(n, StringComparison.OrdinalIgnoreCase));
+                if (at >= 0) { list[at] = n; continue; }
+                int ours = list.FindLastIndex(x => names.Contains(x, StringComparer.OrdinalIgnoreCase));
+                if (ours >= 0) list.Insert(ours + 1, n); else list.Add(n);
+            }
             lines[i] = "sResourceArchive2List=" + string.Join(",", list);
         }
         if (listLines.Count == 0)

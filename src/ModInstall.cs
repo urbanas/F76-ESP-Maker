@@ -11,6 +11,8 @@ static class ModInstall
 {
     public const string Filter = "Mod downloads (*.zip;*.7z;*.rar;*.ba2)|*.zip;*.7z;*.rar;*.ba2|All files (*.*)|*.*";
 
+    public static bool IsBa2(string path) => Path.GetExtension(path).Equals(".ba2", StringComparison.OrdinalIgnoreCase);
+
     public static bool Supported(string path) =>
         Path.GetExtension(path).ToLowerInvariant() is ".zip" or ".7z" or ".rar" or ".ba2";
 

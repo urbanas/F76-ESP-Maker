@@ -1,6 +1,23 @@
 ESP Maker - changes
 ===================
 
+2.6
+New
+- Vortex support. When Vortex manages your mods, "Build & save" hands the mod to Vortex ("Through
+  Vortex", on by default): Vortex installs it and keeps it in the game's mod list. Before, every
+  Vortex deploy dropped mods copied in by hand from the list.
+- Mod Manager and Vortex: "Install mod..." asks whether Vortex or ESP Maker installs it; "Hand to
+  Vortex" turns a mod copied in by hand into a Vortex mod; turning a Vortex mod on or off, or
+  deleting it, changes it in Vortex too (Vortex must be closed); mods that are off in Vortex are
+  listed at the bottom - tick one to turn it on.
+- Vortex set to another game: ESP Maker switches a closed Vortex to Fallout 76 first, or asks you
+  to switch an open one.
+- Right-click a part row: "Use the item's look" (the part follows the item again).
+Fixed
+- Bright: turning X-ray off now works for plants that are also listed elsewhere (Nuked flora, Aid &
+  food) - their copy there kept its X-ray.
+- Build & save keeps your mod where you put it in the mod list (it always moved it to the end).
+
 2.5.5
 New
 - Nuked flora (Stable Flux): the plants that grow only in nuke blast zones (Blast Berry, Geiger
