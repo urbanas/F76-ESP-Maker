@@ -39,6 +39,7 @@ public static class EventCatalog
         }
         AddShowmen(idx, exists, cats);
         AddEnemyCopies(cats);
+        Rules.Current.AddCategories(cats, idx, exists);
         Rules.Current.FixModels(cats, exists);
         PartNames.NameAll(idx, cats);
         Rules.Current.RenameParts(cats);

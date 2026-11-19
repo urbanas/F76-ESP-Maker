@@ -60,7 +60,8 @@ pick one yourself; the app restarts in the new language. The translations are ne
 with AI help - some wording may be off. Please report anything that reads wrong.
 Options -> Mod manager (or the Mods button at the bottom of the left bar): every mod in your Data
 folder - tick to turn it on or off, drag to change the load order (lower wins), see which mods
-change the same files, delete a mod. Your ini is backed up before saving.
+change the same files, delete a mod. Your ini is backed up before saving. "Install mod..." (or drag
+a downloaded .zip / .7z / .rar / .ba2 onto the list) puts a downloaded mod into Data for you.
 Edit -> "Colour by priority..." colours your picks by how much they matter (white rare, gold worth
 a detour, green useful, red junk).
 

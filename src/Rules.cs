@@ -42,6 +42,9 @@ public sealed class Rules
     public List<ModelRule> Exclude { get; set; } = new();
     public List<ModelRule> Include { get; set; } = new();
     public List<ModelRule> Rename { get; set; } = new();
+    /// <summary>Whole new categories (app 2.5.5+, user 2026-11-19: Stable Flux plants). Older apps don't know the field and
+    /// skip it - so no schema change; never make anything else depend on it.</summary>
+    public List<CategoryRule> Categories { get; set; } = new();
     /// <summary>Window text for names the rules bring before the next app version: language -> English -> text.</summary>
     public Dictionary<string, Dictionary<string, string>> Translations { get; set; } = new();
     /// <summary>What each version changed, shown before the restart. Version 0 = the next push (push-rules.ps1 fills it in).</summary>
@@ -147,6 +150,8 @@ public sealed class Rules
             if (string.IsNullOrWhiteSpace(m.Model)) return "a model fix without a model";
         if (Include.Any(m => string.IsNullOrWhiteSpace(m.Category) || string.IsNullOrWhiteSpace(m.Entry))) return "an include without a category or entry";
         if (Rename.Any(m => string.IsNullOrWhiteSpace(m.Name))) return "a rename without a name";
+        if (Categories.Any(c => string.IsNullOrWhiteSpace(c.Name) || string.IsNullOrWhiteSpace(c.Id))) return "a category without a name or id";
+        if (Categories.GroupBy(c => c.Id.Trim().ToLowerInvariant()).Any(g => g.Count() > 1)) return "two categories with one id";
         return null;
     }
 
@@ -159,6 +164,8 @@ public sealed class Rules
         foreach (var r in e.RobotParts) yield return r.Pattern;
         foreach (var h in e.HumanGroups.Where(h => h.Beam.Length > 0)) yield return h.Beam;
         foreach (var ev in Events.All) { yield return ev.Prefixes; yield return ev.OwnModels; }
+        foreach (var c in Categories)
+            foreach (var p in new[] { c.HarvestGives, c.Match, c.Skip }) if (p != null) yield return p;
     }
 
     /// <summary>True when <paramref name="version"/> is newer than the running app.</summary>
@@ -259,6 +266,71 @@ public sealed class Rules
             }
             if (!e.Models.Contains(m, StringComparer.OrdinalIgnoreCase)) e.Models.Add(m);
             if (!string.IsNullOrWhiteSpace(x.Name)) (e.PartNames ??= new())[m] = x.Name.Trim();
+        }
+    }
+
+    /// <summary>Categories: new categories from the rules (before the model fixes, so include / exclude reach them too).
+    /// Rows copied from <see cref="CategoryRule.From"/> are the same entries there - linked twins (same models).</summary>
+    public void AddCategories(List<Category> cats, GameIndex idx, Func<string, bool> exists)
+    {
+        if (Categories.Count == 0) return;
+        var world = idx.Records.Where(r => GameIndex.WorldTypes.Contains(r.Type)).ToList();
+        var byModel = world.GroupBy(r => ItemFinder.Catalog.NormalizeModel(r.Model)).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+        var spots = idx.WorldSpots();
+        foreach (var x in Categories)
+        {
+            if (cats.Any(c => Same(c.Name, x.Name))) continue; // a category the app already has
+            var like = x.After == null ? null : cats.FirstOrDefault(c => Same(c.Name, x.After));
+            var style = like?.DefaultStyle.Clone() ?? new Style();
+            if (x.Color != null) { style.GlowColor = x.Color; style.BeamColor = x.Color; }
+            if (x.BeamLength is int bl) style.BeamLength = bl;
+            var c = new Category { Name = x.Name.Trim(), Description = Loc.Tr(x.Description), DefaultStyle = style, Section = x.Section ?? like?.Section ?? "ITEMS", Group = x.Group ?? like?.Group };
+            string id = x.Id.Trim().ToLowerInvariant();
+            // what the plant has to give when harvested (by the given item's name)
+            HashSet<string>? gives = null;
+            if (x.HarvestGives != null)
+            {
+                var items = idx.Records.Where(r => r.Name.Trim().Length > 0 && Rx(x.HarvestGives).IsMatch(r.Name.Trim())).Select(r => r.FormId).ToList();
+                gives = world.Where(r => r.Type == "FLOR" && r.Harvest != 0 && items.Any(i => idx.Gives(r.Harvest, i)))
+                             .Select(r => ItemFinder.Catalog.NormalizeModel(r.Model)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+            // Match / Skip: tested on the row's name and each of its models
+            bool Any(Entry e, string? p) => p != null && (Rx(p).IsMatch(e.Name) || e.Models.Any(m => Rx(p).IsMatch(m)));
+            if (x.From != null && cats.FirstOrDefault(k => Same(k.Name, x.From)) is Category from)
+                foreach (var e in from.Entries.Where(e => e.Group == null && e.Models.Count > 0))
+                {
+                    if (gives != null && !e.Models.Any(gives.Contains)) continue;
+                    if (x.Match != null && !Any(e, x.Match) || Any(e, x.Skip)) continue;
+                    int colon = e.Id.LastIndexOf(':');
+                    c.Entries.Add(new Entry
+                    {
+                        Id = id + ":" + (colon >= 0 ? e.Id[(colon + 1)..] : e.Id), Category = c.Name, Name = e.Name, Models = e.Models.ToList(),
+                        ItemNames = e.ItemNames.ToList(), Detail = e.Detail, Harvestable = e.Harvestable, NoIcon = e.NoIcon,
+                        BeamModels = e.BeamModels?.ToHashSet(), Scenery = e.Scenery, Spots = e.Spots, PreviewModel = e.PreviewModel,
+                    });
+                }
+            foreach (var p in x.Entries)
+            {
+                var models = p.Models.Select(m => ItemFinder.Catalog.NormalizeModel(m.Trim())).Where(exists).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (models.Count == 0 || p.Name.Trim().Length == 0) continue;
+                var e = new Entry
+                {
+                    Id = id + ":" + p.Name.Trim().ToLowerInvariant(), Category = c.Name, Name = p.Name.Trim(), Models = models,
+                    ItemNames = models.SelectMany(m => byModel.GetValueOrDefault(m) ?? new()).Select(r => r.Name.Trim()).Where(n => n.Length > 0)
+                                      .Prepend(p.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                    Detail = p.Detail.Length > 0 ? Loc.Tr(p.Detail) : models.Count == 1 ? Loc.Tr("1 model") : Loc.Tf("{0} models", models.Count),
+                    Harvestable = models.Any(m => (byModel.GetValueOrDefault(m) ?? new()).Any(r => r.Type == "FLOR")),
+                    NoIcon = models.All(m => (m.StartsWith(@"actors\") || m.Contains(@"clothes\") || m.Contains(@"powerarmor\")) && !m.EndsWith("_go.nif")),
+                };
+                ItemFinder.Catalog.CountSpots(new[] { e }, byModel, spots);
+                c.Entries.Add(e);
+            }
+            if (c.Entries.Count == 0) continue;
+            c.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            // after the named category (and the rules' categories already put after it), else at the end of its section
+            int at = like != null ? cats.IndexOf(like) + 1 : cats.FindLastIndex(k => k.Section == c.Section) + 1;
+            while (like != null && at < cats.Count && Categories.Any(r => Same(cats[at].Name, r.Name) && Same(r.After ?? "", like.Name))) at++;
+            cats.Insert(at == 0 ? cats.Count : at, c);
         }
     }
 
@@ -395,6 +467,33 @@ public sealed class EventRule
     public string Color { get; set; } = "#FFFFFF";
     public string Description { get; set; } = "";
     public List<PickRule> Picks { get; set; } = new();
+}
+
+/// <summary>A whole new category (app 2.5.5+). Rows: copies of <see cref="From"/>'s entries (filtered), and/or its own
+/// <see cref="Entries"/> (name + models). Name, description and details are English; their translations go in
+/// <see cref="Rules.Translations"/>.</summary>
+public sealed class CategoryRule
+{
+    public string Name { get; set; } = "";
+    /// <summary>Entry ids start with it ("nuked" -> "nuked:blast berry") - keep it once players have ticks saved.</summary>
+    public string Id { get; set; } = "";
+    /// <summary>Placed right after this category, and starts with its look.</summary>
+    public string? After { get; set; }
+    /// <summary>ITEMS, EVENTS... (default: the After category's, else ITEMS).</summary>
+    public string? Section { get; set; }
+    public string? Group { get; set; }
+    public string Description { get; set; } = "";
+    public string? Color { get; set; }
+    public int? BeamLength { get; set; }
+    /// <summary>Copy the rows of this category (e.g. "Plants (all)"); they stay ticked together with it.</summary>
+    public string? From { get; set; }
+    /// <summary>From's rows: only plants whose harvest gives an item whose name matches (e.g. "^Raw .+ Flux$").</summary>
+    public string? HarvestGives { get; set; }
+    /// <summary>From's rows: only those whose name or one of its models matches / none matches.</summary>
+    public string? Match { get; set; }
+    public string? Skip { get; set; }
+    public List<PickRule> Entries { get; set; } = new();
+    public string? Note { get; set; }
 }
 
 public sealed class PickRule

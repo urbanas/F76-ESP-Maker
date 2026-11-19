@@ -1,10 +1,11 @@
 {
   "schema": 1,
-  "version": 6,
+  "version": 7,
   "minApp": "2.5",
-  "latestApp": "2.5.3",
-  "updated": "2026-11-17",
+  "latestApp": "2.5.5",
+  "updated": "2026-11-19",
   "changes": [
+    { "version": 7, "text": [ "ESP Maker 2.5.5 is out: new categories Nuked flora (Stable Flux) and Flux plants outside blast zones, and the Mod Manager installs mods from downloaded archives" ] },
     { "version": 5, "text": [ "ESP Maker 2.5.2 is out: the Razorgrain glow (Bright) now shows in game", "Loot spots: the Lucky Strike dig sites have their own row now instead of being part of Treasure map mounds - it selects together with EVENTS > Lucky Strike > Dig sites" ] },
     { "version": 4, "text": [ "Treasure map mounds now also show the Lucky Strike dig sites (Excavator's, Prospector's and Miner's maps)" ] },
     { "version": 3, "text": [ "ESP Maker 2.5.1 is out: Bright on Razorgrain gives a Fill glow instead of broken mirror shards" ] },
@@ -1387,6 +1388,8 @@
       "Pre-war food",
       "Notes & holotapes",
       "Plants (all)",
+      "Nuked flora (Stable Flux)",
+      "Flux plants outside blast zones",
       "Aid & food",
       "Junk & misc",
       "Junk: *",
@@ -1414,5 +1417,101 @@
     { "model": "setdressing\\ashlootmounds\\ashlootmound02.nif", "category": "Loot spots & event objects", "entry": "Lucky Strike dig sites", "note": "own row in Loot spots, twin of EVENTS Lucky Strike > Dig sites - user request 2026-11-17" }
   ],
   "rename": [],
-  "translations": {}
+  "categories": [
+    {
+      "name": "Nuked flora (Stable Flux)",
+      "id": "nuked",
+      "after": "Plants (all)",
+      "description": "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.",
+      "from": "Plants (all)",
+      "harvestGives": "^Raw .+ Flux$",
+      "match": "\\\\florarad| / ",
+      "skip": "\\\\thistle01\\.nif$",
+      "note": "blast zone = a nuked model (florarad...) or the nuked twin of an ordinary plant on one model (Mutfruit / Fission Fruit); not the thistle: its model is every ordinary thistle (user 2026-11-19)"
+    },
+    {
+      "name": "Flux plants outside blast zones",
+      "id": "fluxplant",
+      "after": "Plants (all)",
+      "description": "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.",
+      "from": "Plants (all)",
+      "harvestGives": "^Raw .+ Flux$",
+      "skip": "\\\\florarad| / |\\\\thistle01\\.nif$",
+      "note": "flux plants that are not blast-zone ones (Skyline Valley storms...), user 2026-11-19"
+    }
+  ],
+  "translations": {
+    "de": {
+      "Nuked flora (Stable Flux)": "Verstrahlte Flora (Stabiler Flux)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "Pflanzen, die nur in Atombomben-Einschlagzonen wachsen (Blast Berry, Geiger Blossom, Gamma Dogwood...). Ihre Ernte gibt rohen Flux, der an einer Chemiestation zu stabilem Flux wird. Dieselben Einträge wie in Plants (all) - wählst du einen hier, ist er dort auch gewählt.",
+      "Flux plants outside blast zones": "Flux-Pflanzen außerhalb von Einschlagzonen",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "Pflanzen außerhalb von Atombomben-Einschlagzonen, deren Ernte ebenfalls rohen Flux geben kann, der an einer Chemiestation zu stabilem Flux wird (Flash Fern, Afterwind Vine, Lightning Flux aus den Stürmen im Skyline Valley...). Dieselben Einträge wie in Plants (all) - wählst du einen hier, ist er dort auch gewählt."
+    },
+    "es": {
+      "Nuked flora (Stable Flux)": "Flora nuclear (Flujo estable)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "Plantas que solo crecen en zonas de impacto nuclear (Blast Berry, Geiger Blossom, Gamma Dogwood...). Al recolectarlas obtienes flujo en bruto, que se convierte en flujo estable en una mesa de química. Las mismas entradas que en Plants (all): si eliges una aquí, también se elige allí.",
+      "Flux plants outside blast zones": "Plantas de flujo fuera de zonas nucleares",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "Plantas fuera de las zonas de impacto nuclear que también pueden dar flujo en bruto, que se convierte en flujo estable en una mesa de química (Flash Fern, Afterwind Vine, Lightning Flux de las tormentas de Skyline Valley...). Las mismas entradas que en Plants (all): si eliges una aquí, también se elige allí."
+    },
+    "esmx": {
+      "Nuked flora (Stable Flux)": "Flora nuclear (Flujo estable)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "Plantas que solo crecen en zonas de impacto nuclear (Blast Berry, Geiger Blossom, Gamma Dogwood...). Al cosecharlas obtienes flujo en bruto, que se convierte en flujo estable en una estación de química. Las mismas entradas que en Plants (all): si eliges una aquí, también se elige allá.",
+      "Flux plants outside blast zones": "Plantas de flujo fuera de zonas nucleares",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "Plantas fuera de las zonas de impacto nuclear que también pueden dar flujo en bruto, que se convierte en flujo estable en una estación de química (Flash Fern, Afterwind Vine, Lightning Flux de las tormentas de Skyline Valley...). Las mismas entradas que en Plants (all): si eliges una aquí, también se elige allá."
+    },
+    "fr": {
+      "Nuked flora (Stable Flux)": "Flore irradiée (Flux stable)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "Plantes qui ne poussent que dans les zones d'impact nucléaire (Blast Berry, Geiger Blossom, Gamma Dogwood...). Les récolter donne du flux brut, transformé en flux stable à un établi de chimie. Les mêmes entrées que dans Plants (all) - en choisir une ici la choisit aussi là-bas.",
+      "Flux plants outside blast zones": "Plantes à flux hors zones d'impact",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "Plantes hors des zones d'impact nucléaire dont la récolte peut aussi donner du flux brut, transformé en flux stable à un établi de chimie (Flash Fern, Afterwind Vine, Lightning Flux des tempêtes de Skyline Valley...). Les mêmes entrées que dans Plants (all) - en choisir une ici la choisit aussi là-bas."
+    },
+    "it": {
+      "Nuked flora (Stable Flux)": "Flora nuclearizzata (Flusso stabile)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "Piante che crescono solo nelle zone d'impatto nucleare (Blast Berry, Geiger Blossom, Gamma Dogwood...). Raccoglierle dà flusso grezzo, trasformato in flusso stabile a un banco di chimica. Le stesse voci di Plants (all): selezionarne una qui la seleziona anche lì.",
+      "Flux plants outside blast zones": "Piante di flusso fuori dalle zone d'impatto",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "Piante fuori dalle zone d'impatto nucleare la cui raccolta può dare anche flusso grezzo, trasformato in flusso stabile a un banco di chimica (Flash Fern, Afterwind Vine, Lightning Flux delle tempeste di Skyline Valley...). Le stesse voci di Plants (all): selezionarne una qui la seleziona anche lì."
+    },
+    "ja": {
+      "Nuked flora (Stable Flux)": "核汚染植物 (安定フラックス)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "核爆発ゾーンにだけ生える植物 (Blast Berry、Geiger Blossom、Gamma Dogwood など)。収穫すると未加工のフラックスが手に入り、ケミストリーステーションで安定フラックスにできます。Plants (all) と同じ項目です - ここで選ぶとそちらでも選ばれます。",
+      "Flux plants outside blast zones": "核爆発ゾーン外のフラックス植物",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "核爆発ゾーンの外で、収穫すると未加工のフラックスも手に入る植物 (Flash Fern、Afterwind Vine、Skyline Valley の嵐の Lightning Flux など)。ケミストリーステーションで安定フラックスにできます。Plants (all) と同じ項目です - ここで選ぶとそちらでも選ばれます。"
+    },
+    "ko": {
+      "Nuked flora (Stable Flux)": "핵 오염 식물 (안정 플럭스)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "핵 폭발 지역에서만 자라는 식물 (Blast Berry, Geiger Blossom, Gamma Dogwood...). 수확하면 원료 플럭스를 얻고, 화학 작업대에서 안정 플럭스로 만듭니다. Plants (all)과 같은 항목입니다 - 여기서 선택하면 그곳에서도 선택됩니다.",
+      "Flux plants outside blast zones": "핵 폭발 지역 밖의 플럭스 식물",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "핵 폭발 지역 밖에서 수확해도 원료 플럭스를 얻을 수 있는 식물 (Flash Fern, Afterwind Vine, Skyline Valley 폭풍의 Lightning Flux...). 화학 작업대에서 안정 플럭스로 만듭니다. Plants (all)과 같은 항목입니다 - 여기서 선택하면 그곳에서도 선택됩니다."
+    },
+    "pl": {
+      "Nuked flora (Stable Flux)": "Napromieniowana flora (Stabilny strumień)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "Rośliny rosnące tylko w strefach wybuchu atomowego (Blast Berry, Geiger Blossom, Gamma Dogwood...). Ich zbiór daje surowy strumień, z którego przy stole chemicznym powstaje stabilny strumień. Te same pozycje co w Plants (all) - zaznaczenie tutaj zaznacza je i tam.",
+      "Flux plants outside blast zones": "Rośliny strumienia poza strefami wybuchu",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "Rośliny poza strefami wybuchu atomowego, których zbiór też może dać surowy strumień, z którego przy stole chemicznym powstaje stabilny strumień (Flash Fern, Afterwind Vine, Lightning Flux z burz w Skyline Valley...). Te same pozycje co w Plants (all) - zaznaczenie tutaj zaznacza je i tam."
+    },
+    "ptbr": {
+      "Nuked flora (Stable Flux)": "Flora nuclear (Fluxo estável)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "Plantas que só crescem em zonas de explosão nuclear (Blast Berry, Geiger Blossom, Gamma Dogwood...). Colhê-las dá fluxo bruto, transformado em fluxo estável numa estação de química. As mesmas entradas de Plants (all) - selecionar uma aqui também a seleciona lá.",
+      "Flux plants outside blast zones": "Plantas de fluxo fora das zonas nucleares",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "Plantas fora das zonas de explosão nuclear cuja colheita também pode dar fluxo bruto, transformado em fluxo estável numa estação de química (Flash Fern, Afterwind Vine, Lightning Flux das tempestades de Skyline Valley...). As mesmas entradas de Plants (all) - selecionar uma aqui também a seleciona lá."
+    },
+    "ru": {
+      "Nuked flora (Stable Flux)": "Облучённая флора (Стабильный флюс)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "Растения, растущие только в зонах ядерного удара (Blast Berry, Geiger Blossom, Gamma Dogwood...). Их сбор даёт сырой флюс, из которого на химической станции делают стабильный флюс. Те же пункты, что и в Plants (all) - выбор здесь выбирает их и там.",
+      "Flux plants outside blast zones": "Растения с флюсом вне зон удара",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "Растения вне зон ядерного удара, сбор которых тоже может дать сырой флюс, из которого на химической станции делают стабильный флюс (Flash Fern, Afterwind Vine, Lightning Flux из бурь Skyline Valley...). Те же пункты, что и в Plants (all) - выбор здесь выбирает их и там."
+    },
+    "zhhans": {
+      "Nuked flora (Stable Flux)": "核爆植物 (稳定通量)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "只生长在核爆区的植物（Blast Berry、Geiger Blossom、Gamma Dogwood……）。采集可得到原始通量，在化学工作台可制成稳定通量。与 Plants (all) 中的条目相同 - 在这里选中，那里也会选中。",
+      "Flux plants outside blast zones": "核爆区外的通量植物",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "核爆区外、采集也可能得到原始通量的植物（Flash Fern、Afterwind Vine、Skyline Valley 风暴中的 Lightning Flux……），在化学工作台可制成稳定通量。与 Plants (all) 中的条目相同 - 在这里选中，那里也会选中。"
+    },
+    "zhhant": {
+      "Nuked flora (Stable Flux)": "核爆植物 (穩定通量)",
+      "Plants that grow only in nuke blast zones (Blast Berry, Geiger Blossom, Gamma Dogwood...). Harvesting them gives raw flux, made into Stable Flux at a chemistry station. The same entries as in Plants (all) - selecting one here selects it there too.": "只生長在核爆區的植物（Blast Berry、Geiger Blossom、Gamma Dogwood……）。採集可得到原始通量，在化學工作台可製成穩定通量。與 Plants (all) 中的項目相同 - 在這裡選取，那裡也會選取。",
+      "Flux plants outside blast zones": "核爆區外的通量植物",
+      "Plants outside nuke blast zones whose harvest can also give raw flux, made into Stable Flux at a chemistry station (Flash Fern, Afterwind Vine, Lightning Flux from the Skyline Valley storms...). The same entries as in Plants (all) - selecting one here selects it there too.": "核爆區外、採集也可能得到原始通量的植物（Flash Fern、Afterwind Vine、Skyline Valley 風暴中的 Lightning Flux……），在化學工作台可製成穩定通量。與 Plants (all) 中的項目相同 - 在這裡選取，那裡也會選取。"
+    }
+  }
 }

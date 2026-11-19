@@ -14,7 +14,7 @@ public static class Pickup
     /// (user, 2026-11-16); this copy is used when the rules in use have none.</summary>
     static readonly string[] BuiltIn =
     {
-        "Bobbleheads", "Magazines", "XP recipes", "Plans", "Pre-war food", "Notes & holotapes", "Plants (all)", "Aid & food",
+        "Bobbleheads", "Magazines", "XP recipes", "Plans", "Pre-war food", "Notes & holotapes", "Plants (all)", "Nuked flora (Stable Flux)", "Flux plants outside blast zones","Aid & food",
         "Junk & misc", "Junk: *", "Weapons", "Loot bags", "Clothes lying around", "All outfits (ground & display model)",
         "Other: Misc items", "Other: Notes & books", "Other: Plants", "Other: Weapons", "Other: Ammo", "Other: Keys",
         "Other: Apparel on the ground",

@@ -1,6 +1,18 @@
 ESP Maker - changes
 ===================
 
+2.5.5
+New
+- Nuked flora (Stable Flux): the plants that grow only in nuke blast zones (Blast Berry, Geiger
+  Blossom, Gamma Dogwood...) - harvesting them gives raw flux for Stable Flux. "Flux plants outside
+  blast zones" has the others that can give raw flux (Flash Fern, Afterwind Vine, Lightning Flux...).
+  Both list the same entries as Plants (all): checking one here checks it there too.
+- Mod Manager: "Install mod..." (or drag a downloaded .zip / .7z / .rar / .ba2 onto the list) puts
+  the mod's .ba2 files into Data for you. Archives with option folders let you pick which to install.
+- Online item fixes can now add whole new categories (not only fix items in existing ones).
+Changed
+- Mod Manager opens instantly (no white flash in dark mode).
+
 2.5.4
 Fixed
 - A glow with "Visible through walls" turned off didn't show in game (found on Salt and Pepper),
