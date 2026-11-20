@@ -1100,5 +1100,12 @@
 "Vortex manages some of these mods - when it deploys, it keeps only its own mods in the list. Use Hand to Vortex for the others.": "Vortex verwaltet einige dieser Mods – beim Bereitstellen behält es nur seine eigenen Mods in der Liste. Nimm für die anderen „An Vortex übergeben“.",
 "Vortex manages your mods, and when it deploys it removes mods copied in by hand from the game's mod list.\n\nInstall through Vortex?\n\nYes = Vortex installs it (recommended)\nNo = ESP Maker copies it into Data": "Vortex verwaltet deine Mods und entfernt beim Bereitstellen von Hand kopierte Mods aus der Mod-Liste des Spiels.\n\nÜber Vortex installieren?\n\nJa = Vortex installiert ihn (empfohlen)\nNein = ESP Maker kopiert ihn nach Data",
 "Vortex installs mods into the game it is showing. Switch Vortex to Fallout 76 first, then press OK.": "Vortex installiert Mods in das Spiel, das es gerade zeigt. Stelle Vortex zuerst auf Fallout 76 um und drücke dann OK.",
-"Vortex switched to Fallout 76.": "Vortex auf Fallout 76 umgestellt."
+"Vortex switched to Fallout 76.": "Vortex auf Fallout 76 umgestellt.",
+"↺ Reset look": "↺ Look zurücksetzen",
+"⧉ Detach": "⧉ Lösen",
+"Float the look editor in its own window (drag it to this window's right edge to dock it again).": "Den Look-Editor in einem eigenen Fenster öffnen (zum erneuten Andocken an den rechten Rand dieses Fensters ziehen).",
+"Dock the look editor here": "Look-Editor hier andocken",
+"Open / close the look editor (Ctrl+L)": "Look-Editor öffnen / schließen (Strg+L)",
+"Let go to dock the look editor here": "Loslassen, um den Look-Editor hier anzudocken",
+"OWN": "EIGEN"
 }

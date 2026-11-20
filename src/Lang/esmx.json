@@ -1099,5 +1099,12 @@
 "Vortex manages some of these mods - when it deploys, it keeps only its own mods in the list. Use Hand to Vortex for the others.": "Vortex gestiona algunos de estos mods - al desplegar solo deja sus propios mods en la lista. Usa \"Pasar a Vortex\" para los demás.",
 "Vortex manages your mods, and when it deploys it removes mods copied in by hand from the game's mod list.\n\nInstall through Vortex?\n\nYes = Vortex installs it (recommended)\nNo = ESP Maker copies it into Data": "Vortex gestiona tus mods y, al desplegar, quita de la lista de mods del juego los copiados a mano.\n\n¿Instalar con Vortex?\n\nSí = lo instala Vortex (recomendado)\nNo = ESP Maker lo copia en Data",
 "Vortex installs mods into the game it is showing. Switch Vortex to Fallout 76 first, then press OK.": "Vortex instala los mods en el juego que está mostrando. Cambia primero Vortex a Fallout 76 y luego pulsa Aceptar.",
-"Vortex switched to Fallout 76.": "Vortex ha cambiado a Fallout 76."
+"Vortex switched to Fallout 76.": "Vortex ha cambiado a Fallout 76.",
+"↺ Reset look": "↺ Restablecer estilo",
+"⧉ Detach": "⧉ Separar",
+"Float the look editor in its own window (drag it to this window's right edge to dock it again).": "Abre el editor de estilo en su propia ventana (arrástralo al borde derecho de esta ventana para volver a acoplarlo).",
+"Dock the look editor here": "Acoplar aquí el editor de estilo",
+"Open / close the look editor (Ctrl+L)": "Abrir / cerrar el editor de estilo (Ctrl+L)",
+"Let go to dock the look editor here": "Suelta para acoplar aquí el editor de estilo",
+"OWN": "PROPIO"
 }

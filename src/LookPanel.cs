@@ -17,7 +17,15 @@ sealed class LookPanel : UserControl
     public Control[] DragHandles => new Control[] { title, sub, titleRow };
     /// <summary>The title with "Reset" at its right (room left for the pop-up's close button).</summary>
     readonly Panel titleRow = new() { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0, 0, 40, 0) };
-    readonly Button reset = new() { Text = Tr("↺ Reset"), AutoSize = true, Dock = DockStyle.Right };
+    readonly Button reset = new() { Text = Tr("↺ Reset look"), AutoSize = true, Dock = DockStyle.Right };
+    /// <summary>"⧉ Detach" right of Reset, shown while docked in the main window (MainForm wires it).</summary>
+    public readonly Button Detach = new() { Text = Tr("⧉ Detach"), AutoSize = true, Dock = DockStyle.Right, Visible = false };
+    readonly Panel detachGap = new() { Width = 6, Dock = DockStyle.Right, Visible = false };
+    /// <summary>Docked: Detach shows and no room is kept for the pop-up's ✕.</summary>
+    public bool Docked
+    {
+        set { Detach.Visible = detachGap.Visible = value; titleRow.Padding = new Padding(0, 0, value ? 0 : 40, 0); }
+    }
     /// <summary>"Reset" was clicked: back to the default look (an item: its category's; a category: the starting one).</summary>
     public event Action? ResetClicked;
     readonly Panel sameHint =new() { Dock = DockStyle.Top, Height = 0, Visible = false }; // (gone: the look is always editable)
@@ -132,6 +140,8 @@ sealed class LookPanel : UserControl
         title.Dock = DockStyle.Fill;
         titleRow.Controls.Add(title);
         titleRow.Controls.Add(reset);
+        titleRow.Controls.Add(detachGap);
+        titleRow.Controls.Add(Detach);
         foreach (var c in new Control[] { switchRow, tick, sub, titleRow }) header.Controls.Add(c);
         scroll.Controls.Add(Editor);
         scroll.Controls.Add(sameHint);

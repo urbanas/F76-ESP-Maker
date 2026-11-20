@@ -1099,5 +1099,12 @@
 "Vortex manages some of these mods - when it deploys, it keeps only its own mods in the list. Use Hand to Vortex for the others.": "これらの MOD の一部は Vortex が管理しています - デプロイ時、Vortex は自分の MOD だけを一覧に残します。ほかの MOD は「Vortex に渡す」を使ってください。",
 "Vortex manages your mods, and when it deploys it removes mods copied in by hand from the game's mod list.\n\nInstall through Vortex?\n\nYes = Vortex installs it (recommended)\nNo = ESP Maker copies it into Data": "Vortex が MOD を管理しています。デプロイ時に、手動でコピーした MOD をゲームの MOD 一覧から外します。\n\nVortex 経由でインストールしますか?\n\nはい = Vortex がインストール(推奨)\nいいえ = ESP Maker が Data にコピー",
 "Vortex installs mods into the game it is showing. Switch Vortex to Fallout 76 first, then press OK.": "Vortex は表示中のゲームに MOD をインストールします。先に Vortex を Fallout 76 に切り替えてから OK を押してください。",
-"Vortex switched to Fallout 76.": "Vortex を Fallout 76 に切り替えました。"
+"Vortex switched to Fallout 76.": "Vortex を Fallout 76 に切り替えました。",
+"↺ Reset look": "↺ 見た目をリセット",
+"⧉ Detach": "⧉ 切り離す",
+"Float the look editor in its own window (drag it to this window's right edge to dock it again).": "見た目エディターを別ウィンドウで開きます（このウィンドウの右端にドラッグすると再びドッキングします）。",
+"Dock the look editor here": "見た目エディターをここにドッキング",
+"Open / close the look editor (Ctrl+L)": "見た目エディターを開く / 閉じる (Ctrl+L)",
+"Let go to dock the look editor here": "離すと見た目エディターをここにドッキングします",
+"OWN": "個別"
 }

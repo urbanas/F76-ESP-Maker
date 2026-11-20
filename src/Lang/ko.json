@@ -1099,5 +1099,12 @@
 "Vortex manages some of these mods - when it deploys, it keeps only its own mods in the list. Use Hand to Vortex for the others.": "이 모드 중 일부는 Vortex가 관리합니다 - 배포할 때 목록에 자기 모드만 남깁니다. 나머지는 \"Vortex에 넘기기\"를 쓰세요.",
 "Vortex manages your mods, and when it deploys it removes mods copied in by hand from the game's mod list.\n\nInstall through Vortex?\n\nYes = Vortex installs it (recommended)\nNo = ESP Maker copies it into Data": "Vortex가 모드를 관리하며, 배포할 때 손으로 복사한 모드를 게임 모드 목록에서 뺍니다.\n\nVortex를 통해 설치할까요?\n\n예 = Vortex가 설치 (권장)\n아니요 = ESP Maker가 Data에 복사",
 "Vortex installs mods into the game it is showing. Switch Vortex to Fallout 76 first, then press OK.": "Vortex는 지금 보여 주는 게임에 모드를 설치합니다. 먼저 Vortex를 Fallout 76으로 바꾼 뒤 확인을 누르세요.",
-"Vortex switched to Fallout 76.": "Vortex를 Fallout 76으로 바꿨습니다."
+"Vortex switched to Fallout 76.": "Vortex를 Fallout 76으로 바꿨습니다.",
+"↺ Reset look": "↺ 모양 초기화",
+"⧉ Detach": "⧉ 분리",
+"Float the look editor in its own window (drag it to this window's right edge to dock it again).": "모양 편집기를 별도 창으로 엽니다 (이 창의 오른쪽 가장자리로 끌면 다시 도킹됩니다).",
+"Dock the look editor here": "모양 편집기를 여기에 도킹",
+"Open / close the look editor (Ctrl+L)": "모양 편집기 열기 / 닫기 (Ctrl+L)",
+"Let go to dock the look editor here": "놓으면 모양 편집기가 여기에 도킹됩니다",
+"OWN": "개별"
 }

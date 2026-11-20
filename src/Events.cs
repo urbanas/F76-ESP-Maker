@@ -114,7 +114,7 @@ public static class EventCatalog
             c.Entries.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
             result.Add(c);
         }
-        return result;
+        return result; // (the category tree sorts them A-Z by the shown name: MainForm.AddSectionNode)
     }
 
     /// <summary>The pick for the costumes Spooky Scorched wear; built as two entries, heads and bodies.</summary>

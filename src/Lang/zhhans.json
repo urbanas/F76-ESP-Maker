@@ -1100,5 +1100,12 @@
 "Vortex manages some of these mods - when it deploys, it keeps only its own mods in the list. Use Hand to Vortex for the others.": "其中一些模组由 Vortex 管理——部署时它只在列表中保留自己的模组。其他模组请用“交给 Vortex”。",
 "Vortex manages your mods, and when it deploys it removes mods copied in by hand from the game's mod list.\n\nInstall through Vortex?\n\nYes = Vortex installs it (recommended)\nNo = ESP Maker copies it into Data": "Vortex 管理你的模组，部署时会把手动复制的模组从游戏的模组列表中移除。\n\n通过 Vortex 安装？\n\n是 = 由 Vortex 安装（推荐）\n否 = 由 ESP Maker 复制到 Data",
 "Vortex installs mods into the game it is showing. Switch Vortex to Fallout 76 first, then press OK.": "Vortex 会把模组安装到它当前显示的游戏中。请先把 Vortex 切换到 Fallout 76，然后按“确定”。",
-"Vortex switched to Fallout 76.": "Vortex 已切换到 Fallout 76。"
+"Vortex switched to Fallout 76.": "Vortex 已切换到 Fallout 76。",
+"↺ Reset look": "↺ 重置外观",
+"⧉ Detach": "⧉ 分离",
+"Float the look editor in its own window (drag it to this window's right edge to dock it again).": "在单独的窗口中打开外观编辑器（拖到本窗口右边缘即可重新停靠）。",
+"Dock the look editor here": "将外观编辑器停靠在这里",
+"Open / close the look editor (Ctrl+L)": "打开 / 关闭外观编辑器 (Ctrl+L)",
+"Let go to dock the look editor here": "松开即可将外观编辑器停靠在这里",
+"OWN": "自定义"
 }

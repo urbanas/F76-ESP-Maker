@@ -2310,16 +2310,16 @@ sealed class ModelView : UserControl
         return (parts, hx, hy);
     }
 
-    /// <summary>Barn wall panels behind the item, seen from the starting camera (the far, +y side, turned to face the item); a small item gets a
-    /// small wall (1.6 x its height, at least 30 cm - a 3 m barn wall behind a bobblehead filled the whole picture), big
-    /// items the real size. Null without the wall model.</summary>
+    /// <summary>Barn wall panels behind the item, seen from the starting camera (the far, +y side, turned to face the item): always the
+    /// game's real panel size, 1 m behind the item (user, 2026-11-20: a wall that shrank with small items misled the X-ray check and
+    /// the size; it was 1.6 x the item's height before). More panels only for very wide / tall items. Null without the wall model.</summary>
     internal static List<PreviewPart>? WallBehind(Dictionary<string, PreviewScene>? models, (float X, float Y, float Z) min, (float X, float Y, float Z) max)
     {
         if (models == null || !models.TryGetValue(PropWall, out var wall)) return null;
         float w = wall.Max.X - wall.Min.X, h = wall.Max.Z - wall.Min.Z;
         if (w < 50 || h < 50) return null;
-        float size = Math.Max(max.X - min.X, Math.Max(max.Y - min.Y, max.Z - min.Z));
-        float k = Math.Min(1f, Math.Max(21f, (max.Z - min.Z) * 1.6f) / h), sw = w * k, sh = h * k, gap = Math.Max(10, size * 0.4f);
+        const float k = 1f;
+        float sw = w, sh = h, gap = StyleEditor.UnitsPerMetre;
         int nx = Math.Max(1, (int)MathF.Ceiling((max.X - min.X + 2 * gap) / sw)), nz = Math.Max(1, (int)MathF.Ceiling((max.Z - min.Z + gap) / sh));
         float cx = (min.X + max.X) / 2, hx = nx * sw / 2, y = max.Y + gap;
         var parts = new List<PreviewPart>();

@@ -706,6 +706,70 @@ sealed class SizablePopup : Form
     }
 }
 
+/// <summary>A see-through accent area (never focused, clicks go through) showing where the dragged look pop-up will dock.</summary>
+sealed class DockHint : Form
+{
+    public DockHint()
+    {
+        FormBorderStyle = FormBorderStyle.None;
+        ShowInTaskbar = false;
+        StartPosition = FormStartPosition.Manual;
+        Opacity = 0.45;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+    }
+    protected override bool ShowWithoutActivation => true;
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= 0x20 | 0x80 | 0x08000000; // WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+            return cp;
+        }
+    }
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    /// <summary>Just under <paramref name="top"/> (the dragged pop-up stays on top of it).</summary>
+    public void Below(Form top) => SetWindowPos(Handle, top.Handle, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); // NOSIZE | NOMOVE | NOACTIVATE
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Ui.Accent);
+        using var edge = new Pen(Ui.Fg, 3);
+        g.DrawRectangle(edge, 1, 1, Width - 3, Height - 3);
+        TextRenderer.DrawText(g, Text, big ??= new Font(Font.FontFamily, 14f, FontStyle.Bold), new Rectangle(10, 0, Width - 20, Height), Color.White,
+                              TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
+    }
+    Font? big;
+}
+
+/// <summary>The thin strip on the main window's right edge that opens / closes the docked look panel (text turned 90°).</summary>
+sealed class SideTab : Control
+{
+    bool hover;
+    public SideTab()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        Cursor = Cursors.Hand;
+    }
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(hover ? Ui.Line : Ui.Panel);
+        using (var edge = new Pen(Ui.Line)) g.DrawLine(edge, 0, 0, 0, Height);
+        g.TranslateTransform(Width, 0);
+        g.RotateTransform(90);
+        // (TextRenderer ignores the turn - GDI+ text does not)
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        using var fg = new SolidBrush(Ui.Fg);
+        using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        g.DrawString(Text, Font, fg, new RectangleF(0, 0, Height, Width), sf);
+    }
+}
+
 /// <summary>A panel that lets the mouse through near its edges (to the window under it: <see cref="SizablePopup"/>'s grips).</summary>
 sealed class EdgePanel : Panel
 {

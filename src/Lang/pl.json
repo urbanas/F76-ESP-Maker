@@ -1099,5 +1099,12 @@
 "Vortex manages some of these mods - when it deploys, it keeps only its own mods in the list. Use Hand to Vortex for the others.": "Vortex zarządza częścią tych modów - przy wdrażaniu zostawia na liście tylko swoje. Dla pozostałych użyj „Przekaż do Vortexa”.",
 "Vortex manages your mods, and when it deploys it removes mods copied in by hand from the game's mod list.\n\nInstall through Vortex?\n\nYes = Vortex installs it (recommended)\nNo = ESP Maker copies it into Data": "Vortex zarządza twoimi modami i przy wdrażaniu usuwa z listy modów gry te skopiowane ręcznie.\n\nZainstalować przez Vortexa?\n\nTak = instaluje Vortex (zalecane)\nNie = ESP Maker kopiuje go do Data",
 "Vortex installs mods into the game it is showing. Switch Vortex to Fallout 76 first, then press OK.": "Vortex instaluje mody w grze, którą właśnie pokazuje. Najpierw przełącz Vortexa na Fallout 76, potem kliknij OK.",
-"Vortex switched to Fallout 76.": "Przełączono Vortexa na Fallout 76."
+"Vortex switched to Fallout 76.": "Przełączono Vortexa na Fallout 76.",
+"↺ Reset look": "↺ Resetuj wygląd",
+"⧉ Detach": "⧉ Odłącz",
+"Float the look editor in its own window (drag it to this window's right edge to dock it again).": "Otwiera edytor wyglądu w osobnym oknie (przeciągnij go do prawej krawędzi tego okna, aby znów go zadokować).",
+"Dock the look editor here": "Zadokuj tutaj edytor wyglądu",
+"Open / close the look editor (Ctrl+L)": "Otwórz / zamknij edytor wyglądu (Ctrl+L)",
+"Let go to dock the look editor here": "Puść, aby zadokować tutaj edytor wyglądu",
+"OWN": "WŁASNY"
 }

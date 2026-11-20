@@ -23,6 +23,12 @@ public sealed class Settings
     public int[]? PopupAt { get; set; }
     /// <summary>The look pop-up's size, as the user dragged it (null = the default).</summary>
     public int[]? PopupSize { get; set; }
+    /// <summary>The look editor sits in a panel on the main window's right (true, 2026-11-20) or floats as the pop-up.</summary>
+    public bool LookDocked { get; set; } = true;
+    /// <summary>The docked look panel is open (false = only its tab on the right edge shows).</summary>
+    public bool LookOpen { get; set; }
+    /// <summary>The docked look panel's width as dragged (0 = the default).</summary>
+    public int DockWidth { get; set; }
     /// <summary>Dark colours for the main window.</summary>
     public bool Dark { get; set; }
     /// <summary>More > Compact rows: lower rows in the category list and the item list.</summary>

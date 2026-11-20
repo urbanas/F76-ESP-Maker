@@ -1,6 +1,23 @@
 ESP Maker - changes
 ===================
 
+2.7
+New
+- The look editor is docked on the right of the main window instead of popping up on every click,
+  so arrow keys move through the list. The "Look" edge tab or Ctrl+L opens and closes it, drag its
+  left edge to resize. "Detach" floats it in its own window; drag that window to the main window's
+  right edge to dock it again (a tinted hint shows where it goes).
+- The Look column is shorter: an "OWN" badge for items with their own look, then one small icon
+  per feature (glow, beam, arrow, icon, text...) in the look's colours. Hover for the words.
+- New item fixes ask right away to restart ESP Maker (the status bar line was easy to miss).
+Changed
+- Build & save and the big-mod size warning are one window.
+- 3D view: the wall behind the item is always the same real size, 1 m behind it.
+- Events, Enemies and Other categories are sorted A-Z.
+- "Reset" is now "Reset look".
+Fixed
+- Light mode: white and pale colours were almost invisible in the Look column and the layer list.
+
 2.6
 New
 - Vortex support. When Vortex manages your mods, "Build & save" hands the mod to Vortex ("Through

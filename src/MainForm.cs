@@ -119,6 +119,14 @@ public sealed class MainForm : Form
     /// <summary>The pop-up look editor (made the first time it opens).</summary>
     Form? lookPopup;
     Panel? lookPopupInside;
+    /// <summary>The look editor docked on the window's right (settings.LookDocked), its splitter and the edge tab that
+    /// opens / closes it (or, while the editor floats, docks it again).</summary>
+    readonly Panel dockPanel = new() { Dock = DockStyle.Right, Visible = false, Padding = new Padding(4, 2, 2, 4) };
+    readonly Panel dockInside = new() { Dock = DockStyle.Fill };
+    readonly Splitter dockSplit = new() { Dock = DockStyle.Right, Width = 5, Visible = false, MinSize = 380, MinExtra = 300 };
+    readonly SideTab dockTab = new() { Dock = DockStyle.Right, Width = 24 };
+    /// <summary>The Look cell's words while the mouse is on it (the cell itself shows icons).</summary>
+    readonly ToolTip lookTip = new();
     Action categoryPicked = () => { };
 
     /// <summary>"1.0", "1.0.1"... (the project's Version).</summary>
@@ -263,7 +271,7 @@ public sealed class MainForm : Form
                 TextRenderer.DrawText(e.Graphics, hint, list.Font, Rectangle.FromLTRB(e.Bounds.Right - hintW, e.Bounds.Top, e.Bounds.Right - 6, e.Bounds.Bottom),
                                       lit ? SystemColors.HighlightText : lookHot ? Ui.Accent : Ui.Muted, flags | TextFormatFlags.Right);
             }
-            if (e.ColumnIndex != 0 && e.ColumnIndex != 2 || en == null && e.ColumnIndex == 2)
+            if (e.ColumnIndex != 0 && e.ColumnIndex != 2 || e.ColumnIndex == 2 && e.SubItem?.Tag is not LookIcons.Cell)
             {
                 // plain text (category, details; a part row's look)
                 using (var bg = new SolidBrush(cellBg)) e.Graphics.FillRectangle(bg, e.Bounds);
@@ -278,26 +286,15 @@ public sealed class MainForm : Form
                 // the look (an ingredient's: each of its looks in its own colour)
                 using (var bg = new SolidBrush(cellBg)) e.Graphics.FillRectangle(bg, e.Bounds);
                 int x = e.Bounds.Left + 4, right = e.Bounds.Right - 4 - hintW;
-                var looks = e.SubItem?.Tag as List<(string Text, Color Colour)> ?? new() { (e.SubItem?.Text ?? "", e.SubItem?.ForeColor ?? list.ForeColor) };
-                if (en != null && e.SubItem?.Text.Length > 0)
-                {
-                    // a little picture of the look (as the look tiles draw it), faded when it just follows the category
-                    var of = en.Group?.FirstOrDefault() ?? en;
-                    int side = e.Bounds.Height - 4;
-                    var pic = new Rectangle(x, e.Bounds.Top + 2, side, side);
-                    ItemFinder.PresetTiles.DrawStyle(e.Graphics, project.StyleOf(of, CatOf(of)), pic);
-                    if (!project.Overrides.ContainsKey(of.Id))
-                        using (var fade = new SolidBrush(Color.FromArgb(90, cellBg))) e.Graphics.FillRectangle(fade, pic);
-                    x = pic.Right + 6;
-                }
-                for (int i = 0; i < looks.Count && x < right; i++)
-                {
-                    // an ingredient's looks (bush and item): each part in its own colour (the picture replaces the "■")
-                    var part = (i > 0 ? " / " : "") + looks[i].Text.Replace("■ ", "");
-                    TextRenderer.DrawText(e.Graphics, part, list.Font, new Rectangle(x, e.Bounds.Top, right - x, e.Bounds.Height),
-                                          lit ? SystemColors.HighlightText : looks[i].Colour, flags | TextFormatFlags.EndEllipsis);
-                    x += TextRenderer.MeasureText(e.Graphics, part, list.Font, Size.Empty, flags).Width;
-                }
+                // a little picture of the look (as the look tiles draw it), the "OWN" badge, then one icon per feature
+                // (user, 2026-11-20: the words got too long); all faded when it just follows the category
+                var lc = (LookIcons.Cell)e.SubItem!.Tag!;
+                int side = e.Bounds.Height - 4, start = x;
+                var pic = new Rectangle(x, e.Bounds.Top + 2, side, side);
+                ItemFinder.PresetTiles.DrawStyle(e.Graphics, lc.Looks[0].Style, pic);
+                x = LookIcons.Draw(e.Graphics, lc, pic.Right + 6, right, e.Bounds, list.Font, lit, SystemColors.HighlightText);
+                if (!lc.Looks.Any(l => l.Own))
+                    using (var fade = new SolidBrush(Color.FromArgb(Ui.Dark ? 110 : 75, cellBg))) // lighter on the white list: pale looks vanished e.Graphics.FillRectangle(fade, Rectangle.FromLTRB(start, e.Bounds.Top, Math.Min(x, right), e.Bounds.Bottom));
                 EditHint();
                 Separator();
                 return;
@@ -359,6 +356,10 @@ public sealed class MainForm : Form
             var old = hoverLink;
             hoverLink = now;
             list.Cursor = now != null ? Cursors.Hand : Cursors.Default;
+            // the look cell shows icons: its words come up under the mouse
+            if (now is (int ti, 2) && list.Items[ti].SubItems[2].Text is { Length: > 0 } words)
+                lookTip.Show(words.Replace("■ ", ""), list, e.X + 14, e.Y + 20, 10000);
+            else lookTip.Hide(list);
             foreach (var h in new[] { old, now })
                 if (h is (int i, _) && i < list.Items.Count) list.Invalidate(list.Items[i].Bounds);
         };
@@ -366,6 +367,7 @@ public sealed class MainForm : Form
         {
             if (hoverLink is (int i, _) && i < list.Items.Count) list.Invalidate(list.Items[i].Bounds);
             hoverLink = null;
+            lookTip.Hide(list);
             list.Cursor = Cursors.Default;
         };
         // a click on a row: Wine / Proton (Steam Deck) doesn't reliably send the list's click notice, so the press is
@@ -406,21 +408,13 @@ public sealed class MainForm : Form
                 BeginInvoke(EditLookOfSelection);
                 return;
             }
-            // a part row (one brahmin type under Brahmin): its own look opens too, like an item row (user, 2026-11-15)
-            if (e.Button == MouseButtons.Left && hitItem?.Tag is PartRow && e.X >= hitItem.GetBounds(ItemBoundsPortion.Label).Left
-                && Control.ModifierKeys == Keys.None && lookPopup is not { Visible: true })
-            {
-                BeginInvoke(EditLookOfSelection);
-                return;
-            }
+            // (a plain click on a row or part row only picks it now - user, 2026-11-20: the editor kept popping up while
+            //  arrowing through the list; the docked panel / open pop-up follows the picked row)
             if (e.Button != MouseButtons.Left || hitItem?.Tag is not Entry en) return;
             // "8 parts ›": open / close the parts under the row
             if (LinkAt(hitItem, 0) is Rectangle badge && badge.Contains(e.Location)) { ToggleRows(en); return; }
             var label = hitItem.GetBounds(ItemBoundsPortion.Label);
             if (Expandable(en) && e.X >= label.Left && e.X < label.Left + 20) { ToggleRows(en); return; } // the ► / ▼ in front of the name (the box is left of it)
-            // a plain click anywhere else on the row (not its tick box): the look pop-up opens; once open it follows the picked row
-            if (e.X >= label.Left && Control.ModifierKeys == Keys.None && lookPopup is not { Visible: true })
-                BeginInvoke(EditLookOfSelection);
         }
         list.KeyDown += (_, e) =>
         {
@@ -550,6 +544,7 @@ public sealed class MainForm : Form
         // the look editor: a pop-up next to the clicked look
         var centre = new Panel { Dock = DockStyle.Fill };
         centre.Controls.Add(middle);
+        BuildLookDock(centre);
         catLookButton.Click += (_, _) =>
         {
             // the category's own look: nothing picked in the list
@@ -663,6 +658,7 @@ public sealed class MainForm : Form
         {
             if (e.Control && e.KeyCode == Keys.F) { search.Focus(); search.SelectAll(); e.Handled = e.SuppressKeyPress = true; }
             if (e.Control && e.KeyCode == Keys.K) { e.Handled = e.SuppressKeyPress = true; QuickJump(); }
+            if (e.Control && e.KeyCode == Keys.L) { e.Handled = e.SuppressKeyPress = true; ToggleLook(); }
             if (e.Control && e.KeyCode is Keys.Z or Keys.Y && !Typing(this))
             {
                 e.Handled = e.SuppressKeyPress = true;
@@ -695,7 +691,7 @@ public sealed class MainForm : Form
                     if (catTree.SelectedNode != node) return;
                     // the category was just shown (AfterSelect): only redo the panel when a row is still picked - twice flickers
                     if (list.SelectedItems.Count > 0) { list.SelectedItems.Clear(); ShowInspector(); }
-                    OpenLookPopup(catTree.RectangleToScreen(node.Bounds));
+                    if (!settings.LookDocked) OpenLookPopup(catTree.RectangleToScreen(node.Bounds)); // docked: the open panel shows it, a closed one stays closed
                 });
             }
             if (e.Node != catTree.SelectedNode) return; // another node: AfterSelect does it
@@ -954,6 +950,7 @@ public sealed class MainForm : Form
             RefreshCategoryCounts();
             // start on Your picks; with nothing ticked yet (a new user) on the first category instead
             SelectNode(project.Selected.Count > 0 ? picksNode : FirstCat(roots[1]));
+            if (settings.LookDocked && settings.LookOpen) OpenDock(true); // the docked look panel, open when the app was closed
             int ticked = cats.Sum(TickedIn);
             Status(Tf("Ready - {0:N0} things to choose from ({1}: {2}).", ShownCats.Sum(c => c.Entries.Count), game.Edition, game.GameFolder));
             Log(Tf("Fallout 76 ({0}) in {1}; mods are listed in {2}.", game.Edition, game.GameFolder, game.IniPath));
@@ -1006,6 +1003,8 @@ public sealed class MainForm : Form
         {
             Log(Tf("Item fixes version {0} ({1}) downloaded - they apply after a restart.", newer.Version, newer.Updated));
             ShowNotice(Tf("New item fixes (version {0}) - restart to use them", newer.Version), () => OfferRestart(newer));
+            // ask right away too - the status bar line was easy to miss (user, 2026-11-20); not while a build runs
+            BeginInvoke(() => { if (!UseWaitCursor) OfferRestart(newer); });
         }
         else if (note.Length > 0) Log(Tf("Couldn't check for item fixes: {0}", note));
         else if (manual) Log(Tf("No newer item fixes - version {0} is in use.", Rules.Current.Version));
@@ -1072,7 +1071,10 @@ public sealed class MainForm : Form
         {
             var parent = sec;
             if (g.Key != "") sec.Nodes.Add(parent = new TreeNode { Tag = new CatGroup(section, g.Key) });
-            foreach (var c in g) parent.Nodes.Add(new TreeNode { Tag = c });
+            // Events, Enemies and Other: A-Z by the shown (translated) name (user, 2026-11-20); Items and Junk keep their order
+            var list = section is "EVENTS" or "ENEMIES" or Catalog.AllSection
+                ? g.OrderBy(c => c.Shown, StringComparer.CurrentCultureIgnoreCase) : (IEnumerable<Category>)g;
+            foreach (var c in list) parent.Nodes.Add(new TreeNode { Tag = c });
         }
         roots.Add(sec);
     }
@@ -1458,8 +1460,93 @@ public sealed class MainForm : Form
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr w, IntPtr l);
 
+    /// <summary>The docked look panel, made once: [⧉ Detach] over the editor, a splitter to drag its width, and the edge
+    /// tab (open / close; while the editor floats it docks it again).</summary>
+    void BuildLookDock(Panel centre)
+    {
+        inspector.Detach.Click += (_, _) => SetLookDocked(false);
+        var tip = new ToolTip();
+        tip.SetToolTip(inspector.Detach, Tr("Float the look editor in its own window (drag it to this window's right edge to dock it again)."));
+        dockPanel.Controls.Add(dockInside);
+        // docked from the last added: the tab at the edge, the panel left of it, the splitter, the list fills the rest
+        centre.Controls.Add(dockSplit);
+        centre.Controls.Add(dockPanel);
+        centre.Controls.Add(dockTab);
+        dockSplit.SplitterMoved += (_, _) => { settings.DockWidth = dockPanel.Width; settings.Save(); };
+        dockTab.Click += (_, _) => { if (settings.LookDocked) OpenDock(!dockPanel.Visible); else SetLookDocked(true); };
+        tip.SetToolTip(dockTab, Tr("Open / close the look editor (Ctrl+L)"));
+        UpdateDockTab();
+        // (it opens again once the game is read - LoadGame; while loading it showed an empty, broken-looking editor - user, 2026-11-20)
+    }
+
+    void UpdateDockTab() => dockTab.Text = !settings.LookDocked ? "◀  " + Tr("Dock the look editor here")
+                                         : dockPanel.Visible ? "▶  " + Tr("Look") : "◀  " + Tr("Look");
+
+    /// <summary>Opens / closes the docked look panel (it keeps showing the picked row's or category's look).</summary>
+    void OpenDock(bool open)
+    {
+        if (open)
+        {
+            if (inspector.Parent != dockInside) dockInside.Controls.Add(inspector);
+            inspector.Docked = true;
+            dockPanel.Width = DockWidthIn(dockPanel.Parent!.ClientSize.Width);
+            Ui.Apply(dockPanel);
+        }
+        dockPanel.Visible = dockSplit.Visible = open;
+        UpdateDockTab();
+        if (settings.LookOpen != open) { settings.LookOpen = open; settings.Save(); }
+        if (!open) list.Focus();
+    }
+
+    /// <summary>The ⧉ Detach button (false) / the edge tab while it floats (true).</summary>
+    void SetLookDocked(bool docked)
+    {
+        settings.LookDocked = docked;
+        settings.Save();
+        if (docked) { lookPopup?.Hide(); OpenDock(true); }
+        else { dockPanel.Visible = dockSplit.Visible = false; UpdateDockTab(); EditLookOfSelection(); }
+    }
+
+    bool popupDragging;
+    DockHint? dockHint;
+
+    /// <summary>The docked panel's width in a centre area <paramref name="room"/> wide.</summary>
+    int DockWidthIn(int room) => Math.Clamp(settings.DockWidth > 0 ? settings.DockWidth : (int)(760 * DeviceDpi / 96f), 380, Math.Max(380, room - dockTab.Width - 300));
+
+    /// <summary>The mouse (dragging the pop-up) is at the main window's right edge: inside its last strip or just past it.</summary>
+    bool InDockZone(Point mouse)
+    {
+        if (WindowState == FormWindowState.Minimized) return false;
+        int zone = (int)(110 * DeviceDpi / 96f);
+        return mouse.Y >= Top && mouse.Y <= Bottom && mouse.X >= Right - zone && mouse.X <= Right + zone / 3;
+    }
+
+    /// <summary>The tinted "Let go to dock" area where the docked panel would be (under the dragged pop-up).</summary>
+    void ShowDockHint(bool show)
+    {
+        // the dragged pop-up goes see-through over the area, so the hint shows under it
+        if (lookPopup != null) { double o = show ? 0.7 : 1.0; if (lookPopup.Opacity != o) lookPopup.Opacity = o; }
+        if (!show) { if (dockHint is { Visible: true }) dockHint.Hide(); return; }
+        var centre = dockPanel.Parent!;
+        var area = centre.RectangleToScreen(centre.ClientRectangle);
+        int w = DockWidthIn(area.Width);
+        dockHint ??= new DockHint { Owner = this, Text = Tr("Let go to dock the look editor here") };
+        dockHint.Bounds = new Rectangle(area.Right - w, area.Top, w, area.Height);
+        if (!dockHint.Visible) dockHint.Show();
+        dockHint.Below(lookPopup!);
+    }
+
+    /// <summary>Ctrl+L: the look editor open / closed (docked or floating).</summary>
+    void ToggleLook()
+    {
+        if (settings.LookDocked) OpenDock(!dockPanel.Visible);
+        else if (lookPopup is { Visible: true }) lookPopup.Hide();
+        else EditLookOfSelection();
+    }
+
     void OpenLookPopup(Rectangle anchor)
     {
+        if (settings.LookDocked) { OpenDock(true); return; }
         if (lookPopup == null)
         {
             lookPopup = new SizablePopup
@@ -1488,14 +1575,24 @@ public sealed class MainForm : Form
                 c.MouseDown += (_, e) =>
                 {
                     if (e.Button != MouseButtons.Left) return;
+                    var before = settings.PopupAt;
                     ReleaseCapture();
-                    SendMessage(lookPopup.Handle, 0xA1, 2, IntPtr.Zero); // WM_NCLBUTTONDOWN, HTCAPTION
+                    popupDragging = true;
+                    SendMessage(lookPopup.Handle, 0xA1, 2, IntPtr.Zero); // WM_NCLBUTTONDOWN, HTCAPTION - returns when the mouse is let go
+                    popupDragging = false;
+                    bool dock = InDockZone(Cursor.Position);
+                    ShowDockHint(false);
+                    // let go at the main window's right edge: it docks there (and floats from where it was, next time)
+                    if (dock) { settings.PopupAt = before; SetLookDocked(true); }
                 };
+            // dragged near the main window's right edge: a tinted area shows where it will dock
+            lookPopup.Move += (_, _) => { if (popupDragging) ShowDockHint(InDockZone(Cursor.Position)); };
             // dragged somewhere: it opens there from now on (also after a restart)
             lookPopup.ResizeEnd += (_, _) => { settings.PopupAt = new[] { lookPopup.Left, lookPopup.Top }; settings.PopupSize = new[] { lookPopup.Width, lookPopup.Height }; settings.Save(); };
             // (no growing / shrinking with the settings any more - user, 2026-11-09: it jumped; drag its edges instead)
         }
         if (inspector.Parent != lookPopupInside) lookPopupInside!.Controls.Add(inspector);
+        inspector.Docked = false;
         ApplyTheme();
         var at = settings.PopupAt is { Length: 2 } p ? new Point(p[0], p[1]) : (Point?)null;
         var area = PopupArea(at is { } a0 && Screen.AllScreens.Any(s => s.WorkingArea.Contains(a0)) ? Screen.FromPoint(a0).WorkingArea : Screen.FromRectangle(anchor).WorkingArea);
@@ -1565,6 +1662,7 @@ public sealed class MainForm : Form
         SuspendLayout();
         Ui.Apply(this);
         if (inspector.Parent == null) Ui.Apply(inspector);
+        dockTab.Invalidate();
         if (lookPopup != null)
         {
             Ui.Apply(lookPopup);
@@ -1861,8 +1959,8 @@ public sealed class MainForm : Form
             // a part: its own look, or the item's (greyed: it just follows)
             var own = project.PartLooks.GetValueOrDefault(pr.Entry.Id)?.GetValueOrDefault(pr.Model);
             var pc = li.SubItems[2];
-            if (own != null) (pc.Text, pc.ForeColor) = LookText(own, pr.Entry, true);
-            else { pc.Text = Tr("as the item"); pc.ForeColor = SystemColors.GrayText; }
+            if (own != null) { (pc.Text, pc.ForeColor) = LookText(own, pr.Entry, true); pc.Tag = new LookIcons.Cell(new() { new(own, pr.Entry, true) }); }
+            else { pc.Text = Tr("as the item"); pc.ForeColor = SystemColors.GrayText; pc.Tag = null; }
             li.ForeColor = PartOn(pr) ? list.ForeColor : SystemColors.GrayText;
             return;
         }
@@ -1871,13 +1969,16 @@ public sealed class MainForm : Form
         if (e.Group != null)
         {
             // an ingredient (bush + item): the looks of its entries; a recipe: its ingredients' - one if they agree, else each
-            var looks = (HasRows(e) ? Leaves(e) : e.Group).Select(LookCell).Distinct().ToList();
+            var parts = (HasRows(e) ? Leaves(e) : e.Group).Select(g => (Entry: g, Cell: LookCell(g))).GroupBy(t => t.Cell).Select(t => t.First()).ToList();
+            var looks = parts.Select(t => t.Cell).ToList();
             cell.Text = looks.Count == 1 ? looks[0].Text : string.Join(" / ", looks.Select(l => l.Text));
             cell.ForeColor = looks.Count > 0 ? looks[0].Colour : SystemColors.GrayText;
-            cell.Tag = looks.Count > 1 ? looks : null; // drawn in parts, each in its own colour
+            // drawn as icons, each look in its own colours
+            cell.Tag = new LookIcons.Cell(parts.Select(t => new LookIcons.Look(project.StyleOf(t.Entry, CatOf(t.Entry)), t.Entry, project.Overrides.ContainsKey(t.Entry.Id))).ToList());
             return;
         }
         (cell.Text, cell.ForeColor) = LookCell(e);
+        cell.Tag = new LookIcons.Cell(new() { new(project.StyleOf(e, CatOf(e)), e, project.Overrides.ContainsKey(e.Id)) });
     }
 
     /// <summary>An entry's look in the Look column: "■ glow + beam 14 m" in its colour ("own: " for its own look).</summary>
@@ -2924,14 +3025,22 @@ public sealed class MainForm : Form
         RefreshColours();
     }
 
-    async Task<BuildResult?> Build(string outFile)
+    /// <summary>"That's 1,505 models (roughly 250 MB)..." for a very big mod (over 500 models), else null; with the question when <paramref name="ask"/>.</summary>
+    string? SizeWarning(bool ask)
+    {
+        if (game == null) return null;
+        var (models, bytes) = Builder.Estimate(project, cats, game);
+        if (models <= 500) return null;
+        var text = Tf("That's {0:N0} models (roughly {1:N0} MB). A very big mod makes the game load longer and fills the world with beams.\n\nBuild it anyway?", models, bytes / 1_000_000);
+        return ask ? text : text.Split("\n\n")[0]; // in the Build & save dialog: the warning without the question (its Build button answers it)
+    }
+
+    /// <param name="sizeShown">The Build & save dialog already showed the size warning: don't ask again.</param>
+    async Task<BuildResult?> Build(string outFile, bool sizeShown = false)
     {
         if (game == null) return null;
         if (project.Selected.Count == 0) { Box(Tr("Select at least one item first."), Text); return null; }
-        var (models, bytes) = Builder.Estimate(project, cats, game);
-        if (models > 500 && Box(
-                Tf("That's {0:N0} models (roughly {1:N0} MB). A very big mod makes the game load longer and fills the world with beams.\n\nBuild it anyway?", models, bytes / 1_000_000),
-                Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return null;
+        if (!sizeShown && SizeWarning(true) is string big && Box(big, Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return null;
         SetBusy(true);
         logBox.Clear();
         Log(Tf("Building {0}...", Path.GetFileName(outFile)));
@@ -3036,6 +3145,9 @@ public sealed class MainForm : Form
             flow.Controls.Add(box);
             flow.Controls.Add(install);
             if (ItemFinder.Vortex.ManagesGame) flow.Controls.Add(vortex);
+            // a very big mod: the warning sits in this dialog (user, 2026-11-20: one window instead of two)
+            if (SizeWarning(false) is string big)
+                flow.Controls.Add(new Label { Text = "⚠ " + big, AutoSize = true, MaximumSize = new Size(360, 0), UseMnemonic = false, ForeColor = Ui.Accent, Margin = new Padding(3, 10, 3, 0) });
             return () =>
             {
                 var n = box.Text.Trim();
@@ -3065,10 +3177,10 @@ public sealed class MainForm : Form
         if (AskSave() is not var (name, install, viaVortex)) return;
         project.ModName = name;
         Save();
-        if (!install) { BuildFile(); return; }
+        if (!install) { BuildFile(true); return; }
         if (GameData.GameRunning) { Box(Tr("Close Fallout 76 first - the game locks its archives while it runs."), Text); return; }
         var outFile = Path.Combine(OutputDir, ArchiveName(name));
-        if (await Build(outFile) is not BuildResult built) return;
+        if (await Build(outFile, sizeShown: true) is not BuildResult built) return;
         try
         {
             // the mod, and its texture archive when it replaces game textures
@@ -3113,11 +3225,11 @@ public sealed class MainForm : Form
     }
 
     /// <summary>"Install in the game" off: only the file, wherever the user wants it.</summary>
-    async void BuildFile()
+    async void BuildFile(bool sizeShown = false)
     {
         using var dlg = new SaveFileDialog { Filter = "BA2 archive|*.ba2", FileName = ArchiveName(project.ModName), InitialDirectory = Directory.CreateDirectory(OutputDir).FullName };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
-        if (await Build(dlg.FileName) is BuildResult r)
+        if (await Build(dlg.FileName, sizeShown) is BuildResult r)
             Log(r.TextureArchive != null
                 ? Tf("Two files: {0} and {1}. To use them: put both in the game's Data folder and add both names to the END of sResourceArchive2List in {2} (or install them with your mod manager).", Path.GetFileName(dlg.FileName), Path.GetFileName(r.TextureArchive), game?.IniName ?? "Fallout76Custom.ini")
                 : Tf("To use it: put the file in the game's Data folder and add its name to the END of sResourceArchive2List in {0} (or install it with your mod manager).", game?.IniName ?? "Fallout76Custom.ini"));

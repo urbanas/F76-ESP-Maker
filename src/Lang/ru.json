@@ -1102,5 +1102,12 @@
 "Vortex manages some of these mods - when it deploys, it keeps only its own mods in the list. Use Hand to Vortex for the others.": "Vortex управляет частью этих модов — при развёртывании он оставляет в списке только свои. Для остальных используйте «Передать в Vortex».",
 "Vortex manages your mods, and when it deploys it removes mods copied in by hand from the game's mod list.\n\nInstall through Vortex?\n\nYes = Vortex installs it (recommended)\nNo = ESP Maker copies it into Data": "Vortex управляет вашими модами и при развёртывании убирает из списка модов игры моды, скопированные вручную.\n\nУстановить через Vortex?\n\nДа = установит Vortex (рекомендуется)\nНет = ESP Maker скопирует его в Data",
 "Vortex installs mods into the game it is showing. Switch Vortex to Fallout 76 first, then press OK.": "Vortex устанавливает моды в ту игру, которая в нём открыта. Сначала переключите Vortex на Fallout 76, затем нажмите OK.",
-"Vortex switched to Fallout 76.": "Vortex переключён на Fallout 76."
+"Vortex switched to Fallout 76.": "Vortex переключён на Fallout 76.",
+"↺ Reset look": "↺ Сбросить оформление",
+"⧉ Detach": "⧉ Открепить",
+"Float the look editor in its own window (drag it to this window's right edge to dock it again).": "Открыть редактор оформления в отдельном окне (перетащите его к правому краю этого окна, чтобы снова закрепить).",
+"Dock the look editor here": "Закрепить редактор оформления здесь",
+"Open / close the look editor (Ctrl+L)": "Открыть / закрыть редактор оформления (Ctrl+L)",
+"Let go to dock the look editor here": "Отпустите, чтобы закрепить редактор оформления здесь",
+"OWN": "СВОЙ"
 }

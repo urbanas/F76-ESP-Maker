@@ -33,8 +33,10 @@ The app finds the game by itself. If it can't, it asks for the folder:
 HOW TO USE
 1. Pick a section in the bar on the far left, then a category - or search (Ctrl+K jumps to any
    category or item). Select what you want to find.
-2. Click the category to choose its look in the pop-up. Click an item for its own look. The
-   pop-up stays open and follows the row you pick; drag it anywhere, drag its edges to resize.
+2. Choose the look in the look editor on the right (the "Look" tab or Ctrl+L opens and closes
+   it). Click the category for its look, an item for its own look (or click its Look cell); the
+   editor follows the row you pick, and arrow keys move through the list. "Detach" floats it
+   in its own window; drag that window to the main window's right edge to dock it again.
    Start from a preset (Glow only / Glow + beam / Glow + beam + name). The bottom row is the item
    itself (Outline / Fill / Bright glow, colour, strength, or Off / Invisible). "+ Add on top"
    stacks layers above it: Beam, Arrow, Icon (picture or 3D model), Item copy, Text - in any

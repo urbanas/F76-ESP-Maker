@@ -296,7 +296,14 @@ public sealed class StyleEditor : UserControl
                 using var a = new SolidBrush(Color.FromArgb(160, 120, 80)); using var b = new SolidBrush(Color.FromArgb(90, 122, 60));
                 g.FillPie(a, dot, 90, 180); g.FillPie(b, dot, 270, 180);
             }
-            else using (var b = new SolidBrush(Dot)) g.FillEllipse(b, dot);
+            else
+            {
+                using (var b = new SolidBrush(Dot)) g.FillEllipse(b, dot);
+                // a thin edge so a white (or very dark) colour still shows on the list (user, 2026-11-20)
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using var edge = new Pen(Color.FromArgb(150, Ui.Muted), 1f);
+                g.DrawEllipse(edge, dot.X, dot.Y, dot.Width - 1, dot.Height - 1);
+            }
             x += d + 8;
             int textW = (item ? Width - 6 : Button(0).Left - 4) - x;
             using var bold = new Font(Font, FontStyle.Bold);
