@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "version": 8,
+  "version": 9,
   "minApp": "2.5",
   "latestApp": "2.6",
-  "updated": "2026-11-19",
+  "updated": "2026-11-20",
   "changes": [
     { "version": 8, "text": [ "ESP Maker 2.6 is out: Vortex support - your mod goes through Vortex, so Vortex no longer drops it from the game's mod list" ] },
     { "version": 7, "text": [ "ESP Maker 2.5.5 is out: new categories Nuked flora (Stable Flux) and Flux plants outside blast zones, and the Mod Manager installs mods from downloaded archives" ] },
@@ -841,6 +841,37 @@
               "setdressing\\guntherswagon\\guntherswagon.nif"
             ],
             "detail": "CAMP getaway wagons light up too"
+          }
+        ]
+      },
+      {
+        "name": "Gearin' Up",
+        "group": "Public events",
+        "prefixes": "(?!)",
+        "ownModels": "(?!)",
+        "color": "#B0B8C0",
+        "description": "Gearin' Up (Burning Springs): the Sturdy Scrap Metal barrels to collect, the scrap dumpster they go to and the deathclaw cage.",
+        "picks": [
+          {
+            "name": "Sturdy Scrap Metal",
+            "models": [
+              "setdressing\\burn_assets\\burn_deathclawarmour_barrel_01.nif"
+            ],
+            "detail": "the scrap barrels that spawn during the event"
+          },
+          {
+            "name": "Scrap dumpster (forging machine)",
+            "models": [
+              "setdressing\\burn_assets\\burn_scrapdumpster\\burn_scrapyarddumpster_activator.nif"
+            ],
+            "detail": "where the scrap is brought"
+          },
+          {
+            "name": "Deathclaw cage",
+            "models": [
+              "furniture\\deathclaw\\burn_deathclawcage\\burn_deathclawcage.nif"
+            ],
+            "detail": "the tamed deathclaw's cage"
           }
         ]
       },
