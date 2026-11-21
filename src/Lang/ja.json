@@ -1106,5 +1106,9 @@
 "Dock the look editor here": "見た目エディターをここにドッキング",
 "Open / close the look editor (Ctrl+L)": "見た目エディターを開く / 閉じる (Ctrl+L)",
 "Let go to dock the look editor here": "離すと見た目エディターをここにドッキングします",
-"OWN": "個別"
+"OWN": "個別",
+"ESP Maker {0} is available": "ESP Maker {0} が利用可能です",
+"what's new:": "新機能:",
+"Open the Nexus page to download it?": "Nexus のページを開いてダウンロードしますか？",
+"Item fixes version {0} ({1}) downloaded - no item changes, only news.": "アイテム修正 バージョン {0} ({1}) をダウンロードしました - アイテムの変更はなく、お知らせのみです。"
 }

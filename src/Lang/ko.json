@@ -1106,5 +1106,9 @@
 "Dock the look editor here": "모양 편집기를 여기에 도킹",
 "Open / close the look editor (Ctrl+L)": "모양 편집기 열기 / 닫기 (Ctrl+L)",
 "Let go to dock the look editor here": "놓으면 모양 편집기가 여기에 도킹됩니다",
-"OWN": "개별"
+"OWN": "개별",
+"ESP Maker {0} is available": "ESP Maker {0} 사용 가능",
+"what's new:": "새로운 내용:",
+"Open the Nexus page to download it?": "Nexus 페이지를 열어 다운로드하시겠습니까?",
+"Item fixes version {0} ({1}) downloaded - no item changes, only news.": "아이템 수정 버전 {0} ({1}) 다운로드됨 - 아이템 변경 없음, 소식만 있음."
 }

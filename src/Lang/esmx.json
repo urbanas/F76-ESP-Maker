@@ -1106,5 +1106,9 @@
 "Dock the look editor here": "Acoplar aquí el editor de estilo",
 "Open / close the look editor (Ctrl+L)": "Abrir / cerrar el editor de estilo (Ctrl+L)",
 "Let go to dock the look editor here": "Suelta para acoplar aquí el editor de estilo",
-"OWN": "PROPIO"
+"OWN": "PROPIO",
+"ESP Maker {0} is available": "ESP Maker {0} está disponible",
+"what's new:": "novedades:",
+"Open the Nexus page to download it?": "¿Abrir la página de Nexus para descargarlo?",
+"Item fixes version {0} ({1}) downloaded - no item changes, only news.": "Correcciones de objetos versión {0} ({1}) descargadas: sin cambios de objetos, solo novedades."
 }

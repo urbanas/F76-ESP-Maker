@@ -61,6 +61,17 @@ public sealed class Rules
             (list.Count > 1 ? Loc.Tf("Version {0}", c.Version) + "\n" : "") + string.Join("\n", c.Text.Select(s => "• " + Tr(s)))));
     }
 
+    /// <summary>True when only the header and change notes differ (a release announcement, no item fix) - user 2026-11-22:
+    /// the "Item fixes" dialog for a version notice was confusing.</summary>
+    public bool SameFixesAs(Rules other) => FixesJson(this) == FixesJson(other);
+
+    static string FixesJson(Rules r)
+    {
+        var c = JsonSerializer.Deserialize<Rules>(JsonSerializer.Serialize(r, Options), Options)!;
+        c.Version = 0; c.LatestApp = null; c.Updated = ""; c.MinApp = ""; c.Changes = new(); c.Translations = new();
+        return JsonSerializer.Serialize(c, Options);
+    }
+
     // ---- loading
 
     /// <summary>The rules in use (set at start; a newer download takes effect after a restart).</summary>

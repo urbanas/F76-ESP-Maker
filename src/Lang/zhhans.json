@@ -1107,5 +1107,9 @@
 "Dock the look editor here": "将外观编辑器停靠在这里",
 "Open / close the look editor (Ctrl+L)": "打开 / 关闭外观编辑器 (Ctrl+L)",
 "Let go to dock the look editor here": "松开即可将外观编辑器停靠在这里",
-"OWN": "自定义"
+"OWN": "自定义",
+"ESP Maker {0} is available": "ESP Maker {0} 已发布",
+"what's new:": "新内容：",
+"Open the Nexus page to download it?": "打开 Nexus 页面下载吗？",
+"Item fixes version {0} ({1}) downloaded - no item changes, only news.": "已下载物品修正版本 {0} ({1}) - 没有物品更改，只有消息。"
 }

@@ -999,6 +999,20 @@ public sealed class MainForm : Form
     {
         if (manual) Status(Tr("Checking for item fixes..."));
         var (newer, fetched, note) = await Rules.CheckOnline();
+        if (newer != null && newer.SameFixesAs(Rules.Current))
+        {
+            // only a release note: no item fix to restart for - the new rules apply quietly at the next start
+            Log(Tf("Item fixes version {0} ({1}) downloaded - no item changes, only news.", newer.Version, newer.Updated));
+            var app = newer.LatestApp;
+            if (app != null && Rules.NewerThanApp(app) && (manual || settings.LatestAppSeen != app))
+            {
+                settings.LatestAppSeen = app;
+                settings.Save();
+                ShowNotice(Tf("ESP Maker {0} is out - open the Nexus page", app), () => OpenUrl(Rules.NexusUrl));
+                BeginInvoke(() => { if (!UseWaitCursor) OfferNewApp(app, newer); });
+            }
+            return;
+        }
         if (newer != null)
         {
             Log(Tf("Item fixes version {0} ({1}) downloaded - they apply after a restart.", newer.Version, newer.Updated));
@@ -1040,6 +1054,15 @@ public sealed class MainForm : Form
         if (Box(text, Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return false;
         RestartForRules();
         return true;
+    }
+
+    /// <summary>A new ESP Maker version (rules with no item changes): what's new, then the Nexus page.</summary>
+    void OfferNewApp(string app, Rules r)
+    {
+        var changes = r.ChangesSince(Rules.Current.Version);
+        var text = Tf("ESP Maker {0} is available", app) + (changes.Length > 0 ? " - " + Tr("what's new:") + "\n\n" + changes : "")
+                 + "\n\n" + Tr("Open the Nexus page to download it?");
+        if (Box(text, Text, MessageBoxButtons.YesNo) == DialogResult.Yes) OpenUrl(Rules.NexusUrl);
     }
 
     void ShowNotice(string text, Action click)

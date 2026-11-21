@@ -1109,5 +1109,9 @@
 "Dock the look editor here": "Закрепить редактор оформления здесь",
 "Open / close the look editor (Ctrl+L)": "Открыть / закрыть редактор оформления (Ctrl+L)",
 "Let go to dock the look editor here": "Отпустите, чтобы закрепить редактор оформления здесь",
-"OWN": "СВОЙ"
+"OWN": "СВОЙ",
+"ESP Maker {0} is available": "Доступен ESP Maker {0}",
+"what's new:": "что нового:",
+"Open the Nexus page to download it?": "Открыть страницу Nexus, чтобы скачать?",
+"Item fixes version {0} ({1}) downloaded - no item changes, only news.": "Исправления предметов версии {0} ({1}) загружены — изменений предметов нет, только новости."
 }

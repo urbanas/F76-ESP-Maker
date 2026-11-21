@@ -1107,5 +1107,9 @@
 "Dock the look editor here": "Look-Editor hier andocken",
 "Open / close the look editor (Ctrl+L)": "Look-Editor öffnen / schließen (Strg+L)",
 "Let go to dock the look editor here": "Loslassen, um den Look-Editor hier anzudocken",
-"OWN": "EIGEN"
+"OWN": "EIGEN",
+"ESP Maker {0} is available": "ESP Maker {0} ist verfügbar",
+"what's new:": "Neuigkeiten:",
+"Open the Nexus page to download it?": "Nexus-Seite zum Herunterladen öffnen?",
+"Item fixes version {0} ({1}) downloaded - no item changes, only news.": "Objektkorrekturen Version {0} ({1}) heruntergeladen – keine Objektänderungen, nur Neuigkeiten."
 }
