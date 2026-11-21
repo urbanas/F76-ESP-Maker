@@ -1,6 +1,15 @@
 ESP Maker - changes
 ===================
 
+2.7.1
+Fixed
+- Hiding clothes with a body mod installed: each hidden outfit used to get its own copy of the body,
+  so a detailed body mod made the mod huge (3 GB) and the build very slow. All hidden outfits now
+  share one copy - small mod, quick build.
+- Body mods (EVB76, Summer Kissed Skin...) that ESP Maker can't change are now used as they are
+  under hidden clothes, instead of the game's own body wearing the mod's skin (broken textures).
+- Mod Manager: the list keeps its scroll position when you tick or move a mod.
+
 2.7
 New
 - The look editor is docked on the right of the main window instead of popping up on every click,

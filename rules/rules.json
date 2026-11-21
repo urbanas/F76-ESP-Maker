@@ -1,10 +1,11 @@
 {
   "schema": 1,
-  "version": 10,
+  "version": 11,
   "minApp": "2.5",
-  "latestApp": "2.7",
-  "updated": "2026-11-20",
+  "latestApp": "2.7.1",
+  "updated": "2026-11-21",
   "changes": [
+    { "version": 11, "text": [ "ESP Maker 2.7.1 is out: much smaller and faster builds when you hide clothes (all hidden outfits share one body), body mods (EVB76, Summer Kissed...) are kept as they are under hidden clothes, and the Mod Manager keeps its scroll position" ] },
     { "version": 10, "text": [ "ESP Maker 2.7 is out: the look editor is docked on the right (no more pop-up on every click), a shorter Look column with icons, and light-mode fixes" ] },
     { "version": 9, "text": [ "New: EVENTS > Gearin' Up (Burning Springs) - the Sturdy Scrap Metal barrels, the scrap dumpster (forging machine) and the deathclaw cage" ] },
     { "version": 8, "text": [ "ESP Maker 2.6 is out: Vortex support - your mod goes through Vortex, so Vortex no longer drops it from the game's mod list" ] },
