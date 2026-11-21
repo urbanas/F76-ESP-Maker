@@ -221,14 +221,22 @@ public static class Ba2Writer
         var rw = new BinaryWriter(records);
         var blobs = new List<byte[]>();
         long pos = dataStart;
+        // identical files (hidden outfits = the same bare body) are stored once: their records point at one copy
+        var stored = new Dictionary<string, (long Pos, uint Packed)>();
         foreach (var (path, data) in files)
         {
             var h = Ba2Hash.Of(path);
-            var packed = Zlib.Compress(data);
+            var key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data));
+            if (!stored.TryGetValue(key, out var at))
+            {
+                var packed = Zlib.Compress(data);
+                at = (pos, (uint)packed.Length);
+                stored[key] = at;
+                blobs.Add(packed);
+                pos += packed.Length;
+            }
             rw.Write(h.Name); rw.Write(Encoding.ASCII.GetBytes(h.Ext.PadRight(4, '\0')[..4])); rw.Write(h.Dir);
-            rw.Write(0x00100100u); rw.Write(pos); rw.Write((uint)packed.Length); rw.Write((uint)data.Length); rw.Write(0xBAADF00Du);
-            blobs.Add(packed);
-            pos += packed.Length;
+            rw.Write(0x00100100u); rw.Write(at.Pos); rw.Write(at.Packed); rw.Write((uint)data.Length); rw.Write(0xBAADF00Du);
         }
         WriteArchive(file, "GNRL", files.Count, records.ToArray(), blobs, pos, files.Select(f => f.Path));
     }

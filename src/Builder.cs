@@ -21,6 +21,9 @@ public static class Builder
         var replaced = new List<TextureOut>(); // the game's own textures, replaced
         var materials = new Dictionary<string, byte[]>();
         var done = new Dictionary<string, string>(); // model -> entry name that claimed it
+        // hidden outfits all become the same bare body: read and patch it once per look (a body mod's body can be
+        // 11 MB - 330 copies made the build take very long, user 2026-11-21)
+        var bareCache = new Dictionary<(string Src, string Archive, PatchOptions Opts), (PatchResult R, bool FellBack, bool RawBody)>();
         var conflicts = new List<string>();
         var cutouts = new Dictionary<string, Cut>(); // game material -> how its glow must be made
         var masks = new Dictionary<string, bool[,]>(); // 3D icon shapes
@@ -152,10 +155,11 @@ public static class Builder
                     if (done.TryGetValue(path, out var by)) { log(Tf("  {0}: {1} is also selected as {2} - that look is used", e.Shown, model, by)); continue; }
                     // a hidden worn outfit: the bare body / hands go in its place (the outfit model is the body under it too)
                     var srcPath = path;
+                    string? bareModel = null;
                     if (e.HideAs(model, look) is string bare)
                     {
                         opts = opts with { Invisible = false };
-                        if (bare.Length > 0) { srcPath = @"meshes\" + bare; log(Tf("  {0}: {1} - shown as {2}", e.Shown, model, bare)); }
+                        if (bare.Length > 0) { srcPath = @"meshes\" + bare; bareModel = bare; log(Tf("  {0}: {1} - shown as {2}", e.Shown, model, bare)); }
                         else log($"  {e.Name}: {model} - kept visible (covers hair / head, which can't be shown instead)");
                     }
                     var winner = game.Find(srcPath);
@@ -164,17 +168,35 @@ public static class Builder
                     try
                     {
                         PatchResult r;
-                        bool fellBack = false;
-                        try { r = NifPatch.Apply(src.Archive.ReadFile(src), opts); }
+                        bool fellBack = false, rawBody = false;
+                        var bareKey = (srcPath, src.Archive.FileName, opts);
+                        if (bareModel != null && bareCache.TryGetValue(bareKey, out var hit)) (r, fellBack, rawBody) = hit;
+                        else
+                        {
+                        var srcData = src.Archive.ReadFile(src);
+                        try { r = NifPatch.Apply(srcData, opts); }
+                        catch (Exception ex) when (bareModel != null && project.KeepOtherMods && src != game.FindOriginal(srcPath))
+                        {
+                            // a body mod's bare body / hands in a form this app can't change (EVB76, Summer Kissed Skin: Fallout 4
+                            // models, version 130 - the game loads them): copied as it is. The original game body would wear
+                            // that mod's skin materials, laid out for its own mesh - broken textures (user report 2026-11-20)
+                            r = new PatchResult(srcData, 0, false, "");
+                            rawBody = true;
+                            log(Tf("  {0}: {1} from {2} copied unchanged ({3}) - no glow or marker on it", e.Shown, bareModel, src.Archive.FileName, ex.Message));
+                        }
                         catch (Exception ex) when (game.FindOriginal(srcPath) is { } orig && orig != src)
                         {
                             // the other mod's file is gone (removed while the app was open) or in a form this app can't change
-                            log(Tf("  {0}: couldn't use {1} from {2} ({3}) - using the original game model", e.Shown, model, src.Archive.FileName, ex.Message));
+                            log(Tf("  {0}: couldn't use {1} from {2} ({3}) - using the original game model", e.Shown, bareModel ?? model, src.Archive.FileName, ex.Message));
                             r = NifPatch.Apply(orig.Archive.ReadFile(orig), opts);
                             fellBack = true;
                         }
+                        if (bareModel != null) bareCache[bareKey] = (r, fellBack, rawBody);
+                        }
                         if (winner != null && !winner.Archive.FileName.StartsWith("SeventySix - ", StringComparison.OrdinalIgnoreCase))
-                            conflicts.Add(project.KeepOtherMods && !fellBack
+                            conflicts.Add(rawBody
+                                ? Tf("{0}: {1} is the body from {2} - used as it is (this app can't add a highlight to it)", e.Shown, model, winner.Archive.FileName)
+                                : project.KeepOtherMods && !fellBack
                                 ? Tf("{0}: {1} is also changed by {2} - kept its changes and added the highlight on top", e.Shown, model, winner.Archive.FileName)
                                 : fellBack
                                 ? Tf("{0}: {1} is also changed by {2} - its version couldn't be read, so this starts from the original game model and replaces it", e.Shown, model, winner.Archive.FileName)

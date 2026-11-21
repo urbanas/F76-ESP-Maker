@@ -382,8 +382,12 @@ sealed class ModManager : Form
     {
         loading = true;
         list.BeginUpdate();
-        list.Items.Clear();
-        int n = 0;
+        // rows are updated in place when the count is the same (tick / move): clearing the list
+        // jumped it back to the top, so the view scrolled under the mouse on every click
+        bool reuse = list.Items.Count == mods.Count;
+        int top = list.TopItem?.Index ?? 0;
+        if (!reuse) list.Items.Clear();
+        int n = 0, row = 0;
         foreach (var m in mods)
         {
             string what = m.Name + (m.Own ? Tr("   (ESP Maker)") : "") + (m.Link || m.VortexOff ? Tr("   (Vortex)") : "");
@@ -406,13 +410,30 @@ sealed class ModManager : Form
             it.ToolTipText = m.FoundAt != null
                 ? what + "\n" + info + "\n" + Tr("The game only loads archives that sit directly in the Data folder.")
                 : what + (info is "" or "..." ? "" : "\n" + info);
-            if (m.VortexOff) it.ForeColor = Ui.ToTheme(m.On ? Color.SteelBlue : Color.Gray);
-            else if (m.Missing) it.ForeColor = Ui.ToTheme(Color.Firebrick);
-            else if (!m.On) it.ForeColor = Ui.ToTheme(Color.Gray);
-            list.Items.Add(it);
-            if (m == select) { it.Selected = true; it.Focused = true; }
+            Color? fc = m.VortexOff ? Ui.ToTheme(m.On ? Color.SteelBlue : Color.Gray)
+                : m.Missing ? Ui.ToTheme(Color.Firebrick)
+                : !m.On ? Ui.ToTheme(Color.Gray) : null;
+            if (fc != null) it.ForeColor = fc.Value;
+            if (reuse)
+            {
+                var old = list.Items[row];
+                for (int i = 0; i < it.SubItems.Count; i++) old.SubItems[i].Text = it.SubItems[i].Text;
+                old.Checked = it.Checked;
+                old.Tag = m;
+                old.ToolTipText = it.ToolTipText;
+                old.ForeColor = fc ?? list.ForeColor;
+                if (m == select) { old.Selected = true; old.Focused = true; }
+                else if (old.Selected) old.Selected = false;
+            }
+            else
+            {
+                list.Items.Add(it);
+                if (m == select) { it.Selected = true; it.Focused = true; }
+            }
+            row++;
         }
         list.EndUpdate();
+        if (!reuse && top > 0 && top < list.Items.Count) list.TopItem = list.Items[top];
         if (select != null && list.SelectedItems.Count > 0) list.SelectedItems[0].EnsureVisible();
         moveToData.Enabled = Selected()?.FoundAt != null;
         loading = false;
