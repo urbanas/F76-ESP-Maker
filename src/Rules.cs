@@ -101,7 +101,7 @@ public sealed class Rules
         {
             if (!File.Exists(path)) continue;
             var (r, error) = Parse(File.ReadAllText(path));
-            if (r == null) { log?.Invoke(Loc.Tf("Item fixes in {0} were skipped: {1}", path, error)); continue; }
+            if (r == null) { log?.Invoke(Loc.Tf("Item list updates in {0} were skipped: {1}", path, error)); continue; }
             if (r.Version > best.Version) { best = r; source = from; }
         }
         Use(best, source);

@@ -51,10 +51,10 @@ public sealed class MainForm : Form
     readonly ToolStripMenuItem keepItem = new(Tr("Keep other mods' changes"));
     /// <summary>Which game install is used (Steam or Microsoft Store / Game Pass) - click to pick another.</summary>
     readonly ToolStripMenuItem gameItem = new(Tr("Game folder..."));
-    /// <summary>Options: item fixes (Rules.cs) - check online at start, check now, load a file, and which ones are in use.</summary>
-    readonly ToolStripMenuItem onlineItem = new(Tr("Check online for item fixes at start")) { CheckOnClick = true };
+    /// <summary>Options: item list updates (Rules.cs) - check online at start, check now, load a file, and which ones are in use.</summary>
+    readonly ToolStripMenuItem onlineItem = new(Tr("Check online for item list updates at start")) { CheckOnClick = true };
     readonly ToolStripMenuItem rulesInfo = new() { Enabled = false };
-    /// <summary>The link at the right of the status bar: "Restart to use them" after new item fixes, "Nexus page" for a
+    /// <summary>The link at the right of the status bar: "Restart to use them" after new item list updates, "Nexus page" for a
     /// new version.</summary>
     readonly LinkLabel notice = new() { Dock = DockStyle.Right, AutoSize = true, Visible = false, Padding = new Padding(0, 0, 8, 0) };
     Action noticeClick = () => { };
@@ -603,8 +603,8 @@ public sealed class MainForm : Form
                 Item(Tr("Colour by priority..."), PriorityColours)),
             Menu(Tr("&View"), darkItem, compactItem, languageMenu, new ToolStripSeparator(), logItem),
             Menu(Tr("&Options"), Item(Tr("Mod manager..."), OpenModManager), new ToolStripSeparator(), keepItem, gameItem,
-                new ToolStripSeparator(), onlineItem, Item(Tr("Check for item fixes now"), () => _ = CheckRules(true)),
-                Item(Tr("Load item fixes file..."), LoadRulesFile), rulesInfo),
+                new ToolStripSeparator(), onlineItem, Item(Tr("Check for item list updates now"), () => _ = CheckRules(true)),
+                Item(Tr("Load item list updates file..."), LoadRulesFile), rulesInfo),
             Menu(Tr("&Help"), Item(Tr("Show the tour..."), () => { using var t = new Tutorial(Font); t.ShowDialog(this); })),
         });
         MainMenuStrip = menuBar;
@@ -646,7 +646,7 @@ public sealed class MainForm : Form
         notice.LinkClicked += (_, _) => noticeClick();
         onlineItem.Checked = settings.OnlineRules == true;
         onlineItem.CheckedChanged += (_, _) => { settings.OnlineRules = onlineItem.Checked; settings.Save(); };
-        onlineItem.ToolTipText = Tr("When ESP Maker starts, it downloads one text file with item fixes from GitHub. Nothing is sent.");
+        onlineItem.ToolTipText = Tr("When ESP Maker starts, it downloads one text file with item list updates from GitHub. Nothing is sent.");
         ShowRulesInfo();
         Controls.Add(menuBar); // added last: docks above everything
         Load += (_, _) => { RestoreWindow(split); ApplyTheme(); ApplyDensity(); _ = LoadGameAsync(); };
@@ -956,7 +956,7 @@ public sealed class MainForm : Form
             Log(Tf("Fallout 76 ({0}) in {1}; mods are listed in {2}.", game.Edition, game.GameFolder, game.IniPath));
             if (ticked > 0) Log(Tf("Your last setup was loaded: {0} item(s) selected.", ticked));
             Log(Tf("ESP Maker {0}", AppVersion));
-            Log(Tf("Item fixes: version {0} ({1}, {2}).", Rules.Current.Version, RulesSource(), Rules.Current.Updated));
+            Log(Tf("Item list updates: version {0} ({1}, {2}).", Rules.Current.Version, RulesSource(), Rules.Current.Updated));
             foreach (var note in StartNotes) Log(note);
             gameItem.Text = Tf("Game: {0} - change...", game.Edition);
             ShowInstallState();
@@ -974,18 +974,18 @@ public sealed class MainForm : Form
         catch (Exception ex) { Status(Tr("Error: ") + ex.Message); Log(ex.ToString()); }
     }
 
-    // ---- item fixes (Rules.cs): online only with the user's consent, asked once
+    // ---- item list updates (Rules.cs): online only with the user's consent, asked once
 
     static string RulesSource() => Rules.Source switch { "downloaded" => Tr("downloaded"), "file" => Tr("from a file"), _ => Tr("built in") };
 
-    void ShowRulesInfo() => rulesInfo.Text = Tf("Item fixes in use: version {0} ({1})", Rules.Current.Version, RulesSource());
+    void ShowRulesInfo() => rulesInfo.Text = Tf("Item list updates in use: version {0} ({1})", Rules.Current.Version, RulesSource());
 
     void StartRulesCheck()
     {
         if (Environment.GetCommandLineArgs().Length > 1) return; // dev and test commands never go online or ask
         if (settings.OnlineRules == null)
         {
-            bool yes = Box(Tr("Check online for item fixes when ESP Maker starts?\n\nIt downloads one small text file from GitHub - the lists of which models belong to which enemy, event and item - and sends nothing. Fixes then arrive without a new version.\n\nYou can change this any time in Options."),
+            bool yes = Box(Tr("Check online for item list updates when ESP Maker starts?\n\nIt downloads one small text file from GitHub - the lists of which models belong to which enemy, event and item - and sends nothing. Updates then arrive without a new version.\n\nYou can change this any time in Options."),
                            Text, MessageBoxButtons.YesNo) == DialogResult.Yes;
             onlineItem.Checked = yes; // saves the setting
             settings.OnlineRules = yes;
@@ -994,15 +994,15 @@ public sealed class MainForm : Form
         if (settings.OnlineRules == true) _ = CheckRules(false);
     }
 
-    /// <summary>One download of the item fixes; newer ones are saved and apply after a restart (status bar link).</summary>
+    /// <summary>One download of the item list updates; newer ones are saved and apply after a restart (status bar link).</summary>
     async Task CheckRules(bool manual)
     {
-        if (manual) Status(Tr("Checking for item fixes..."));
+        if (manual) Status(Tr("Checking for item list updates..."));
         var (newer, fetched, note) = await Rules.CheckOnline();
         if (newer != null && newer.SameFixesAs(Rules.Current))
         {
             // only a release note: no item fix to restart for - the new rules apply quietly at the next start
-            Log(Tf("Item fixes version {0} ({1}) downloaded - no item changes, only news.", newer.Version, newer.Updated));
+            Log(Tf("Item list updates version {0} ({1}) downloaded - no item changes, only news.", newer.Version, newer.Updated));
             var app = newer.LatestApp;
             if (app != null && Rules.NewerThanApp(app) && (manual || settings.LatestAppSeen != app))
             {
@@ -1015,13 +1015,13 @@ public sealed class MainForm : Form
         }
         if (newer != null)
         {
-            Log(Tf("Item fixes version {0} ({1}) downloaded - they apply after a restart.", newer.Version, newer.Updated));
-            ShowNotice(Tf("New item fixes (version {0}) - restart to use them", newer.Version), () => OfferRestart(newer));
+            Log(Tf("Item list updates version {0} ({1}) downloaded - they apply after a restart.", newer.Version, newer.Updated));
+            ShowNotice(Tf("New item list updates (version {0}) - restart to use them", newer.Version), () => OfferRestart(newer));
             // ask right away too - the status bar line was easy to miss (user, 2026-11-20); not while a build runs
             BeginInvoke(() => { if (!UseWaitCursor) OfferRestart(newer); });
         }
-        else if (note.Length > 0) Log(Tf("Couldn't check for item fixes: {0}", note));
-        else if (manual) Log(Tf("No newer item fixes - version {0} is in use.", Rules.Current.Version));
+        else if (note.Length > 0) Log(Tf("Couldn't check for item list updates: {0}", note));
+        else if (manual) Log(Tf("No newer item list updates - version {0} is in use.", Rules.Current.Version));
         var latest = (fetched ?? Rules.Current).LatestApp;
         if (latest != null && Rules.NewerThanApp(latest) && (manual || settings.LatestAppSeen != latest))
         {
@@ -1034,22 +1034,22 @@ public sealed class MainForm : Form
 
     void LoadRulesFile()
     {
-        using var dlg = new OpenFileDialog { Title = Tr("Load item fixes file"), Filter = Tr("Item fixes") + " (*.json)|*.json" };
+        using var dlg = new OpenFileDialog { Title = Tr("Load item list updates file"), Filter = Tr("Item list updates") + " (*.json)|*.json" };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         if (Rules.Import(dlg.FileName, out var r) is string error) { Box(Tf("That file can't be used: {0}", error), Text); return; }
         if (r!.Version <= Rules.Current.Version)
         {
-            Box(Tf("That file has item fixes version {0} - version {1} is already in use.", r.Version, Rules.Current.Version), Text);
+            Box(Tf("That file has item list updates version {0} - version {1} is already in use.", r.Version, Rules.Current.Version), Text);
             return;
         }
-        if (!OfferRestart(r)) ShowNotice(Tf("New item fixes (version {0}) - restart to use them", r.Version), () => OfferRestart(r));
+        if (!OfferRestart(r)) ShowNotice(Tf("New item list updates (version {0}) - restart to use them", r.Version), () => OfferRestart(r));
     }
 
-    /// <summary>What the new item fixes change, then restart to use them (false = later).</summary>
+    /// <summary>What the new item list updates change, then restart to use them (false = later).</summary>
     bool OfferRestart(Rules r)
     {
         var changes = r.ChangesSince(Rules.Current.Version);
-        var text = Tf("Item fixes version {0}", r.Version) + (changes.Length > 0 ? " - " + Tr("what changed:") + "\n\n" + changes : "")
+        var text = Tf("Item list updates version {0}", r.Version) + (changes.Length > 0 ? " - " + Tr("what changed:") + "\n\n" + changes : "")
                  + "\n\n" + Tr("Restart ESP Maker now to use them?");
         if (Box(text, Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return false;
         RestartForRules();
@@ -2842,7 +2842,7 @@ public sealed class MainForm : Form
             new("vending", Tr("Player vendors"), Tr("every CAMP vending machine: glow, a tall beam and a $ icon"), I("dollar", "#FFB347")),
             new("plants", Tr("Bright plants"), Tr("harvestable plants in their own colours, brighter - nothing added, not through walls"), I("herb", Catalog.PlantGreen)),
         };
-        // the item fixes can add presets (an event that's on) and take built-in ones away
+        // the item list updates can add presets (an event that's on) and take built-in ones away
         tiles.RemoveAll(t => Rules.Current.RetirePresets.Contains(t.Key));
         foreach (var p in Rules.Current.Presets.Where(p => tiles.All(t => t.Key != p.Key)))
             tiles.Add(new(p.Key, Tr(p.Title), Tr(p.Note), p.Icon.StartsWith("model:") ? M(p.Icon, p.Color) : I(p.Icon, p.Color)));

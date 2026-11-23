@@ -17,7 +17,7 @@ The app speaks all 13 of the game's languages (**View → Language**). Item, ene
 
 ESP Maker builds the mod (`.ba2`) and installs it for you. It only changes files on your own PC. The result is a normal `.ba2` mod listed in your custom ini, like any other Fallout 76 mod.
 
-**Item fixes online (only if you allow it):** the app asks once whether it may check this repository at start for [rules/rules.json](rules/rules.json). That file lists which models belong to which enemy, event and item, so fixes arrive without a new version. It downloads only that file and sends nothing. You can change this in **Options**.
+**Item list updates (only if you allow it):** the app asks once whether it may check this repository at start for [rules/rules.json](rules/rules.json). That file lists which models belong to which enemy, event and item, so updates (new events, fixed items) arrive without a new version. It downloads only that file and sends nothing. You can change this in **Options**.
 
 ## Download
 

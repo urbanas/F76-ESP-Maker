@@ -103,9 +103,9 @@ GOOD TO KNOW
 - Enemies that turn invisible (cloaking) can't be highlighted while cloaked.
 - Plants lose their beam once harvested, but keep their pickup range - it can get in the way of
   using things right next to them.
-- Item fixes online: only if you allow it (asked once, Options to change). At start the app
-  downloads one small text file from GitHub (github.com/urbanas/F76-ESP-Maker) with fixes to its
-  item lists. Nothing is sent. New fixes apply after a restart.
+- Item list updates: only if you allow it (asked once, Options to change). At start the app
+  downloads one small text file from GitHub (github.com/urbanas/F76-ESP-Maker) with updates to its
+  item lists (new events, fixed items). Nothing is sent. New updates apply after a restart.
 - Bright colours changes the game's material, not the item: everything using that material brightens.
 - NPC vendors can't be highlighted: they share their models with ordinary robots and players' clothes.
 - If you also use other ESP mods: when two mods change the same model, the one listed later in the
