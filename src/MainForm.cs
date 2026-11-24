@@ -26,7 +26,12 @@ public sealed class MainForm : Form
     /// <summary>The real entries under a group (a recipe's ingredients' plants and items).</summary>
     static IEnumerable<Entry> Leaves(Entry e) => e.Group == null ? new[] { e } : e.Group.SelectMany(Leaves);
 
-    bool Full(Entry e) => e.Group != null ? e.Group.All(Full) : project.Selected.Contains(e.Id);
+    bool Full(Entry e) => e.Group != null ? e.Group.All(g => OnlyIn(e, g) is { } only ? only.All(m => PartLit(g, m)) : Full(g)) : project.Selected.Contains(e.Id);
+
+    /// <summary>An ingredient that is only some parts of entry g (the dirty Sugar Bombs, not the clean box): those parts;
+    /// null = all of g.</summary>
+    static List<string>? OnlyIn(Entry ing, Entry g) =>
+        ing.Only != null && g.Group == null && g.Models.Any(m => !ing.Only.Contains(m)) ? g.Models.Where(ing.Only.Contains).ToList() : null;
 
     /// <summary>Partly ticked: a recipe with only some ingredients ticked, an entry with some parts left out.</summary>
     bool IsPartial(Entry e) => e.Group != null
@@ -38,7 +43,7 @@ public sealed class MainForm : Form
     /// panel) until another category or filter is picked - to compare with and without the look, or check again.</summary>
     readonly HashSet<string> keepShown = new();
 
-    bool IsTicked(Entry e) => e.Group != null ? e.Group.Any(IsTicked) : project.Selected.Contains(e.Id);
+    bool IsTicked(Entry e) => e.Group != null ? e.Group.Any(g => OnlyIn(e, g) is { } only ? only.Any(m => PartLit(g, m)) : IsTicked(g)) : project.Selected.Contains(e.Id);
 
     readonly TreeView catTree = new() { Dock = DockStyle.Fill, Font = new Font(Loc.UiFont, 10f), HideSelection = false, ShowLines = false, FullRowSelect = true, ItemHeight = 22 };
     static readonly Font SectionFont = new(Loc.UiFont, 10f, FontStyle.Bold);
@@ -2399,7 +2404,7 @@ public sealed class MainForm : Form
         if (en.Group != null)
         {
             // a recipe (or one ingredient of it): its ingredients - with the XP recipes look as their own while ticked
-            foreach (var g in en.Group) TickWithTwins(g, on);
+            foreach (var g in en.Group) if (!TickOnlyParts(en, g, on, TickWithTwins)) TickWithTwins(g, on);
             foreach (var leaf in Leaves(en)) SetRecipeLook(leaf, on);
             return;
         }
@@ -2429,7 +2434,7 @@ public sealed class MainForm : Form
 
     void SetTicked(Entry e, bool on)
     {
-        if (e.Group != null) { foreach (var g in e.Group) SetTicked(g, on); return; } // never saved itself
+        if (e.Group != null) { foreach (var g in e.Group) if (!TickOnlyParts(e, g, on, SetTicked)) SetTicked(g, on); return; } // never saved itself
         foreach (var x in twins.GetValueOrDefault(e.Id, new()).Prepend(e))
             if (on) project.Selected.Add(x.Id); else project.Selected.Remove(x.Id);
     }
@@ -2506,6 +2511,7 @@ public sealed class MainForm : Form
             if (off.Count > 0) Log(Tf("{0}: {1} of {2} parts light up.", first.Name, first.Models.Count - off.Count, first.Models.Count));
         }
         foreach (var e in picked) SyncParts(e);
+        MirrorLooks(picked);
         Save();
         RefreshColours();
         if (first.Models.Count > 1) FillList(keepScroll: true); // the parts note in Details
@@ -2650,7 +2656,7 @@ public sealed class MainForm : Form
             inspector.ShowLook(heading, text, tickState, same, own, project.StyleOf(first, CatOf(first)), items.All(e => e.NoIcon), null,
                                items.Any(e => e.CanPick));
             inspector.View.Show(game, first, project.StyleOf(first, CatOf(first)), project.KeepOtherMods, project.OffParts.GetValueOrDefault(first.Id),
-                                SharedWith(first), IsTicked(first), null, project.PartLooks.GetValueOrDefault(first.Id));
+                                SharedWith(first), IsTicked(first), IngredientPart(tags.OfType<Entry>(), first), project.PartLooks.GetValueOrDefault(first.Id));
             return;
         }
         if (Current is Category c)
@@ -2675,6 +2681,7 @@ public sealed class MainForm : Form
         {
             if (!project.PartLooks.TryGetValue(pr.Entry.Id, out var looks)) return; // "same as the item": not editable
             looks[pr.Model] = look;
+            MirrorLooks(new[] { pr.Entry });
             Save();
             RefreshColours();
             inspector.View.Show(game!, pr.Entry, project.StyleOf(pr.Entry, CatOf(pr.Entry)), project.KeepOtherMods, project.OffParts.GetValueOrDefault(pr.Entry.Id),
@@ -2684,6 +2691,7 @@ public sealed class MainForm : Form
         if (inspItems.Count > 0)
         {
             foreach (var e in inspItems) { project.Overrides[e.Id] = look.Clone(); project.RecipeLooks.Remove(e.Id); } // their own now
+            MirrorLooks(inspItems);
             if (inspItems.Any(e => !IsTicked(e))) { Save(); TickSwitched(true); return; } // changing the look selects it (the pop-up has no tick)
         }
         else if (inspCat is Category c)
@@ -2722,6 +2730,7 @@ public sealed class MainForm : Form
     {
         foreach (var pr in parts)
             if (project.PartLooks.TryGetValue(pr.Entry.Id, out var looks) && looks.Remove(pr.Model) && looks.Count == 0) project.PartLooks.Remove(pr.Entry.Id);
+        MirrorLooks(parts.Select(p => p.Entry).Distinct());
         Save();
         FillList(keepScroll: true);
         ShowInspector();
@@ -2739,6 +2748,7 @@ public sealed class MainForm : Form
                 looks[pr.Model] = project.StyleOf(e, CatOf(e)).Clone();
             }
             else if (project.PartLooks.TryGetValue(e.Id, out var looks) && looks.Remove(pr.Model) && looks.Count == 0) project.PartLooks.Remove(e.Id);
+            MirrorLooks(new[] { e });
             Save();
             FillList(keepScroll: true); // the part's row and the item's "◆" badge
         }
@@ -2749,6 +2759,7 @@ public sealed class MainForm : Form
                 else { project.Overrides.Remove(e.Id); }
             foreach (var e in inspItems) project.RecipeLooks.Remove(e.Id);
             if (!own && inspFromRecipe) foreach (var e in inspItems) SetRecipeLook(e, true); // back to the XP recipes look
+            MirrorLooks(inspItems);
             Save();
             RefreshColours();
         }
@@ -2759,6 +2770,8 @@ public sealed class MainForm : Form
     void TickSwitched(bool on)
     {
         if (inspPart is PartRow pr) SetPartOn(pr, on);
+        else if (inspFromRecipe && inspItems.Count > 0) // recipe rows: as their boxes do (an ingredient ticks only its parts)
+            foreach (var t in list.SelectedItems.Cast<ListViewItem>().Select(li => li.Tag).OfType<Entry>().ToList()) TickWithTwins(t, on);
         else if (inspItems.Count > 0)
             foreach (var e in inspItems)
             {
@@ -2803,15 +2816,50 @@ public sealed class MainForm : Form
 
     IEnumerable<Entry> LinkedWith(string model) => (entriesByModel.GetValueOrDefault(model) ?? new()).Where(o => o.LinkParts);
 
-    /// <summary>After a change to e: its shared parts get the same state in the other entries that list them.</summary>
+    /// <summary>After a change to e: its shared parts get the same state in the other entries that list them.
+    /// Linked parts (robots) and twins alike: the same model in another category (Sugar Bombs in Pre-war food and Aid &amp;
+    /// food) is the same thing in the game - a part left out in one is left out in the other.</summary>
     void SyncParts(Entry e)
     {
-        if (!e.LinkParts) return;
+        if (e.Group != null || e.NoLink) return;
         foreach (var m in e.Models)
         {
             bool lit = PartLit(e, m);
-            foreach (var o in LinkedWith(m).Where(o => o != e)) SetPart(o, m, lit, SetTicked);
+            if (e.LinkParts) foreach (var o in LinkedWith(m).Where(o => o != e).ToList()) SetPart(o, m, lit, SetTicked);
+            else foreach (var o in twins.GetValueOrDefault(e.Id, new()).Where(o => o.Models.Contains(m)).ToList()) SetPart(o, m, lit, TickOnly);
         }
+    }
+
+    /// <summary>Ticks / unticks just this entry (its twins are kept in step part by part).</summary>
+    void TickOnly(Entry x, bool on) { if (on) project.Selected.Add(x.Id); else project.Selected.Remove(x.Id); }
+
+    /// <summary>Picked from recipe rows: the part of <paramref name="first"/> that is the ingredient (the preview opens on
+    /// the dirty Sugar Bombs box, not the clean one); null = no such part.</summary>
+    static string? IngredientPart(IEnumerable<Entry> rows, Entry first) =>
+        rows.SelectMany(r => r.Group != null && r.Only == null ? r.Group : new List<Entry> { r })
+            .Select(ing => ing.Group?.Contains(first) == true ? OnlyIn(ing, first)?.FirstOrDefault() : null).FirstOrDefault(m => m != null);
+
+    /// <summary>A recipe ingredient that is only some parts of g: those parts in or out (false = not such a case).</summary>
+    bool TickOnlyParts(Entry ing, Entry g, bool on, Action<Entry, bool> tick)
+    {
+        if (OnlyIn(ing, g) is not { } only) return false;
+        foreach (var m in only) SetPart(g, m, on, tick);
+        SyncParts(g);
+        return true;
+    }
+
+    /// <summary>Twins with exactly the same models are one thing in the game: an own look (item or part) set on one goes
+    /// to the others too.</summary>
+    void MirrorLooks(IEnumerable<Entry> edited)
+    {
+        foreach (var e in edited.Where(e => e.Group == null && !e.NoLink).ToList())
+            foreach (var o in twins.GetValueOrDefault(e.Id, new()).Where(o => o.Models.Count == e.Models.Count && o.Models.All(e.Models.Contains)))
+            {
+                if (project.Overrides.TryGetValue(e.Id, out var st)) project.Overrides[o.Id] = st.Clone(); else project.Overrides.Remove(o.Id);
+                if (project.RecipeLooks.Contains(e.Id)) project.RecipeLooks.Add(o.Id); else project.RecipeLooks.Remove(o.Id);
+                if (project.PartLooks.TryGetValue(e.Id, out var pl)) project.PartLooks[o.Id] = pl.ToDictionary(kv => kv.Key, kv => kv.Value.Clone());
+                else project.PartLooks.Remove(o.Id);
+            }
     }
 
     /// <summary>A setup just opened: a shared part that is on anywhere lights up in the game, so it is shown on everywhere.</summary>
@@ -3021,6 +3069,7 @@ public sealed class MainForm : Form
         var picked = Picked();
         if (picked.Count == 0) return;
         foreach (var e in picked) { project.Overrides[e.Id] = copiedLook.Clone(); project.RecipeLooks.Remove(e.Id); } // now their own
+        MirrorLooks(picked);
         Save();
         RefreshColours();
         Log(Tf("Pasted the look of {0} onto {1}.", copiedFrom, (picked.Count == 1 ? picked[0].Name : Tf("{0} items", picked.Count))));
@@ -3044,6 +3093,7 @@ public sealed class MainForm : Form
         // picked from XP recipes rows: back to the XP recipes look instead of their own categories'
         if (list.SelectedItems.Cast<ListViewItem>().Select(li => li.Tag).OfType<Entry>().All(x => x.Id.StartsWith("recipe:")))
             foreach (var e in picked) SetRecipeLook(e, true);
+        MirrorLooks(picked);
         Save();
         RefreshColours();
     }
@@ -3428,6 +3478,30 @@ public sealed class MainForm : Form
             Check(PartLit(guardian, arm) && guardian.Models.Where(m => m.Contains(@"\robot\parts\")).All(m => PartLit(guardian, m)), "whole Sentry Bot selected: EN06's shared parts follow");
             TickWithTwins(sentry, false); SyncParts(sentry);
             Check(!PartLit(guardian, arm) && IsTicked(guardian) && !IsTicked(robobrain), "whole Sentry Bot unselected: they go again");
+
+            log.Add("twins part by part, recipe ingredient parts");
+            var bombs = cats.SelectMany(c => c.Entries).Where(e => e.Name == "Sugar Bombs" && e.Group == null && e.Models.Count == 2).ToList();
+            var brain = cats.SelectMany(c => c.Entries).FirstOrDefault(e => e.Name == "Brain Bombs" && e.Group != null);
+            if (bombs.Count == 2 && brain != null)
+            {
+                string clean = bombs[0].Models.First(m => m.Contains("clean")), dirty = bombs[0].Models.First(m => m != clean);
+                var ing = brain.Group!.First(g => g.Name == "Sugar Bombs");
+                Check(ing.Only!.Contains(dirty) && !ing.Only.Contains(clean), "Brain Bombs needs the dirty Sugar Bombs, not the clean box");
+                TickWithTwins(brain, true);
+                Check(bombs.All(b => PartLit(b, dirty) && !PartLit(b, clean)) && IsTicked(ing) && Full(ing), "recipe ticked: only the dirty box, in both categories");
+                Check(IngredientPart(new[] { ing }, bombs[0]) == dirty, "ingredient preview opens on the dirty box");
+                SetPartOn(new PartRow(bombs[1], clean), true);
+                Check(bombs.All(b => PartLit(b, clean)), "clean part ticked in one category: ticked in the other");
+                SetPartOn(new PartRow(bombs[0], clean), false);
+                Check(bombs.All(b => !PartLit(b, clean) && PartLit(b, dirty)), "and unticked in both");
+                project.Overrides[bombs[0].Id] = new Style { GlowColor = "#13579B" };
+                MirrorLooks(new[] { bombs[0] });
+                Check(project.Overrides.GetValueOrDefault(bombs[1].Id)?.GlowColor == "#13579B", "own look reaches the same item in the other category");
+                TickWithTwins(brain, false);
+                Check(bombs.All(b => !IsTicked(b)) && !IsTicked(ing), "recipe unticked: Sugar Bombs gone in both");
+                foreach (var b in bombs) project.Overrides.Remove(b.Id);
+            }
+            else Check(false, $"Sugar Bombs twins / Brain Bombs not found ({bombs.Count})");
 
             log.Add("quick looks");
             Pick(guardian);

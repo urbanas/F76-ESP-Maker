@@ -250,6 +250,9 @@ public sealed class Entry
     /// <summary>A group of other entries (an XP recipe: its ingredients as they are listed in Plants, Aid &amp; food...).
     /// Ticking it ticks them; it has no models of its own and is never saved as ticked.</summary>
     public List<Entry>? Group;
+    /// <summary>A recipe ingredient: the models that are this ingredient. Its entries may list more (Sugar Bombs: the
+    /// irradiated cereal box the recipe needs and the clean box) - only these parts are ticked and previewed.</summary>
+    public HashSet<string>? Only;
     /// <summary>Spots in the world where something with these models is placed or can spawn; -1 = not counted
     /// (enemies). 0 = only ever in inventories - never visible in the world (a dropped item becomes a loot bag).</summary>
     public int Spots = -1;
@@ -794,7 +797,7 @@ public static class Catalog
                 recipe.Group.Add(new Entry
                 {
                     Id = recipe.Id + ":" + ing.ToLowerInvariant(), Category = string.Join(" + ", members.Select(m => m.Category).Distinct()),
-                    Name = ing, Group = members, Spots = -1, NoLink = true, ItemNames = new() { ing },
+                    Name = ing, Group = members, Only = models.ToHashSet(), Spots = -1, NoLink = true, ItemNames = new() { ing },
                     Detail = string.Join(" · ", members.Select(m => (m.Category.StartsWith("Plants") ? Tr("harvest: ") : Tr("lying around: ")) + m.Name)),
                 });
             }
