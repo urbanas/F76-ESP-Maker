@@ -1607,7 +1607,7 @@ sealed class ModelView : UserControl
         tips.SetToolTip(lookSwitchText, Tr("On: the item with your look (glow, beam, icon). Off: the original game model, to compare (preview only - the mod doesn't change)"));
         tips.SetToolTip(lookOff, Tr("Show the original game model, to compare (preview only - the mod doesn't change)"));
         Controls.Add(previewRow);
-        parts.Columns.Add("Part", 220);
+        parts.Columns.Add("Part", Ui.S(220));
         var header = new Label { Dock = DockStyle.Top, Height = 20, Text = Tr("Parts - deselect to leave out") };
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 32, WrapContents = false };
         Button B(string t, bool on) { var b = new Button { Text = t, AutoSize = true }; b.Click += (_, _) => SetAll(on); return b; }
@@ -1950,7 +1950,7 @@ sealed class ModelView : UserControl
             Text = Tr("3D view - ") + entry.Shown, StartPosition = FormStartPosition.CenterScreen, Size = new Size(area.Width * 3 / 4, area.Height * 3 / 4),
             MinimizeBox = false, ShowIcon = false, ShowInTaskbar = false, KeyPreview = true, Font = owner?.Font ?? Font, BackColor = SystemColors.Control,
         };
-        var view = new ModelView { Dock = DockStyle.Fill, ShowParts = false };
+        var view = Ui.Scaled(new ModelView { Dock = DockStyle.Fill, ShowParts = false });
         view.CopyFrom(this);
         f.Controls.Add(view);
         // the look settings move in on the right (one place to look and edit); they go back when it closes
@@ -1961,15 +1961,16 @@ sealed class ModelView : UserControl
             var dock = s.Dock;
             var stand = new Label
             {
-                Dock = dock, Size = s.Size, TextAlign = ContentAlignment.MiddleCenter, ForeColor = SystemColors.GrayText, Padding = new Padding(16),
+                Dock = dock, Size = s.Size, TextAlign = ContentAlignment.MiddleCenter, ForeColor = SystemColors.GrayText, Padding = new Padding(Ui.S(16)),
                 Text = Tr("The look settings are in the 3D view window - close it to edit them here."),
             };
-            var side = new Panel { Dock = DockStyle.Right, Width = Math.Max(360, s.Width) + 12, Padding = new Padding(8, 4, 4, 4) };
+            // (the settings are already scaled: the panel is scaled before they move in)
+            var side = Ui.Scaled(new Panel { Dock = DockStyle.Right, Width = Math.Max(360, Ui.U(s.Width)) + 12, Padding = new Padding(8, 4, 4, 4) });
             home.Controls.Add(stand);
             home.Controls.SetChildIndex(stand, at);
             s.Dock = DockStyle.Fill;
             side.Controls.Add(s);
-            f.Controls.Add(new Splitter { Dock = DockStyle.Right, Width = 6, MinSize = 300, MinExtra = 300 });
+            f.Controls.Add(Ui.Scaled(new Splitter { Dock = DockStyle.Right, Width = 6, MinSize = 300, MinExtra = 300 }));
             f.Controls.Add(side);
             f.Width = Math.Min(area.Width, f.Width + side.Width);
             giveBack = () =>
@@ -2050,7 +2051,7 @@ sealed class ModelView : UserControl
         // the toolbar at the top: the two switches, then a menu per topic (each button says its setting), then Save
         Button Drop(ContextMenuStrip m, string tip)
         {
-            var b = new Button { AutoSize = true, Margin = new Padding(3, 3, 3, 3) };
+            var b = new Button { AutoSize = true, Margin = Ui.S(new Padding(3)) };
             b.Click += (_, _) => m.Show(b, new Point(0, b.Height));
             tips.SetToolTip(b, tip);
             return b;
@@ -2060,11 +2061,11 @@ sealed class ModelView : UserControl
         visionButton = Drop(visionMenu, Tr("See the picture as someone with colour blindness does - does your colour still stand out?"));
         var camera = Drop(cameraMenu, Tr("Reset the view, stand back 10 / 30 / 100 m, spin, fit a tall beam, the keys box"));
         camera.Text = Tr("Camera ▾");
-        camera.Margin = new Padding(12, 3, 3, 3);
+        camera.Margin = Ui.S(new Padding(12, 3, 3, 3));
         var save = B(Tr("Save picture..."), Tr("Save the picture as it is now as a PNG file"), SavePicture);
-        save.Margin = new Padding(12, 3, 3, 3);
+        save.Margin = Ui.S(new Padding(12, 3, 3, 3));
         previewRow.Dock = DockStyle.Top;
-        previewRow.Padding = new Padding(4, 4, 4, 2);
+        previewRow.Padding = Ui.S(new Padding(4, 4, 4, 2));
         // drawn on the picture (top right, like the controls box) instead of a strip above it - user, 2026-11-09
         (cameraButton, saveButton) = (camera, save);
         previewRow.Visible = false;
@@ -2495,8 +2496,8 @@ sealed class ModelView : UserControl
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(4) };
         top.Controls.AddRange(new Control[] { search, cat, oneEach });
         var list = new ListView { Dock = DockStyle.Fill, View = View.Details, CheckBoxes = true, FullRowSelect = true, HeaderStyle = ColumnHeaderStyle.Nonclickable };
-        list.Columns.Add("Item", 300);
-        list.Columns.Add("Category", 220);
+        list.Columns.Add("Item", Ui.S(300));
+        list.Columns.Add("Category", Ui.S(220));
         var dots = new ImageList { ImageSize = new Size(14, 14), ColorDepth = ColorDepth.Depth32Bit };
         list.SmallImageList = dots;
         static string Colour(Style s) => s.Glow ? s.GlowColor : s.Beam ? s.BeamColor : s.GlowColor;
@@ -2890,7 +2891,7 @@ sealed class ModelView : UserControl
         }
         using var bold = new Font(Font, FontStyle.Bold);
         int nameW = groups.Max(gr => TextRenderer.MeasureText(g, gr.Name, bold).Width) + 12;
-        int boxW = Math.Min(canvas.Width - 12, 470), inner = boxW - 2 * pad - nameW;
+        int boxW = Math.Min(canvas.Width - 12, Ui.S(470)), inner = boxW - 2 * pad - nameW;
         // lay it out first (for the box's height), then draw
         var spots = new List<(Rectangle R, string Text, bool Lit, string Tip, Action<Rectangle> Click)>();
         var names = new List<(string Name, int Y)>();

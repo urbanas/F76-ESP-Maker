@@ -124,7 +124,7 @@ static class Program
         {
             // dev: the tour's pictures from the real window (into src\Tutorial, then rebuild)
             ApplicationConfiguration.Initialize();
-            var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = new Size(1500, 930) };
+            var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = Ui.S(new Size(1500, 930)) };
             var wait = new System.Windows.Forms.Timer { Interval = 300 };
             wait.Tick += async (_, _) => { if (!form.Ready) return; wait.Stop(); await form.MakeTourShots(args[1]); Environment.Exit(0); };
             form.Shown += (_, _) => wait.Start();
@@ -135,7 +135,7 @@ static class Program
         {
             // dev: drive the window and check what gets stored (uses - and resets - the setup next to the exe)
             ApplicationConfiguration.Initialize();
-            var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = new Size(1500, 930) };
+            var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = Ui.S(new Size(1500, 930)) };
             var wait = new System.Windows.Forms.Timer { Interval = 300 };
             wait.Tick += (_, _) => { if (!form.Ready) return; wait.Stop(); form.RunUiTest(args[1]); Environment.Exit(0); };
             form.Shown += (_, _) => wait.Start();
@@ -148,7 +148,7 @@ static class Program
             ApplicationConfiguration.Initialize();
             Application.ThreadException += (_, e) => File.AppendAllText(AppPaths.File("error.log"), $"{e.Exception}{Environment.NewLine}");
             MainForm.NoTour = true;
-            var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = new Size(1280, 960) };
+            var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = new Size(Ui.S(1280), Math.Min(Ui.S(960), Screen.PrimaryScreen!.WorkingArea.Height)) };
             var t = new System.Windows.Forms.Timer { Interval = 12000 };
             t.Tick += (_, _) =>
             {
@@ -194,7 +194,7 @@ static class Program
         {
             // dev: every saved setup in a folder through what opening it does (uses the setup next to the exe)
             ApplicationConfiguration.Initialize();
-            var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = new Size(1500, 930) };
+            var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = Ui.S(new Size(1500, 930)) };
             var wait = new System.Windows.Forms.Timer { Interval = 300 };
             wait.Tick += (_, _) => { if (!form.Ready) return; wait.Stop(); form.RunSetupTest(args[1], args[2]); Environment.Exit(0); };
             form.Shown += (_, _) => wait.Start();
@@ -205,7 +205,7 @@ static class Program
         {
             // dev: every .ba2 through Import and a build of the result (uses the setup next to the exe)
             ApplicationConfiguration.Initialize();
-            var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = new Size(1500, 930) };
+            var form = new MainForm { StartPosition = FormStartPosition.CenterScreen, Size = Ui.S(new Size(1500, 930)) };
             var wait = new System.Windows.Forms.Timer { Interval = 300 };
             wait.Tick += async (_, _) => { if (!form.Ready) return; wait.Stop(); await form.RunImportTest(args[1], args[2..]); Environment.Exit(0); };
             form.Shown += (_, _) => wait.Start();

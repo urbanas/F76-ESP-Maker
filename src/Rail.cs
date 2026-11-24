@@ -7,6 +7,79 @@ namespace ItemFinder;
 static class Ui
 {
     public static bool Dark;
+
+    /// <summary>Windows display scale (1 = 100 %, 1.5 = 150 %). The app is system-DPI aware: the scale is read once at start
+    /// (a second screen with another scale gets the window stretched by Windows). Sizes in the code are in 100 % pixels:
+    /// S() turns one into screen pixels, ScaleTree scales a control tree that was built with 100 % sizes.</summary>
+    public static readonly float F = ReadScale();
+    static float ReadScale()
+    {
+        try { using var g = Graphics.FromHwnd(IntPtr.Zero); return Math.Max(1f, g.DpiX / 96f); } catch { return 1f; }
+    }
+    public static int S(int px) => F == 1f ? px : (int)Math.Round(px * F);
+    public static float S(float px) => px * F;
+    /// <summary>Screen pixels back to 100 % pixels (sizes saved in the settings).</summary>
+    public static int U(int px) => F == 1f ? px : (int)Math.Round(px / F);
+    public static Size S(Size s) => new(S(s.Width), S(s.Height));
+    public static Padding S(Padding p) => new(S(p.Left), S(p.Top), S(p.Right), S(p.Bottom));
+    /// <summary>Scales the sizes, places, paddings and margins of <paramref name="root"/>'s children (not root's own size:
+    /// a form sets that itself), once, after they were built in 100 % pixels. Fonts are not touched: Windows scales them.</summary>
+    public static void ScaleTree(Control root)
+    {
+        if (F == 1f) return;
+        root.Padding = S(root.Padding);
+        foreach (Control c in root.Controls) ScaleOne(c);
+    }
+
+    /// <summary>A window built in 100 % pixels: its controls, and its own size unless it sizes itself (AutoSize).</summary>
+    public static void ScaleForm(Form f)
+    {
+        if (F == 1f) return;
+        if (f.MinimumSize != Size.Empty) f.MinimumSize = S(f.MinimumSize);
+        if (!f.AutoSize)
+        {
+            // kept on the screen (a big window at 200 % on a small screen)
+            var area = Screen.FromControl(f.Owner ?? f).WorkingArea;
+            var c = S(f.ClientSize);
+            var frame = f.Size - f.ClientSize;
+            f.ClientSize = new Size(Math.Min(c.Width, area.Width - frame.Width), Math.Min(c.Height, area.Height - frame.Height));
+            if (f.MinimumSize.Width > area.Width || f.MinimumSize.Height > area.Height)
+                f.MinimumSize = new Size(Math.Min(f.MinimumSize.Width, area.Width), Math.Min(f.MinimumSize.Height, area.Height));
+        }
+        ScaleTree(f);
+    }
+
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Control, object?> scaledOnce = new();
+
+    /// <summary>A control that sizes itself from its text and Ui.S() sizes: ScaleTree leaves its size alone.</summary>
+    public interface ISelfSized { }
+
+    /// <summary>A control (and what is in it) made after its window was scaled, with 100 % sizes: to the display scale.</summary>
+    public static T Scaled<T>(T c) where T : Control { if (F != 1f) ScaleOne(c); return c; }
+
+    /// <summary>One control and what is in it. An auto-sized control keeps sizing itself (its font already grew with
+    /// the scale; Control.Scale made such buttons twice as wide); only a height set larger than it needs is scaled.</summary>
+    static void ScaleOne(Control c)
+    {
+        // each control once (a scaled one can be moved into a window that is scaled later, e.g. the look editor)
+        if (scaledOnce.TryGetValue(c, out _)) return;
+        scaledOnce.Add(c, null);
+        c.Margin = S(c.Margin);
+        c.Padding = S(c.Padding);
+        if (c.MinimumSize != Size.Empty) c.MinimumSize = S(c.MinimumSize);
+        if (c.MaximumSize != Size.Empty) c.MaximumSize = S(c.MaximumSize);
+        if (c is Splitter sp) { sp.MinSize = S(sp.MinSize); sp.MinExtra = S(sp.MinExtra); }
+        if (c is SplitContainer sc)
+        {
+            sc.Panel1MinSize = S(sc.Panel1MinSize);
+            sc.Panel2MinSize = S(sc.Panel2MinSize);
+            sc.SplitterWidth = S(sc.SplitterWidth);
+        }
+        if (c is ISelfSized) c.Location = new Point(S(c.Left), S(c.Top));
+        else if (c.AutoSize) { if (c is ButtonBase && c.Dock == DockStyle.None) c.MinimumSize = new Size(c.MinimumSize.Width, Math.Max(c.MinimumSize.Height, S(c.Height))); }
+        else if (c is not (SplitterPanel or TabPage)) c.Bounds = new Rectangle(S(c.Left), S(c.Top), S(c.Width), S(c.Height));
+        foreach (Control k in c.Controls) ScaleOne(k);
+    }
     static Color P(int r, int g, int b, int dr, int dg, int db) => Dark ? Color.FromArgb(dr, dg, db) : Color.FromArgb(r, g, b);
     public static Color Panel => P(243, 244, 242, 34, 39, 36);
     public static Color Window => P(255, 255, 255, 28, 32, 30);
@@ -146,7 +219,8 @@ static class Ui
     {
         // dark: cloaked (hidden by Windows, still painting) until the first full paint, else its controls flash white
         bool cloaked = false;
-        f.Load += (_, _) => Apply(f);
+        // built in 100 % pixels: to the display scale first (before the dialog's own Load handlers fit it)
+        f.Load += (_, _) => { ScaleForm(f); Apply(f); };
         f.HandleCreated += (_, _) =>
         {
             TitleBar(f);
@@ -264,30 +338,30 @@ sealed class RailButton : Control
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Parent?.BackColor ?? Ui.Panel);
-        var box = new RectangleF(2, 1, Width - 4, Height - 2);
+        var box = new RectangleF(Ui.S(2), 1, Width - Ui.S(4), Height - 2);
         if (On || hover)
         {
             using var bg = new SolidBrush(On ? Ui.Sel : Ui.Hover);
-            using var path = Ui.Round(box, 7);
+            using var path = Ui.Round(box, Ui.S(7f));
             g.FillPath(bg, path);
         }
         if (Focused && ShowFocusCues)
         {
             using var pen = new Pen(Ui.Accent, 1.5f);
-            using var path = Ui.Round(box, 7);
+            using var path = Ui.Round(box, Ui.S(7f));
             g.DrawPath(pen, path);
         }
         var colour = On ? Ui.Fg : Ui.Muted;
-        DrawIcon(g, Icon, new RectangleF(Width / 2f - 11, 9, 22, 22), colour);
+        DrawIcon(g, Icon, new RectangleF(Width / 2f - Ui.S(11f), Ui.S(9f), Ui.S(22f), Ui.S(22f)), colour);
         using var font = new Font(Loc.UiFont, 8.5f, On ? FontStyle.Bold : FontStyle.Regular);
-        TextRenderer.DrawText(g, Text, font, new Rectangle(0, 34, Width, Height - 36), colour,
+        TextRenderer.DrawText(g, Text, font, new Rectangle(0, Ui.S(34), Width, Height - Ui.S(36)), colour,
                               TextFormatFlags.HorizontalCenter | TextFormatFlags.Top | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
         if (Count > 0)
         {
             var s = Count.ToString("N0");
             using var bf = new Font(Loc.UiFont, 7.5f, FontStyle.Bold);
             var sz = TextRenderer.MeasureText(g, s, bf, Size.Empty, TextFormatFlags.NoPadding);
-            var badge = new RectangleF(Width / 2f + 4, 4, sz.Width + 9, sz.Height + 2);
+            var badge = new RectangleF(Width / 2f + Ui.S(4f), Ui.S(4f), sz.Width + Ui.S(9f), sz.Height + Ui.S(2f));
             using var bb = new SolidBrush(Ui.Accent);
             using var bp = Ui.Round(badge, badge.Height / 2);
             g.FillPath(bb, bp);
@@ -377,6 +451,17 @@ sealed class FlatList : ListView
     static extern bool GetWindowRect(IntPtr hwnd, out Rect r);
     struct Rect { public int Left, Top, Right, Bottom; }
 
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern bool InvalidateRect(IntPtr hwnd, IntPtr rect, bool erase);
+
+    /// <summary>Repaints the column header (its tick box follows the rows' ticks).</summary>
+    public void RefreshHeader()
+    {
+        if (!IsHandleCreated) return;
+        var header = SendMessage(Handle, 0x101F, IntPtr.Zero, IntPtr.Zero); // LVM_GETHEADER
+        if (header != IntPtr.Zero) InvalidateRect(header, IntPtr.Zero, true);
+    }
+
     int HeaderBottom()
     {
         var header = SendMessage(Handle, 0x101F, IntPtr.Zero, IntPtr.Zero); // LVM_GETHEADER
@@ -393,7 +478,9 @@ sealed class PresetTiles : Control
     public int Selected = -1;
     public Color Colour = Color.Cyan;
     int hover = -1;
-    const int Cols = 4, TileH = 82;
+    const int Cols = 4;
+    static int TileH => Ui.S(82);
+    static int Gap => Ui.S(6);
 
     /// <summary>A tile was clicked.</summary>
     public event Action<int>? Picked;
@@ -407,13 +494,13 @@ sealed class PresetTiles : Control
         Margin = new Padding(0, 2, 0, 2);
     }
 
-    public override Size GetPreferredSize(Size proposed) => new(Math.Max(240, proposed.Width), Rows * (TileH + 6));
+    public override Size GetPreferredSize(Size proposed) => new(Math.Max(Ui.S(240), proposed.Width), Rows * (TileH + Gap));
     int Rows => (Names.Length + Cols - 1) / Cols;
 
     Rectangle Tile(int i)
     {
-        int w = (Width - (Cols - 1) * 6) / Cols;
-        return new Rectangle(i % Cols * (w + 6), i / Cols * (TileH + 6), w, TileH);
+        int w = (Width - (Cols - 1) * Gap) / Cols;
+        return new Rectangle(i % Cols * (w + Gap), i / Cols * (TileH + Gap), w, TileH);
     }
 
     int At(Point p) { for (int i = 0; i < Names.Length; i++) if (Tile(i).Contains(p)) return i; return -1; }
@@ -444,15 +531,15 @@ sealed class PresetTiles : Control
             var r = Tile(i);
             bool on = i == Selected;
             using (var bg = new SolidBrush(on ? Ui.AccentSoft : i == hover ? Ui.Hover : Ui.Window))
-            using (var path = Ui.Round(new RectangleF(r.X + 0.5f, r.Y + 0.5f, r.Width - 1, r.Height - 1), 7))
+            using (var path = Ui.Round(new RectangleF(r.X + 0.5f, r.Y + 0.5f, r.Width - 1, r.Height - 1), Ui.S(7f)))
             {
                 g.FillPath(bg, path);
-                using var pen = new Pen(on ? Ui.Accent : Ui.Line, on ? 2f : 1f);
+                using var pen = new Pen(on ? Ui.Accent : Ui.Line, Ui.S(on ? 2f : 1f));
                 g.DrawPath(pen, path);
             }
-            var pic = new Rectangle(r.X + (r.Width - 52) / 2, r.Y + 5, 52, 52);
+            var pic = new Rectangle(r.X + (r.Width - Ui.S(52)) / 2, r.Y + Ui.S(5), Ui.S(52), Ui.S(52));
             DrawLook(g, Names[i], pic, Colour);
-            TextRenderer.DrawText(g, Tr(Names[i]), on ? bold : font, new Rectangle(r.X + 2, pic.Bottom, r.Width - 4, r.Bottom - pic.Bottom),
+            TextRenderer.DrawText(g, Tr(Names[i]), on ? bold : font, new Rectangle(r.X + Ui.S(2), pic.Bottom, r.Width - Ui.S(4), r.Bottom - pic.Bottom),
                                   Ui.Fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         }
         if (Focused && ShowFocusCues && Selected >= 0)
@@ -477,7 +564,7 @@ sealed class PresetTiles : Control
     static void DrawScene(Graphics g, Rectangle r, Color c, bool fill, bool outline, bool beam, bool arrow, bool own, bool tall, bool strong)
     {
         var state = g.Save();
-        using (var clip = Ui.Round(r, Math.Min(5, r.Width / 6))) { g.SetClip(clip); using var scene = new SolidBrush(Color.FromArgb(42, 47, 44)); g.FillPath(scene, clip); }
+        using (var clip = Ui.Round(r, Math.Min(Ui.S(5), r.Width / 6))) { g.SetClip(clip); using var scene = new SolidBrush(Color.FromArgb(42, 47, 44)); g.FillPath(scene, clip); }
         g.TranslateTransform(r.X, r.Y);
         g.ScaleTransform(r.Width / 100f, r.Height / 100f);
         if (beam)
@@ -513,17 +600,17 @@ sealed class PresetTiles : Control
 }
 
 /// <summary>A row of colour dots to pick from, and a last "+" dot that opens the full colour picker.</summary>
-sealed class SwatchRow : Control
+sealed class SwatchRow : Control, Ui.ISelfSized
 {
     public static readonly string[] Colours = { "#FFD23F", "#FF8A00", "#FF3B30", "#FF4FB3", "#A66BFF", "#3D8BFF", "#00E5FF", "#3CE07A", "#C8F03C", "#FFFFFF" };
     public Color Current = Color.Cyan;
-    int D = 22, Gap = 6;
+    int D = Ui.S(22), Gap = Ui.S(6);
     int hover = -1;
 
     /// <summary>Smaller dots (a narrow column).</summary>
     public bool Small
     {
-        set { D = value ? 17 : 22; Gap = value ? 4 : 6; Size = new Size(Colours.Length * (D + Gap) + D + 9, D + 8); Invalidate(); }
+        set { D = Ui.S(value ? 17 : 22); Gap = Ui.S(value ? 4 : 6); Size = new Size(Colours.Length * (D + Gap) + D + Ui.S(9), D + Ui.S(8)); Invalidate(); }
     }
 
     /// <summary>A colour dot was clicked (its colour), or the "+" one (null).</summary>
@@ -533,11 +620,11 @@ sealed class SwatchRow : Control
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
         Cursor = Cursors.Hand;
-        Size = new Size(Colours.Length * (D + Gap) + D + 9, D + 8); // room for the last dot's picked ring (it was cut)
+        Size = new Size(Colours.Length * (D + Gap) + D + Ui.S(9), D + Ui.S(8)); // room for the last dot's picked ring (it was cut)
         Margin = new Padding(3, 3, 3, 3);
     }
 
-    Rectangle Dot(int i) => new(4 + i * (D + Gap), 4, D, D);
+    Rectangle Dot(int i) => new(Ui.S(4) + i * (D + Gap), Ui.S(4), D, D);
     int At(Point p) { for (int i = 0; i <= Colours.Length; i++) if (Dot(i).Contains(p)) return i; return -1; }
     protected override void OnMouseMove(MouseEventArgs e) { int h = At(e.Location); if (h != hover) { hover = h; Invalidate(); } base.OnMouseMove(e); }
     protected override void OnMouseLeave(EventArgs e) { hover = -1; Invalidate(); base.OnMouseLeave(e); }
@@ -563,15 +650,15 @@ sealed class SwatchRow : Control
                 bool on = c.ToArgb() == Current.ToArgb();
                 matched |= on;
                 using (var b = new SolidBrush(c)) g.FillEllipse(b, r);
-                using var pen = new Pen(on ? Ui.Fg : i == hover ? Ui.Muted : Ui.Line, on ? 2.5f : 1f);
-                g.DrawEllipse(pen, on ? Rectangle.Inflate(r, 2, 2) : r);
+                using var pen = new Pen(on ? Ui.Fg : i == hover ? Ui.Muted : Ui.Line, Ui.S(on ? 2.5f : 1f));
+                g.DrawEllipse(pen, on ? Rectangle.Inflate(r, Ui.S(2), Ui.S(2)) : r);
             }
             else
             {
                 // "+": any colour; shows the current one when it isn't one of the dots
                 if (!matched) using (var b = new SolidBrush(Current)) g.FillEllipse(b, r);
-                using var pen = new Pen(!matched ? Ui.Fg : i == hover ? Ui.Muted : Ui.Line, !matched ? 2.5f : 1f);
-                g.DrawEllipse(pen, !matched ? Rectangle.Inflate(r, 2, 2) : r);
+                using var pen = new Pen(!matched ? Ui.Fg : i == hover ? Ui.Muted : Ui.Line, Ui.S(!matched ? 2.5f : 1f));
+                g.DrawEllipse(pen, !matched ? Rectangle.Inflate(r, Ui.S(2), Ui.S(2)) : r);
                 if (matched) TextRenderer.DrawText(g, "+", Font, r, Ui.Fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
         }
@@ -579,7 +666,7 @@ sealed class SwatchRow : Control
 }
 
 /// <summary>Joined buttons in a row ("Outline | Whole item"); the lit one is the choice, none lit = a value of its own.</summary>
-sealed class Seg : Control
+sealed class Seg : Control, Ui.ISelfSized
 {
     readonly string[] options;
     int selected = -1, hover = -1;
@@ -608,11 +695,11 @@ sealed class Seg : Control
         Invalidate();
     }
 
-    int W(int i) => TextRenderer.MeasureText(options[i], Font).Width + 14;
+    int W(int i) => TextRenderer.MeasureText(options[i], Font).Width + Ui.S(14);
     /// <summary>At least this high (e.g. the height of the buttons beside it); kept when the font changes.</summary>
     public int MinHeight { get => minHeight; set { minHeight = value; Size = GetPreferredSize(Size.Empty); } }
     int minHeight;
-    public override Size GetPreferredSize(Size proposed) => new(Enumerable.Range(0, options.Length).Sum(W) + 1, Math.Max(minHeight, Font.Height + 10));
+    public override Size GetPreferredSize(Size proposed) => new(Enumerable.Range(0, options.Length).Sum(W) + 1, Math.Max(minHeight, Font.Height + Ui.S(10)));
     protected override void OnFontChanged(EventArgs e) { Size = GetPreferredSize(Size.Empty); base.OnFontChanged(e); }
     Rectangle Part(int i) { int x = 0; for (int j = 0; j < i; j++) x += W(j); return new(x, 0, W(i), Height - 1); }
     int At(Point p) { for (int i = 0; i < options.Length; i++) if (Part(i).Contains(p)) return i; return -1; }
@@ -646,6 +733,86 @@ sealed class Seg : Control
             if (i > 0) g.DrawLine(line, r.Left, 0, r.Left, r.Bottom);
         }
         g.DrawRectangle(line, 0, 0, Part(options.Length - 1).Right, Height - 1);
+    }
+}
+
+/// <summary>A small funnel button that opens the list filters (All / Selected / ...) as a menu. Showing everything it is
+/// only the funnel; another filter lights it up with the filter's name, so a filtered list is never a surprise.
+/// Same use as <see cref="Seg"/> (Selected, SetText, Picked). (User, 2026-11-24: the always-shown filter strip took a
+/// whole row for something used a few times ever.)</summary>
+sealed class FilterButton : Control, Ui.ISelfSized
+{
+    readonly string[] options;
+    int selected;
+    bool hover;
+    public event Action<int>? Picked;
+
+    public FilterButton(params string[] options)
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        this.options = options;
+        Cursor = Cursors.Hand;
+        AccessibleName = Loc.Tr("Show");
+        Fit();
+    }
+
+    /// <summary>The filter in use (0 = all).</summary>
+    public int Selected { get => selected; set { if (selected == value) return; selected = value; Fit(); Invalidate(); } }
+
+    /// <summary>A filter's text with its count ("Selected 5").</summary>
+    public void SetText(int i, string text)
+    {
+        if (options[i] == text) return;
+        options[i] = text;
+        if (i == selected) { Fit(); Invalidate(); }
+    }
+
+    int Icon => Font.Height + Ui.S(4);
+    /// <summary>The funnel only while showing all; the funnel and the filter's name otherwise.</summary>
+    void Fit() => Width = selected <= 0 ? Icon + Ui.S(8) : Icon + TextRenderer.MeasureText(options[selected], Font).Width + Ui.S(20);
+    protected override void OnFontChanged(EventArgs e) { Fit(); base.OnFontChanged(e); }
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+    protected override void OnMouseClick(MouseEventArgs e) { if (e.Button == MouseButtons.Left) Open(); base.OnMouseClick(e); }
+    protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode is Keys.Enter or Keys.Space or Keys.Down) { Open(); e.Handled = true; } base.OnKeyDown(e); }
+
+    /// <summary>The filters as a menu under the button, the one in use ticked.</summary>
+    void Open()
+    {
+        var menu = new ContextMenuStrip { Font = Font };
+        for (int i = 0; i < options.Length; i++)
+        {
+            int k = i;
+            menu.Items.Add(new ToolStripMenuItem(options[i], null, (_, _) => { Selected = k; Picked?.Invoke(k); }) { Checked = i == selected });
+        }
+        menu.Closed += (_, _) => BeginInvoke(menu.Dispose);
+        menu.Show(this, new Point(Width - menu.PreferredSize.Width, Height));
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Parent?.BackColor ?? Ui.Panel);
+        bool on = selected > 0;
+        var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+        using (var path = Ui.Round(r, Ui.S(4f)))
+        {
+            using (var bg = new SolidBrush(on ? Ui.LitBack : hover ? Ui.Hover : Ui.Window)) g.FillPath(bg, path);
+            using var pen = new Pen(Focused ? Ui.Accent : on ? Ui.Accent : Ui.Line);
+            g.DrawPath(pen, path);
+        }
+        var fg = on ? Ui.LitText : Ui.Fg;
+        // the funnel
+        float s = Icon * 0.55f, x = Ui.S(4) + (Icon - s) / 2f, y = (Height - s) / 2f;
+        using (var pen = new Pen(fg, Ui.S(1.4f)) { LineJoin = LineJoin.Round })
+            g.DrawPolygon(pen, new PointF[] { new(x, y), new(x + s, y), new(x + s * 0.6f, y + s * 0.5f), new(x + s * 0.6f, y + s),
+                                              new(x + s * 0.4f, y + s * 0.85f), new(x + s * 0.4f, y + s * 0.5f) });
+        if (on)
+            TextRenderer.DrawText(g, options[selected], Font, new Rectangle(Ui.S(4) + Icon, 0, Width - Icon - Ui.S(8), Height), fg,
+                                  TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
     }
 }
 
@@ -685,16 +852,16 @@ sealed class Toggle : Control
         pill.CloseFigure();
         using (var b = new SolidBrush(on ? Ui.Accent : Ui.Line)) g.FillPath(b, pill);
         if (Focused) using (var p = new Pen(Ui.Fg)) g.DrawPath(p, pill);
-        int k = h - 4;
+        int k = h - Ui.S(4);
         using var knob = new SolidBrush(Ui.Dark ? Ui.Fg : Ui.Window);
-        g.FillEllipse(knob, on ? w - k - 1 : 3, 3, k, k);
+        g.FillEllipse(knob, on ? w - k - Ui.S(1) : Ui.S(3), Ui.S(3), k, k);
     }
 }
 
 /// <summary>A borderless window that can still be resized by dragging its edges (the look pop-up).</summary>
 sealed class SizablePopup : Form
 {
-    const int Grip = 7;
+    static int Grip => Ui.S(7);
     protected override void WndProc(ref Message m)
     {
         base.WndProc(ref m);
@@ -773,7 +940,7 @@ sealed class SideTab : Control
 /// <summary>A panel that lets the mouse through near its edges (to the window under it: <see cref="SizablePopup"/>'s grips).</summary>
 sealed class EdgePanel : Panel
 {
-    const int Grip = 6;
+    static int Grip => Ui.S(6);
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == 0x84)
@@ -786,7 +953,7 @@ sealed class EdgePanel : Panel
 }
 
 /// <summary>An on / off button with a word on it (an effect: Pulse, Rainbow...): a soft-accent pill while on.</summary>
-sealed class Chip : Control
+sealed class Chip : Control, Ui.ISelfSized
 {
     bool on, hover;
 
@@ -816,7 +983,7 @@ sealed class Chip : Control
         set { if (locked == value) return; locked = value; Cursor = value ? Cursors.Default : Cursors.Hand; TabStop = !value; Invalidate(); }
     }
 
-    void Fit() => Size = new Size(TextRenderer.MeasureText(Text, Font).Width + 22, Font.Height + 10);
+    void Fit() => Size = new Size(TextRenderer.MeasureText(Text, Font).Width + Ui.S(22), Font.Height + Ui.S(10));
     protected override void OnFontChanged(EventArgs e) { Fit(); base.OnFontChanged(e); }
     protected override void OnTextChanged(EventArgs e) { Fit(); base.OnTextChanged(e); }
     protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }

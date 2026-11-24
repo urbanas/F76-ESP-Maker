@@ -40,10 +40,10 @@ public sealed class EsmRecord
 /// SeventySix.esm changes (so it is rebuilt automatically after a game update).</summary>
 public sealed class GameIndex
 {
-    const int CacheVersion = 14; // 14: names read as UTF-8 + NameIds // 13: 13: ARMA slots (BOD2) + female model index // 5: ARMA additional races (Parts); 6: NPC_ (race, default outfit) and OTFT (items); 7: MISC components (MCQP) + CMPO; 8: WEAP first FULL; 9: WEAP default mods (Parts) + OMOD; 10: FURN; 11: ARMO ground models; 12: DOOR + MSTT (Everything else)
+    const int CacheVersion = 15; // 15: MSWP material swaps (Bright on colour variants) // 14: names read as UTF-8 + NameIds // 13: 13: ARMA slots (BOD2) + female model index // 5: ARMA additional races (Parts); 6: NPC_ (race, default outfit) and OTFT (items); 7: MISC components (MCQP) + CMPO; 8: WEAP first FULL; 9: WEAP default mods (Parts) + OMOD; 10: FURN; 11: ARMO ground models; 12: DOOR + MSTT (Everything else)
     /// <summary>Record types that are things lying or standing in the world.</summary>
     public static readonly HashSet<string> WorldTypes = new() { "MISC", "ALCH", "INGR", "BOOK", "NOTE", "FLOR", "AMMO", "KEYM", "WEAP", "CONT", "ACTI" };
-    static readonly HashSet<string> OtherTypes = new() { "LVLI", "COBJ", "MGEF", "RACE", "ARMA", "ARMO", "KYWD", "NPC_", "OTFT", "CMPO", "OMOD", "FURN", "DOOR", "MSTT" };
+    static readonly HashSet<string> OtherTypes = new() { "LVLI", "COBJ", "MGEF", "RACE", "ARMA", "ARMO", "KYWD", "NPC_", "OTFT", "CMPO", "OMOD", "FURN", "DOOR", "MSTT", "MSWP" };
 
     public int Version { get; set; }
     public long EsmSize { get; set; }
@@ -56,6 +56,19 @@ public sealed class GameIndex
     public HashSet<uint> NameIds { get; set; } = new();
 
     [JsonIgnore] public Dictionary<uint, EsmRecord> ById { get; private set; } = new();
+    /// <summary>Material swaps (MSWP): a game material (materials\..., lower case) -> the materials colour variants
+    /// put in its place (Rusted Vendor Bot = the Vendor Bot model with *_rusted.bgsm).</summary>
+    [JsonIgnore] public Dictionary<string, List<string>> Swaps { get; private set; } = new();
+    /// <summary>The index loaded last (the builder reads its material swaps).</summary>
+    public static GameIndex? Current { get; private set; }
+
+    /// <summary>A swap path as a materials\ archive path.</summary>
+    public static string MaterialPath(string m)
+    {
+        m = Ba2Path.Normalize(m);
+        int at = m.IndexOf(@"materials\", StringComparison.Ordinal);
+        return at >= 0 ? m[at..] : @"materials\" + m;
+    }
 
     static string CachePath => AppPaths.File("game-index.json");
 
@@ -78,6 +91,16 @@ public sealed class GameIndex
             try { File.WriteAllText(CachePath, JsonSerializer.Serialize(idx)); } catch { }
         }
         idx.ById = idx.Records.GroupBy(r => r.FormId).ToDictionary(g => g.Key, g => g.First());
+        foreach (var r in idx.Records)
+            if (r.Type == "MSWP" && r.Models != null)
+                for (int k = 0; k + 1 < r.Models.Count; k += 2)
+                {
+                    string from = MaterialPath(r.Models[k]), to = MaterialPath(r.Models[k + 1]);
+                    if (from == to) continue;
+                    var list = idx.Swaps.TryGetValue(from, out var l) ? l : idx.Swaps[from] = new();
+                    if (!list.Contains(to)) list.Add(to);
+                }
+        Current = idx;
         return idx;
     }
 
@@ -119,6 +142,14 @@ public sealed class GameIndex
                 switch (tag)
                 {
                     case "EDID": r.EditorId = ZString(val); break;
+                    // material swaps: original (BNAM) / replacement (SNAM) pairs, kept as from, to, from, to...
+                    case "BNAM" when type == "MSWP":
+                        if (r.Models is { Count: > 0 } open && open.Count % 2 == 1) open.RemoveAt(open.Count - 1); // no SNAM
+                        (r.Models ??= new()).Add(ZString(val));
+                        break;
+                    case "SNAM" when type == "MSWP":
+                        if (r.Models != null && r.Models.Count % 2 == 1) r.Models.Add(ZString(val));
+                        break;
                     case "MODL" when type == "ARMO": if (val.Length == 4) (r.Parts ??= new()).Add(BitConverter.ToUInt32(val)); break;
                     case "MODL" when type == "ARMA": if (val.Length == 4) (r.Parts ??= new()).Add(BitConverter.ToUInt32(val)); break; // additional races
                     // apparel lying on the ground: male / female world models (often *_go.nif, not the worn ones)

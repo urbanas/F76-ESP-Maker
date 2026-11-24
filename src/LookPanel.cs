@@ -24,7 +24,7 @@ sealed class LookPanel : UserControl
     /// <summary>Docked: Detach shows and no room is kept for the pop-up's ✕.</summary>
     public bool Docked
     {
-        set { Detach.Visible = detachGap.Visible = value; titleRow.Padding = new Padding(0, 0, value ? 0 : 40, 0); }
+        set { Detach.Visible = detachGap.Visible = value; titleRow.Padding = new Padding(0, 0, value ? 0 : Ui.S(40), 0); }
     }
     /// <summary>"Reset" was clicked: back to the default look (an item: its category's; a category: the starting one).</summary>
     public event Action? ResetClicked;
@@ -111,18 +111,18 @@ sealed class LookPanel : UserControl
     /// <summary>The height that shows everything without scrolling (the pop-up grows to it when the screen has room).</summary>
     public int WantedHeight =>
         titleRow.Height + sub.Height + (hasTick ? tick.Height : 0)
-        + (hasSwitch ? switchRow.GetPreferredSize(new Size(Math.Max(100, header.ClientSize.Width), 0)).Height : 0)
+        + (hasSwitch ? switchRow.GetPreferredSize(new Size(Math.Max(Ui.S(100), header.ClientSize.Width), 0)).Height : 0)
         + Math.Max(Editor.Height, PreviewMin) + Padding.Vertical;
 
     /// <summary>The least height of the preview (it sits right of the settings, as tall as they are or more).</summary>
-    const int PreviewMin = 300;
+    static int PreviewMin => Ui.S(300);
 
     /// <summary>The settings column: as wide as the editor wants (look stack, 2026-11-15), the preview takes the rest;
     /// a narrow pop-up gives the settings all of it and the preview goes under them.</summary>
     void FitPreview()
     {
-        header.Height = titleRow.Height + sub.Height + (hasSwitch ? switchRow.GetPreferredSize(new Size(Math.Max(100, header.ClientSize.Width), 0)).Height : 0);
-        int w = Math.Min(StyleEditor.WantedWidth(Editor.Font), Math.Max(300, body.Width - 320));
+        header.Height = titleRow.Height + sub.Height + (hasSwitch ? switchRow.GetPreferredSize(new Size(Math.Max(Ui.S(100), header.ClientSize.Width), 0)).Height : 0);
+        int w = Math.Min(StyleEditor.WantedWidth(Editor.Font), Math.Max(Ui.S(300), body.Width - Ui.S(320)));
         if (scroll.Width != w) scroll.Width = w;
     }
 

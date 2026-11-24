@@ -874,7 +874,7 @@ public static class Catalog
         var c = new Category
         {
             Name = Vending,
-            Description = Tr("Player vending machines in CAMPs - every design (Vendor Bot, Slocum's Joe, cash registers...) has a model of its own, so only shops light up. \"Select all\" finds any player's shop. The Legendary Exchange machines at train stations are here too."),
+            Description = Tr("Player vending machines in CAMPs - every design (Vendor Bot, Slocum's Joe, cash registers...) has a model of its own, so only shops light up. Tick them all (the box at the top of the list) to find any player's shop. The Legendary Exchange machines at train stations are here too."),
             DefaultStyle = Look("#FFB347"),
         };
         // designs that come in several colours / versions: one entry, named for all of them

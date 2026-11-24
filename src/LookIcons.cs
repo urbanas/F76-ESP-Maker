@@ -19,18 +19,18 @@ static class LookIcons
     public static int Draw(Graphics g, Cell cell, int x, int right, Rectangle row, Font font, bool lit, Color litText)
     {
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        int size = Math.Min(16, row.Height - 6), y = row.Top + (row.Height - size) / 2;
+        int size = Math.Min(Ui.S(16), row.Height - 6), y = row.Top + (row.Height - size) / 2;
         if (cell.Looks.Any(l => l.Own))
         {
             // the "OWN" badge: the first thing to see on an item with its own look
             using var small = new Font(font.FontFamily, Math.Max(6.5f, font.Size - 2f), FontStyle.Bold);
             var text = Loc.Tr("OWN");
             var ts = TextRenderer.MeasureText(g, text, small, Size.Empty, TextFormatFlags.NoPadding);
-            var pill = new Rectangle(x, row.Top + (row.Height - ts.Height - 2) / 2, ts.Width + 8, ts.Height + 2);
-            using (var bg = new SolidBrush(lit ? litText : Ui.Accent)) using (var path = Round(pill, 3)) g.FillPath(bg, path);
+            var pill = new Rectangle(x, row.Top + (row.Height - ts.Height - 2) / 2, ts.Width + Ui.S(8), ts.Height + 2);
+            using (var bg = new SolidBrush(lit ? litText : Ui.Accent)) using (var path = Round(pill, Ui.S(3))) g.FillPath(bg, path);
             TextRenderer.DrawText(g, text, small, pill, Ui.Dark ? Color.FromArgb(28, 32, 30) : Color.White,
                                   TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            x = pill.Right + 7;
+            x = pill.Right + Ui.S(7);
         }
         for (int i = 0; i < cell.Looks.Count && x < right; i++)
         {
@@ -44,7 +44,7 @@ static class LookIcons
                 if (x + size > right) break;
                 var c = lit ? litText : colour ?? Ui.Muted;
                 DrawOne(g, kind, new Rectangle(x, y, size, size), c, cell.Looks[i]);
-                x += size + 2;
+                x += size + Ui.S(2);
                 if (extra != null)
                 {
                     using var small = new Font(font.FontFamily, Math.Max(6.5f, font.Size - 1.5f));
@@ -53,7 +53,7 @@ static class LookIcons
                                           TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                     x += w;
                 }
-                x += 5;
+                x += Ui.S(5);
             }
         }
         return x;

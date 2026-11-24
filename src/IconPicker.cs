@@ -65,7 +65,7 @@ public static class IconPicker
         {
             Text = Tr("Pick an icon"), FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false,
             StartPosition = FormStartPosition.CenterParent, Font = new Font(Loc.UiFont, 9f), AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding = new Padding(8),
+            Padding = new Padding(Ui.S(8)),
         };
         var tips = new ToolTip();
         FlowLayoutPanel Grid(bool threeD, bool models = false)
@@ -87,8 +87,8 @@ public static class IconPicker
                 return b;
             }
             grid.Controls.Add(Choice("", Tr("No icon"), null));
-            if (models) foreach (var m in Models3D.All) grid.Controls.Add(Choice(m.Id, Tr(m.Name), Models3D.Tile(m, colour, 52)));
-            else foreach (var ic in Icons.All) grid.Controls.Add(Choice(ic.Id, Tr(ic.Name), threeD ? Tile3D(ic, colour, 52) : Tile(ic, colour, 52)));
+            if (models) foreach (var m in Models3D.All) grid.Controls.Add(Choice(m.Id, Tr(m.Name), Models3D.Tile(m, colour, Ui.S(52))));
+            else foreach (var ic in Icons.All) grid.Controls.Add(Choice(ic.Id, Tr(ic.Name), threeD ? Tile3D(ic, colour, Ui.S(52)) : Tile(ic, colour, Ui.S(52))));
             return grid;
         }
         // the pages: joined buttons on top switch them (a TabControl's tabs can't take the dark theme)
@@ -117,8 +117,10 @@ public static class IconPicker
         holder.Controls.Add(tabs);
         foreach (var p in pages) holder.Controls.Add(p);
         Show(current.StartsWith(Models3D.Prefix) ? pages.Count - 1 : 0);
+        foreach (var p in pages) Ui.Scaled(p); // built in 100 % pixels
+        Ui.Scaled(tabs);
         // as big as the biggest page: the window keeps its size when switching
-        holder.MinimumSize = new Size(pages.Max(p => p.GetPreferredSize(Size.Empty).Width), pages.Max(p => p.GetPreferredSize(Size.Empty).Height) + 34);
+        holder.MinimumSize = new Size(pages.Max(p => p.GetPreferredSize(Size.Empty).Width), pages.Max(p => p.GetPreferredSize(Size.Empty).Height) + Ui.S(34));
         dlg.Controls.Add(holder);
         if (CaptureTo != null) // dev: picture of the dialog
             dlg.Shown += (_, _) => { using var bmp = new Bitmap(dlg.Width, dlg.Height); dlg.DrawToBitmap(bmp, new Rectangle(Point.Empty, dlg.Size)); bmp.Save(CaptureTo); dlg.Close(); };

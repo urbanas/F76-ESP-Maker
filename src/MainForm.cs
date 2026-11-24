@@ -64,8 +64,9 @@ public sealed class MainForm : Form
     readonly LinkLabel notice = new() { Dock = DockStyle.Right, AutoSize = true, Visible = false, Padding = new Padding(0, 0, 8, 0) };
     Action noticeClick = () => { };
     readonly TextBox search = new() { PlaceholderText = Tr("Search all items..."), Width = 190, Margin = new Padding(3, 6, 3, 3) };
-    /// <summary>Filter chips over the list (what is shown, with how many): All / Selected / Own look / Has parts.</summary>
-    readonly Seg filterChips = new(Tr("All"), Tr("Selected"), Tr("Own look"), Tr("Has parts")) { Selected = 0, Margin = new Padding(8, 6, 6, 3) };
+    /// <summary>The list filter (what is shown, with how many): All / Selected / Own look / Has parts - a funnel button
+    /// at the end of the search box that opens them as a menu.</summary>
+    readonly FilterButton filterChips = new(Tr("All"), Tr("Selected"), Tr("Own look"), Tr("Has parts")) { Selected = 0, Dock = DockStyle.Right };
     int ListFilter => Math.Max(0, filterChips.Selected);
     /// <summary>Under the list when several rows are picked: what to do with all of them.</summary>
     readonly FlowLayoutPanel bulkBar = new() { Dock = DockStyle.Bottom, Height = 36, Visible = false, WrapContents = false, Padding = new Padding(2, 3, 0, 0) };
@@ -107,10 +108,8 @@ public sealed class MainForm : Form
     /// <summary>Bottom bar: "★ N selected".</summary>
     readonly FlowLayoutPanel tray = new() { Dock = DockStyle.Left, AutoSize = true, WrapContents = false, Padding = new Padding(0, 0, 16, 0) };
     readonly LinkLabel picksLink = new() { AutoSize = true, Margin = new Padding(0, 10, 10, 0), Font = new Font(Loc.UiFont, 9.5f, FontStyle.Bold), LinkBehavior = LinkBehavior.HoverUnderline, LinkColor = Ui.Fg, ActiveLinkColor = Ui.Accent };
-    readonly Label catCrumb = new() { UseMnemonic = false, Dock = DockStyle.Top, Height = 20, ForeColor = Ui.Muted, TextAlign = ContentAlignment.BottomLeft };
     /// <summary>The tree's contents are being swapped: its select events are not the user's.</summary>
     bool switchingRoot;
-    readonly Button catLookButton = new() { Text = Tr("Category look..."), AutoSize = true, Height = 30, Margin = new Padding(12, 2, 4, 2) };
     readonly ToolStripMenuItem darkItem = new(Tr("Dark mode")) { CheckOnClick = true };
     readonly ToolStripMenuItem compactItem = new(Tr("Compact rows")) { CheckOnClick = true };
     /// <summary>View > Language: item names (and, later, the window's text) in one of the game's languages.</summary>
@@ -172,8 +171,8 @@ public sealed class MainForm : Form
         Text = Tr("ESP Maker ") + AppVersion;
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { } // the exe's own icon
         var area = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1600, 930);
-        Width = Math.Min(1560, area.Width);
-        Height = Math.Min(930, area.Height); // tall enough to list every category without scrolling
+        Width = Math.Min(Ui.S(1560), area.Width);
+        Height = Math.Min(Ui.S(930), area.Height); // tall enough to list every category without scrolling
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font(Loc.UiFont, 9.5f);
 
@@ -183,7 +182,7 @@ public sealed class MainForm : Form
         catTree.ShowRootLines = false;
         catTree.ShowPlusMinus = false;
         catTree.BorderStyle = BorderStyle.None;
-        catTree.ItemHeight = 26;
+        catTree.ItemHeight = Ui.S(26);
         catTree.Indent = 4;
         catTree.DrawMode = TreeViewDrawMode.OwnerDrawAll;
         // every row is drawn by hand: without the tree's own double buffer a click repaints in visible steps (flicker)
@@ -228,10 +227,10 @@ public sealed class MainForm : Form
 
         // middle: search + item list (click a row: its look on the right)
         var middle = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
-        // wraps to a second row when the buttons don't fit (longer languages, a narrow window)
-        var top = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 38, WrapContents = true, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(0, 38) };
-        var tickAll = Btn(Tr("Select all"), (_, _) => TickShown(true));
-        var untickAll = Btn(Tr("Deselect all"), (_, _) => TickShown(false));
+        // one row: the search box takes the room, the filter funnel at its end (Select all / Deselect all are the tick box
+        // in the list's header; no Category look button - a click on the category opens its look - user, 2026-11-24: the old row wrapped to three)
+        var top = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0, 2, 0, 6) };
+        search.Dock = DockStyle.Fill;
         // a ListView with checkboxes also flips the box on double-click; only a click on the box itself should
         bool doubleClick = false;
         list.DoubleClick += (_, _) =>
@@ -246,10 +245,36 @@ public sealed class MainForm : Form
         list.OwnerDraw = true;
         list.DrawColumnHeader += (_, e) =>
         {
-            if (!Ui.Dark) { e.DrawDefault = true; return; }
-            using (var bg = new SolidBrush(Ui.Panel)) e.Graphics.FillRectangle(bg, e.Bounds);
-            using (var line = new Pen(Ui.Line)) { e.Graphics.DrawLine(line, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1); e.Graphics.DrawLine(line, e.Bounds.Right - 1, e.Bounds.Top + 4, e.Bounds.Right - 1, e.Bounds.Bottom - 5); }
-            TextRenderer.DrawText(e.Graphics, e.Header?.Text, list.Font, Rectangle.Inflate(e.Bounds, -6, 0), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            // the first column: a tick box for every shown row (was Select all / Deselect all - user, 2026-11-24)
+            bool first = e.ColumnIndex == 0;
+            if (!Ui.Dark && !first) { e.DrawDefault = true; return; }
+            if (Ui.Dark)
+            {
+                using (var bg = new SolidBrush(Ui.Panel)) e.Graphics.FillRectangle(bg, e.Bounds);
+                using var line = new Pen(Ui.Line);
+                e.Graphics.DrawLine(line, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+                e.Graphics.DrawLine(line, e.Bounds.Right - 1, e.Bounds.Top + Ui.S(4), e.Bounds.Right - 1, e.Bounds.Bottom - Ui.S(5));
+            }
+            else e.DrawBackground();
+            var text = Rectangle.Inflate(e.Bounds, -Ui.S(6), 0);
+            if (first)
+            {
+                var state = HeaderTick() switch
+                {
+                    CheckState.Checked => System.Windows.Forms.VisualStyles.CheckBoxState.CheckedNormal,
+                    CheckState.Indeterminate => System.Windows.Forms.VisualStyles.CheckBoxState.MixedNormal,
+                    _ => System.Windows.Forms.VisualStyles.CheckBoxState.UncheckedNormal,
+                };
+                var box = CheckBoxRenderer.GetGlyphSize(e.Graphics, state);
+                int inset = RowTextInset();
+                int bx = e.Bounds.Left + Math.Max(2, (inset - box.Width) / 2);
+                CheckBoxRenderer.DrawCheckBox(e.Graphics, new Point(bx, e.Bounds.Top + (e.Bounds.Height - box.Height) / 2), state);
+                text = Rectangle.FromLTRB(e.Bounds.Left + inset, e.Bounds.Top, e.Bounds.Right - Ui.S(6), e.Bounds.Bottom);
+            }
+            // the first column's name says how many shown rows are ticked: "Item · 12 / 13" (was the line above the title)
+            var label = e.Header?.Text;
+            if (first && ShownCount() is (int on, int all) && all > 0) label += $"  ·  {on} / {all}";
+            TextRenderer.DrawText(e.Graphics, label, list.Font, text, Ui.Dark ? Ui.Muted : SystemColors.ControlText, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         };
         list.DrawItem += (_, e) => { };
         list.DrawSubItem += (_, e) =>
@@ -268,19 +293,19 @@ public sealed class MainForm : Form
             // the look cell is a button: a "›" on every row, "Edit ›" and a lit cell under the mouse
             bool lookHot = e.ColumnIndex == 2 && hoverLink == (e.ItemIndex, 2);
             string hint = e.Item.Tag is Category ? "" : lookHot ? Tr("Edit ›") : "›";
-            int hintW = e.ColumnIndex == 2 ? TextRenderer.MeasureText(e.Graphics, hint, list.Font, Size.Empty, flags).Width + 8 : 0;
+            int hintW = e.ColumnIndex == 2 ? TextRenderer.MeasureText(e.Graphics, hint, list.Font, Size.Empty, flags).Width + Ui.S(8) : 0;
             var cellBg = selected ? (list.Focused ? SystemColors.Highlight : Ui.Sel) : lookHot ? Ui.Hover : list.BackColor;
             void EditHint()
             {
                 if (e.ColumnIndex != 2) return;
-                TextRenderer.DrawText(e.Graphics, hint, list.Font, Rectangle.FromLTRB(e.Bounds.Right - hintW, e.Bounds.Top, e.Bounds.Right - 6, e.Bounds.Bottom),
+                TextRenderer.DrawText(e.Graphics, hint, list.Font, Rectangle.FromLTRB(e.Bounds.Right - hintW, e.Bounds.Top, e.Bounds.Right - Ui.S(6), e.Bounds.Bottom),
                                       lit ? SystemColors.HighlightText : lookHot ? Ui.Accent : Ui.Muted, flags | TextFormatFlags.Right);
             }
             if (e.ColumnIndex != 0 && e.ColumnIndex != 2 || e.ColumnIndex == 2 && e.SubItem?.Tag is not LookIcons.Cell)
             {
                 // plain text (category, details; a part row's look)
                 using (var bg = new SolidBrush(cellBg)) e.Graphics.FillRectangle(bg, e.Bounds);
-                TextRenderer.DrawText(e.Graphics, e.SubItem?.Text, list.Font, Rectangle.FromLTRB(e.Bounds.Left + 6, e.Bounds.Top, e.Bounds.Right - 4 - hintW, e.Bounds.Bottom),
+                TextRenderer.DrawText(e.Graphics, e.SubItem?.Text, list.Font, Rectangle.FromLTRB(e.Bounds.Left + Ui.S(6), e.Bounds.Top, e.Bounds.Right - Ui.S(4) - hintW, e.Bounds.Bottom),
                                       lit ? SystemColors.HighlightText : e.SubItem?.ForeColor ?? list.ForeColor, flags | TextFormatFlags.EndEllipsis);
                 EditHint();
                 Separator();
@@ -290,14 +315,14 @@ public sealed class MainForm : Form
             {
                 // the look (an ingredient's: each of its looks in its own colour)
                 using (var bg = new SolidBrush(cellBg)) e.Graphics.FillRectangle(bg, e.Bounds);
-                int x = e.Bounds.Left + 4, right = e.Bounds.Right - 4 - hintW;
+                int x = e.Bounds.Left + Ui.S(4), right = e.Bounds.Right - Ui.S(4) - hintW;
                 // a little picture of the look (as the look tiles draw it), the "OWN" badge, then one icon per feature
                 // (user, 2026-11-20: the words got too long); all faded when it just follows the category
                 var lc = (LookIcons.Cell)e.SubItem!.Tag!;
                 int side = e.Bounds.Height - 4, start = x;
                 var pic = new Rectangle(x, e.Bounds.Top + 2, side, side);
                 ItemFinder.PresetTiles.DrawStyle(e.Graphics, lc.Looks[0].Style, pic);
-                x = LookIcons.Draw(e.Graphics, lc, pic.Right + 6, right, e.Bounds, list.Font, lit, SystemColors.HighlightText);
+                x = LookIcons.Draw(e.Graphics, lc, pic.Right + Ui.S(6), right, e.Bounds, list.Font, lit, SystemColors.HighlightText);
                 if (!lc.Looks.Any(l => l.Own))
                     using (var fade = new SolidBrush(Color.FromArgb(Ui.Dark ? 110 : 75, cellBg))) // lighter on the white list: pale looks vanished e.Graphics.FillRectangle(fade, Rectangle.FromLTRB(start, e.Bounds.Top, Math.Min(x, right), e.Bounds.Bottom));
                 EditHint();
@@ -311,7 +336,7 @@ public sealed class MainForm : Form
                 var ccell = new Rectangle(cr.Left, cr.Top, list.Columns[0].Width, cr.Height);
                 using (var bg = new SolidBrush(selected ? (list.Focused ? SystemColors.Highlight : Ui.Sel) : list.BackColor)) e.Graphics.FillRectangle(bg, ccell);
                 var lab = e.Item.GetBounds(ItemBoundsPortion.Label);
-                int side = Math.Min(16, cr.Height - 2);
+                int side = Math.Min(Ui.S(16), cr.Height - 2);
                 var fg = lit ? SystemColors.HighlightText : list.ForeColor;
                 CatIcons.Draw(e.Graphics, cat, new RectangleF(ccell.Left + Math.Max(1, (lab.Left - ccell.Left - side) / 2), cr.Top + (cr.Height - side) / 2f, side, side), fg);
                 using var bold = new Font(list.Font, FontStyle.Bold);
@@ -419,7 +444,7 @@ public sealed class MainForm : Form
             // "8 parts ›": open / close the parts under the row
             if (LinkAt(hitItem, 0) is Rectangle badge && badge.Contains(e.Location)) { ToggleRows(en); return; }
             var label = hitItem.GetBounds(ItemBoundsPortion.Label);
-            if (Expandable(en) && e.X >= label.Left && e.X < label.Left + 20) { ToggleRows(en); return; } // the ► / ▼ in front of the name (the box is left of it)
+            if (Expandable(en) && e.X >= label.Left && e.X < label.Left + Ui.S(20)) { ToggleRows(en); return; } // the ► / ▼ in front of the name (the box is left of it)
         }
         list.KeyDown += (_, e) =>
         {
@@ -488,10 +513,11 @@ public sealed class MainForm : Form
             bulkBar.Visible = n > 1;
         };
         list.SelectedIndexChanged += (_, _) => { if (!filling) { pickTimer.Stop(); pickTimer.Start(); } };
-        // the chips as high as the buttons next to them (30 px, 2 px top margin) - they sat lower (user, 2026-11-09)
-        filterChips.MinHeight = 30;
-        filterChips.Margin = new Padding(8, 2, 6, 2);
-        top.Controls.AddRange(new Control[] { search, filterChips, tickAll, untickAll, catLookButton });
+        new ToolTip().SetToolTip(filterChips, Tr("Show: all, only selected, only own looks, or only items with parts"));
+        // docked from the last added: the funnel at the right, a gap, the search box fills the rest
+        top.Controls.Add(search);
+        top.Controls.Add(new Panel { Dock = DockStyle.Right, Width = 6 });
+        top.Controls.Add(filterChips);
         // several rows picked: one bar for all of them
         Button BulkButton(string text, Action act)
         {
@@ -508,12 +534,19 @@ public sealed class MainForm : Form
             BulkButton(Tr("Deselect"), () => TickSelected(false)),
         });
         bulkBar.BackColor = Ui.Panel;
-        list.Columns.Add(ColumnNames[0], 300);
-        list.Columns.Add(ColumnNames[1], 150);
-        list.Columns.Add(ColumnNames[2], 230);
-        list.Columns.Add(ColumnNames[3], 360);
+        list.Columns.Add(ColumnNames[0], Ui.S(300));
+        list.Columns.Add(ColumnNames[1], Ui.S(150));
+        list.Columns.Add(ColumnNames[2], Ui.S(230));
+        list.Columns.Add(ColumnNames[3], Ui.S(360));
         list.ColumnClick += (_, e) =>
         {
+            // the header's tick box: tick every shown row, or untick them all when they all are
+            if (e.Column == 0 && OnHeaderTick(list.PointToClient(Cursor.Position)))
+            {
+                if (!actionButtons.All(b => b.Enabled)) return; // busy (building)
+                TickShown(HeaderTick() != CheckState.Checked);
+                return;
+            }
             if (sortCol != e.Column) (sortCol, sortDesc) = (e.Column, false);
             else if (!sortDesc) sortDesc = true;
             else sortCol = -1;
@@ -526,12 +559,13 @@ public sealed class MainForm : Form
         middle.Controls.Add(bulkBar);
         middle.Controls.Add(listInfo);
         middle.Controls.Add(top);
-        // above the list: section, then the category's name (layout A)
+        // above the list: the category's name (no "Section · 12 of 13 selected" line above it - the tree shows both; user 2026-11-24)
         catTitle.Font = new Font(Loc.UiFont, 13f, FontStyle.Bold);
-        catTitle.Height = 30;
+        catTitle.Dock = DockStyle.Fill;
         catTitle.ForeColor = Ui.Fg;
-        middle.Controls.Add(catTitle);
-        middle.Controls.Add(catCrumb);
+        var titleRow = new Panel { Dock = DockStyle.Top, Height = 30 };
+        titleRow.Controls.Add(catTitle);
+        middle.Controls.Add(titleRow);
 
         // right: the look of whatever is picked
         inspector.LookEdited += LookEdited;
@@ -550,13 +584,6 @@ public sealed class MainForm : Form
         var centre = new Panel { Dock = DockStyle.Fill };
         centre.Controls.Add(middle);
         BuildLookDock(centre);
-        catLookButton.Click += (_, _) =>
-        {
-            // the category's own look: nothing picked in the list
-            list.SelectedItems.Clear();
-            ShowInspector();
-            OpenLookPopup(catLookButton.RectangleToScreen(catLookButton.ClientRectangle));
-        };
         // the pop-up stays open while rows are clicked in the window: it shows the picked row's look (✕ / Esc close it)
         var split = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1 };
         split.Panel1.Controls.Add(left);
@@ -641,7 +668,7 @@ public sealed class MainForm : Form
         bottom.Controls.Add(tray);
         bottom.Controls.Add(actions);
         logPanel.Controls.Add(logBox);
-        actionButtons.AddRange(new[] { install, import, tickAll, untickAll });
+        actionButtons.AddRange(new[] { install, import });
 
         Controls.Add(split);
         Controls.Add(logPanel);
@@ -654,6 +681,8 @@ public sealed class MainForm : Form
         onlineItem.ToolTipText = Tr("When ESP Maker starts, it downloads one text file with item list updates from GitHub. Nothing is sent.");
         ShowRulesInfo();
         Controls.Add(menuBar); // added last: docks above everything
+        Ui.ScaleTree(this); // built in 100 % pixels: to the screen's display scale
+        Ui.Scaled(inspector); // (not in the window yet: it goes into the docked panel or the pop-up when opened)
         Load += (_, _) => { RestoreWindow(split); ApplyTheme(); ApplyDensity(); _ = LoadGameAsync(); };
         FormClosing += (_, _) => RememberWindow(split);
 
@@ -671,7 +700,7 @@ public sealed class MainForm : Form
             }
         };
         search.PlaceholderText = Tr("Search everything (Ctrl+F)");
-        search.Width = 230;
+        search.Width = Ui.S(230);
         var searchTimer = new System.Windows.Forms.Timer { Interval = 250 };
         searchTimer.Tick += (_, _) => { searchTimer.Stop(); FillList(); ShowInspector(); };
         search.TextChanged += (_, _) => { searchTimer.Stop(); if (!clearingSearch) searchTimer.Start(); };
@@ -737,11 +766,40 @@ public sealed class MainForm : Form
         SetBusy(true);
     }
 
-    Button Btn(string text, EventHandler click)
+    /// <summary>The header tick box's state: every shown row ticked (the ones a click can tick: a fallen log is ticked only
+    /// on purpose), none, or some.</summary>
+    CheckState HeaderTick()
     {
-        var b = new Button { Text = text, AutoSize = true, Height = 30, Margin = new Padding(4, 2, 4, 2) };
-        b.Click += click;
-        return b;
+        int rows = 0, on = 0;
+        bool part = false;
+        foreach (ListViewItem li in list.Items)
+            if (li.Tag is Entry e)
+            {
+                bool t = IsTicked(e);
+                if (!t && e.Scenery) continue; // Select all skips it: not counted against "all"
+                rows++;
+                if (t) { on++; part |= IsPartial(e); }
+            }
+        return on == 0 ? CheckState.Unchecked : on == rows && !part ? CheckState.Checked : CheckState.Indeterminate;
+    }
+
+    /// <summary>Ticked rows and all rows in the list as shown (for the Item column's header).</summary>
+    (int On, int All) ShownCount()
+    {
+        int on = 0, all = 0;
+        foreach (ListViewItem li in list.Items)
+            if (li.Tag is Entry e) { all++; if (IsTicked(e)) on++; }
+        return (on, all);
+    }
+
+    /// <summary>Where a row's name starts in the first column (right of its tick box).</summary>
+    int RowTextInset() => list.Items.Count > 0 ? list.Items[0].GetBounds(ItemBoundsPortion.Label).Left - list.Items[0].Bounds.Left : Ui.S(22);
+
+    /// <summary>A point (list coordinates) is on the header's tick box part of the first column.</summary>
+    bool OnHeaderTick(Point p)
+    {
+        int left = list.Items.Count > 0 ? list.Items[0].Bounds.Left : 0; // scrolled sideways: the column moved
+        return p.X >= left && p.X < left + RowTextInset() + Ui.S(2);
     }
 
     static string OutputDir => AppPaths.File("output");
@@ -937,10 +995,14 @@ public sealed class MainForm : Form
             var all = cats.SelectMany(c => c.Entries).ToList();
             var byModel = all.SelectMany(e => e.Models.Select(m => (m, e))).GroupBy(x => x.m).ToDictionary(g => g.Key, g => g.Select(x => x.e).ToList());
             // recipes share ingredients (carrots) with each other and with Plants: they don't tick each other
-            // junk under several components (Duct Tape: adhesive, cloth): each component category ticks on its own
-            static bool JunkCat(Entry x) => x.Category.StartsWith("Junk: ");
-            twins = all.ToDictionary(e => e.Id, e => e.NoLink ? new List<Entry>()
-                : e.Models.SelectMany(m => byModel[m]).Where(o => o != e && !o.NoLink && !(JunkCat(e) && JunkCat(o)) && !(e.LinkParts && o.LinkParts)).Distinct().ToList());
+            // junk under several components (Duct Tape: adhesive, cloth) ticks together, each copy keeps its own look (user 2026-11-24)
+            // the All outfits lists: only the very same item elsewhere (exactly its models) - many look-alikes share one model
+            static bool Outfit(Entry x) => x.Id.StartsWith("outfit:") || x.Id.StartsWith("outfitworn:");
+            static bool Same(Entry a, Entry b) => a.Models.Count == b.Models.Count && a.Models.All(b.Models.Contains);
+            bool Twin(Entry e, Entry o) => o != e && o.Group == null && (!e.NoLink && !o.NoLink ? !(e.LinkParts && o.LinkParts)
+                : (Outfit(e) || !e.NoLink) && (Outfit(o) || !o.NoLink) && Same(e, o));
+            twins = all.ToDictionary(e => e.Id, e => e.NoLink && !Outfit(e) ? new List<Entry>()
+                : e.Models.SelectMany(m => byModel[m]).Where(o => Twin(e, o)).Distinct().ToList());
             entriesByModel = byModel;
             MigrateSetup(all);
             TickTwins(all);
@@ -1171,7 +1233,7 @@ public sealed class MainForm : Form
         rail.Controls.Clear();
         foreach (var root in roots)
         {
-            var b = new RailButton { Tag = root, Width = 72, Height = 64, Margin = new Padding(0, 0, 0, 2), Icon = root.Tag is Picks ? "picks" : (string)root.Tag! };
+            var b = Ui.Scaled(new RailButton { Tag = root, Width = 72, Height = 64, Margin = new Padding(0, 0, 0, 2), Icon = root.Tag is Picks ? "picks" : (string)root.Tag! });
             b.Click += (_, _) =>
             {
                 var r = (TreeNode)b.Tag!;
@@ -1218,12 +1280,12 @@ public sealed class MainForm : Form
         {
             // a sub-heading: small muted caps with a fold arrow, what's selected under it on the right
             int t = CatNodes(n.Parent!).Select(x => (Category)x.Tag).Where(x => x.Group == grp.Name).Sum(TickedIn);
-            var arrow = new Rectangle(row.Left + 8, row.Top, 12, row.Height);
+            var arrow = new Rectangle(row.Left + Ui.S(8), row.Top, Ui.S(12), row.Height);
             TextRenderer.DrawText(g, n.IsExpanded ? "▾" : "▸", GroupFont, arrow, Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
-            var label = new Rectangle(arrow.Right + 2, row.Top + 3, row.Width - arrow.Right - 50, row.Height - 3);
+            var label = new Rectangle(arrow.Right + Ui.S(2), row.Top + Ui.S(3), row.Width - arrow.Right - Ui.S(50), row.Height - Ui.S(3));
             TextRenderer.DrawText(g, Loc.Name(grp.Name).ToUpper(), GroupFont, label, Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
             if (t > 0)
-                TextRenderer.DrawText(g, t.ToString("N0"), GroupFont, new Rectangle(row.Right - 60, row.Top + 3, 50, row.Height - 3), Ui.Accent,
+                TextRenderer.DrawText(g, t.ToString("N0"), GroupFont, new Rectangle(row.Right - Ui.S(60), row.Top + Ui.S(3), Ui.S(50), row.Height - Ui.S(3)), Ui.Accent,
                                       TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
             return;
         }
@@ -1260,7 +1322,7 @@ public sealed class MainForm : Form
         if (sel)
         {
             using var b = new SolidBrush(Ui.Sel);
-            using var p = Ui.Round(new RectangleF(row.Left + 1, row.Top + 1, row.Width - 3, row.Height - 2), 5);
+            using var p = Ui.Round(new RectangleF(row.Left + 1, row.Top + 1, row.Width - 3, row.Height - 2), Ui.S(5f));
             g.FillPath(b, p);
         }
         g.SmoothingMode = g2;
@@ -1268,18 +1330,18 @@ public sealed class MainForm : Form
         using var countFont = new Font(Loc.UiFont, 8.5f, lit && n.Parent != null ? FontStyle.Bold : FontStyle.Regular);
         var countFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.Right;
         var cw = TextRenderer.MeasureText(g, count, countFont, Size.Empty, countFlags).Width;
-        var countBox = new Rectangle(row.Right - cw - 10, row.Top, cw + 4, row.Height);
+        var countBox = new Rectangle(row.Right - cw - Ui.S(10), row.Top, cw + Ui.S(4), row.Height);
         TextRenderer.DrawText(g, count, countFont, countBox, lit && n.Parent != null ? Ui.Accent : Ui.Muted, countFlags);
         var nameFont = n.Parent == null ? SectionFont : sel ? SelectedNameFont : catTree.Font;
-        int nameLeft = row.Left + (n.Parent == null ? 6 : 12);
+        int nameLeft = row.Left + Ui.S(n.Parent == null ? 6 : 12);
         if (n.Tag is Category ic)
         {
             // its icon in front of the name, so the categories don't blend into one block of text
-            int side = Math.Min(16, row.Height - 4);
+            int side = Math.Min(Ui.S(16), row.Height - 4);
             CatIcons.Draw(g, ic, new RectangleF(nameLeft, row.Top + (row.Height - side) / 2f, side, side), sel || lit ? Ui.Fg : Ui.Muted);
-            nameLeft += side + 7;
+            nameLeft += side + Ui.S(7);
         }
-        var nameBox = new Rectangle(nameLeft, row.Top, countBox.Left - nameLeft - 4, row.Height);
+        var nameBox = new Rectangle(nameLeft, row.Top, countBox.Left - nameLeft - Ui.S(4), row.Height);
         TextRenderer.DrawText(g, name, nameFont, nameBox, Ui.Fg, flags);
     }
     static readonly Font SelectedNameFont = new(Loc.UiFont, 10f, FontStyle.Bold);
@@ -1296,8 +1358,8 @@ public sealed class MainForm : Form
     void RefreshCategoryCounts()
     {
         UpdateRail();
-        UpdateCrumb();
         catTree.Invalidate();
+        list.RefreshHeader(); // its tick box follows the ticks
         foreach (TreeNode sec in roots)
         {
             if (sec.Tag is Picks)
@@ -1368,19 +1430,10 @@ public sealed class MainForm : Form
     static string Title(string section) => section == Catalog.AllSection ? Tr("Everything else")
         : section.Length == 0 ? "" : Loc.Name(section[..1] + section[1..].ToLowerInvariant());
 
-    /// <summary>The small line above the list's title: the section, and how much of the category is selected.</summary>
-    void UpdateCrumb()
-    {
-        var text = IsPicks ? Tr("Everything selected, from all sections")
-            : CurrentSection is string s ? Tf("{0}  ·  every category", Title(s))
-            : Current is Category c ? Tf("{0}  ·  {1} of {2} selected", Title(c.Section), TickedIn(c), c.Entries.Count) : "";
-        if (catCrumb.Text != text) catCrumb.Text = text;
-    }
 
     void ShowCategory()
     {
-        UpdateCrumb();
-        catDesc.Height = 66;
+        catDesc.Height = Ui.S(66);
         if (IsPicks)
         {
             var part = PicksSection;
@@ -1469,7 +1522,7 @@ public sealed class MainForm : Form
             if (Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(r))) { StartPosition = FormStartPosition.Manual; Bounds = r; }
         }
         if (settings.Maximized) WindowState = FormWindowState.Maximized;
-        split.SplitterDistance = Math.Clamp(settings.LeftWidth, 300, Math.Max(300, split.Width - 300));
+        split.SplitterDistance = Math.Clamp(Ui.S(settings.LeftWidth), Ui.S(300), Math.Max(Ui.S(300), split.Width - Ui.S(300)));
     }
 
     void RememberWindow(SplitContainer split)
@@ -1477,7 +1530,7 @@ public sealed class MainForm : Form
         var b = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
         settings.Window = new[] { b.X, b.Y, b.Width, b.Height };
         settings.Maximized = WindowState == FormWindowState.Maximized;
-        settings.LeftWidth = split.SplitterDistance;
+        settings.LeftWidth = Ui.U(split.SplitterDistance); // kept in 100 % pixels
         settings.Save();
     }
 
@@ -1500,7 +1553,7 @@ public sealed class MainForm : Form
         centre.Controls.Add(dockSplit);
         centre.Controls.Add(dockPanel);
         centre.Controls.Add(dockTab);
-        dockSplit.SplitterMoved += (_, _) => { settings.DockWidth = dockPanel.Width; settings.Save(); };
+        dockSplit.SplitterMoved += (_, _) => { settings.DockWidth = Ui.U(dockPanel.Width); settings.Save(); };
         dockTab.Click += (_, _) => { if (settings.LookDocked) OpenDock(!dockPanel.Visible); else SetLookDocked(true); };
         tip.SetToolTip(dockTab, Tr("Open / close the look editor (Ctrl+L)"));
         UpdateDockTab();
@@ -1539,13 +1592,13 @@ public sealed class MainForm : Form
     DockHint? dockHint;
 
     /// <summary>The docked panel's width in a centre area <paramref name="room"/> wide.</summary>
-    int DockWidthIn(int room) => Math.Clamp(settings.DockWidth > 0 ? settings.DockWidth : (int)(760 * DeviceDpi / 96f), 380, Math.Max(380, room - dockTab.Width - 300));
+    int DockWidthIn(int room) => Math.Clamp(Ui.S(settings.DockWidth > 0 ? settings.DockWidth : 760), Ui.S(380), Math.Max(Ui.S(380), room - dockTab.Width - Ui.S(300)));
 
     /// <summary>The mouse (dragging the pop-up) is at the main window's right edge: inside its last strip or just past it.</summary>
     bool InDockZone(Point mouse)
     {
         if (WindowState == FormWindowState.Minimized) return false;
-        int zone = (int)(110 * DeviceDpi / 96f);
+        int zone = Ui.S(110);
         return mouse.Y >= Top && mouse.Y <= Bottom && mouse.X >= Right - zone && mouse.X <= Right + zone / 3;
     }
 
@@ -1590,6 +1643,7 @@ public sealed class MainForm : Form
             lookPopup.Controls.Add(close);
             lookPopup.Controls.Add(lookPopupInside);
             close.BringToFront();
+            Ui.Scaled(lookPopup); // (the look editor that goes in it is part of the main window: scaled with it)
             lookPopup.KeyDown += (_, e) =>
             {
                 if (e.KeyCode == Keys.Escape) { lookPopup.Hide(); e.Handled = true; }
@@ -1677,7 +1731,7 @@ public sealed class MainForm : Form
     /// <summary>More > Compact rows: lower rows in both lists (more fit on the screen).</summary>
     void ApplyDensity()
     {
-        catTree.ItemHeight = settings.Compact ? 21 : 26;
+        catTree.ItemHeight = Ui.S(settings.Compact ? 21 : 26);
         list.Font = new Font(Loc.UiFont, settings.Compact ? 8.5f : 9.5f);
         list.Invalidate();
     }
@@ -1727,9 +1781,21 @@ public sealed class MainForm : Form
     {
         ShowInspector();
         var li = list.SelectedItems.Cast<ListViewItem>().FirstOrDefault();
-        var cell = li != null ? list.RectangleToScreen(li.SubItems[2].Bounds) : catLookButton.RectangleToScreen(catLookButton.ClientRectangle);
+        var cell = li != null ? list.RectangleToScreen(li.SubItems[2].Bounds) : CategoryAnchor();
         OpenLookPopup(cell);
     }
+
+    /// <summary>The category's own look (nothing picked in the list), the pop-up next to the category in the tree.</summary>
+    void OpenCategoryLook()
+    {
+        list.SelectedItems.Clear();
+        ShowInspector();
+        OpenLookPopup(CategoryAnchor());
+    }
+
+    /// <summary>Where the category's look pop-up opens: by the picked category in the tree, else by the list's title.</summary>
+    Rectangle CategoryAnchor() => catTree.SelectedNode is { } n && n.IsVisible
+        ? catTree.RectangleToScreen(n.Bounds) : catTitle.RectangleToScreen(catTitle.ClientRectangle);
 
     Category CatOf(Entry e) => cats.First(c => c.Name == e.Category);
 
@@ -1740,11 +1806,11 @@ public sealed class MainForm : Form
         var catNodes = roots.SelectMany(CatNodes).Where(n => n.Tag is Category).ToList();
         using var dlg = Ui.Dialog(new Form { FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, StartPosition = FormStartPosition.Manual,
                                              Size = new Size(560, 380), BackColor = Ui.Line, Padding = new Padding(1), KeyPreview = true, Font = Font });
-        dlg.Location = new Point(Left + (Width - dlg.Width) / 2, Top + 90);
+        dlg.Location = new Point(Left + (Width - Ui.S(dlg.Width)) / 2, Top + Ui.S(90));
         var box = new TextBox { Dock = DockStyle.Top, Font = new Font(Loc.UiFont, 12f), BorderStyle = BorderStyle.None, PlaceholderText = Tr("Jump to a category or item, or type an action...") };
         var boxPad = new Panel { Dock = DockStyle.Top, Height = 40, Padding = new Padding(12, 9, 12, 0), BackColor = Ui.Window };
         boxPad.Controls.Add(box);
-        var hits = new ListBox { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 28, IntegralHeight = false, BackColor = Ui.Window };
+        var hits = new ListBox { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = Ui.S(28), IntegralHeight = false, BackColor = Ui.Window };
         dlg.Controls.Add(hits);
         dlg.Controls.Add(boxPad);
         var found = new List<(string Name, string Where, TreeNode? Node, Entry? Item, Action? Do)>();
@@ -1753,7 +1819,7 @@ public sealed class MainForm : Form
         var actions = new[]
         {
             Act(Tr("Build & save"), "", () => buildButton!.PerformClick()),
-            Act(Tr("Category look..."), "", () => catLookButton.PerformClick()),
+            Act(Tr("Category look..."), "", OpenCategoryLook),
             Act(Tr("Undo"), Tr("Ctrl+Z"), () => UndoRedo(true)),
             Act(Tr("Redo"), Tr("Ctrl+Y"), () => UndoRedo(false)),
             Act(Tr("Search everything"), Tr("Ctrl+F"), () => { search.Focus(); search.SelectAll(); }),
@@ -1800,10 +1866,10 @@ public sealed class MainForm : Form
             using (var bg = new SolidBrush(sel ? Ui.Sel : Ui.Window)) e.Graphics.FillRectangle(bg, e.Bounds);
             var f = found[e.Index];
             var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
-            int whereW = Math.Min(220, TextRenderer.MeasureText(f.Where, hits.Font).Width + 4);
-            TextRenderer.DrawText(e.Graphics, f.Where, hits.Font, new Rectangle(e.Bounds.Right - whereW - 12, e.Bounds.Top, whereW, e.Bounds.Height), Ui.Muted, flags | TextFormatFlags.Right);
+            int whereW = Math.Min(Ui.S(220), TextRenderer.MeasureText(f.Where, hits.Font).Width + 4);
+            TextRenderer.DrawText(e.Graphics, f.Where, hits.Font, new Rectangle(e.Bounds.Right - whereW - Ui.S(12), e.Bounds.Top, whereW, e.Bounds.Height), Ui.Muted, flags | TextFormatFlags.Right);
             TextRenderer.DrawText(e.Graphics, f.Name, f.Item == null && f.Do == null ? SelectedNameFont : hits.Font,
-                                  new Rectangle(e.Bounds.Left + 12, e.Bounds.Top, e.Bounds.Width - whereW - 36, e.Bounds.Height), Ui.Fg, flags);
+                                  new Rectangle(e.Bounds.Left + Ui.S(12), e.Bounds.Top, e.Bounds.Width - whereW - Ui.S(36), e.Bounds.Height), Ui.Fg, flags);
         };
         void Go()
         {
@@ -1958,6 +2024,7 @@ public sealed class MainForm : Form
         if (list.Columns.Cast<ColumnHeader>().Sum(c => c.Width) != list.ClientSize.Width) list.Columns[3].Width = -2;
         if (keepScroll && list.Items.Count > 0) list.TopItem = list.Items[Math.Min(top, list.Items.Count - 1)];
         filling = false;
+        list.RefreshHeader(); // its tick box is for the rows shown now
         if (Ui.Dark) ThemeRows();
         listInfo.Text = (all.Count > MaxShown ? Tf("Showing the first {0:N0} of {1:N0} - type in the search box to narrow it down.", MaxShown, all.Count)
                       : Tf("{0:N0} shown. Hover an item to see what else shares its model.", all.Count));
@@ -2521,7 +2588,7 @@ public sealed class MainForm : Form
     internal static Form CategoryLookDialog(GameData? game, string title, List<Entry> entries, Style look, bool icons3D, bool keepOtherMods, Font font,
                                             out StyleEditor ed)
     {
-        var dlg = Ui.Dialog(new Form { Text = title, FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent, Font = font, AutoScaleMode = AutoScaleMode.Font, ShowIcon = false });
+        var dlg = Ui.Dialog(new Form { Text = title, FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent, Font = font, ShowIcon = false });
         ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = icons3D, PickOk = entries.Any(e => e.CanPick), Sketch = false, Compact = true };
         var side = new Panel { Dock = DockStyle.Left, Width = 340 };
         side.Controls.Add(ed);
@@ -2555,7 +2622,7 @@ public sealed class MainForm : Form
                                     IReadOnlySet<string>? offParts, Func<string, List<string>>? shared, CheckState ticked, out CheckBox tick,
                                     string? focusPart = null, IReadOnlyDictionary<string, Style>? partLooks = null)
     {
-        var dlg = Ui.Dialog(new Form { Text = picked.Count == 1 ? Tr("Look for: ") + picked[0].Name : Tf("Look for {0} items", picked.Count), FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent, Font = font, AutoScaleMode = AutoScaleMode.Font, ShowIcon = false });
+        var dlg = Ui.Dialog(new Form { Text = picked.Count == 1 ? Tr("Look for: ") + picked[0].Name : Tf("Look for {0} items", picked.Count), FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent, Font = font, ShowIcon = false });
         ed = new StyleEditor { Dock = DockStyle.Top, Value = look, Icons3D = picked.All(e => e.NoIcon), PickOk = picked.Any(e => e.CanPick), Sketch = false, Compact = true };
         var side = new Panel { Dock = DockStyle.Left, Width = 340 }; // the settings keep their own height
         // the same tick as in the list: the parts and the look below only matter while it is ticked
@@ -2821,7 +2888,7 @@ public sealed class MainForm : Form
     /// food) is the same thing in the game - a part left out in one is left out in the other.</summary>
     void SyncParts(Entry e)
     {
-        if (e.Group != null || e.NoLink) return;
+        if (e.Group != null) return; // (NoLink entries have no twins - but an outfit has its very same item elsewhere)
         foreach (var m in e.Models)
         {
             bool lit = PartLit(e, m);
@@ -2849,11 +2916,12 @@ public sealed class MainForm : Form
     }
 
     /// <summary>Twins with exactly the same models are one thing in the game: an own look (item or part) set on one goes
-    /// to the others too.</summary>
+    /// to the others too. Not junk under its several components: each component keeps its own colour.</summary>
     void MirrorLooks(IEnumerable<Entry> edited)
     {
-        foreach (var e in edited.Where(e => e.Group == null && !e.NoLink).ToList())
-            foreach (var o in twins.GetValueOrDefault(e.Id, new()).Where(o => o.Models.Count == e.Models.Count && o.Models.All(e.Models.Contains)))
+        static bool Junk(Entry x) => x.Category.StartsWith("Junk: ");
+        foreach (var e in edited.Where(e => e.Group == null).ToList())
+            foreach (var o in twins.GetValueOrDefault(e.Id, new()).Where(o => o.Models.Count == e.Models.Count && o.Models.All(e.Models.Contains) && !(Junk(e) && Junk(o))))
             {
                 if (project.Overrides.TryGetValue(e.Id, out var st)) project.Overrides[o.Id] = st.Clone(); else project.Overrides.Remove(o.Id);
                 if (project.RecipeLooks.Contains(e.Id)) project.RecipeLooks.Add(o.Id); else project.RecipeLooks.Remove(o.Id);
@@ -3503,6 +3571,64 @@ public sealed class MainForm : Form
             }
             else Check(false, $"Sugar Bombs twins / Brain Bombs not found ({bombs.Count})");
 
+            // every shared model, every category: ticked / unticked anywhere (item box or part box) = the same everywhere.
+            // Not: foliage (hide, not glow), All outfits look-alikes (one model, many outfits), robot linked parts
+            log.Add("the same item in every category");
+            {
+                var keepSel = project.Selected.ToList(); var keepOff = project.OffParts.ToDictionary(kv => kv.Key, kv => kv.Value);
+                var miss = new Dictionary<string, List<string>>();
+                static bool Outfit(Entry x) => x.Id.StartsWith("outfit:") || x.Id.StartsWith("outfitworn:");
+                string Why(Entry a, Entry b) =>
+                    a.NoLink && !Outfit(a) || b.NoLink && !Outfit(b) ? $"not linked ({(a.NoLink ? a.Category : b.Category)})"
+                    : (Outfit(a) || Outfit(b)) && !(a.Models.Count == b.Models.Count && a.Models.All(b.Models.Contains)) ? "outfit look-alikes"
+                    : a.LinkParts && b.LinkParts ? "linked parts (robots)" : "OTHER";
+                void Note(string how, Entry a, Entry b, string m)
+                {
+                    var k = how + " | " + Why(a, b);
+                    if (!miss.TryGetValue(k, out var l)) miss[k] = l = new();
+                    l.Add($"{a.Name} [{a.Category}] -> {b.Name} [{b.Category}] {Path.GetFileName(m)}");
+                }
+                void Reset() { project.Selected.Clear(); project.OffParts.Clear(); }
+                void Expect(string how, Entry a, string m, bool lit)
+                {
+                    foreach (var o in entriesByModel.GetValueOrDefault(m) ?? new())
+                        if (o != a && o.Group == null && PartLit(o, m) != lit) Note(how, a, o, m);
+                }
+                var shared = cats.SelectMany(c => c.Entries).Where(e => e.Group == null && e.Models.Any(m => entriesByModel[m].Count(o => o.Group == null) > 1)).Distinct().ToList();
+                foreach (var e in shared)
+                {
+                    // the item's box
+                    Reset(); SetTicked(e, true); SyncParts(e);
+                    foreach (var m in e.Models) Expect("item ticked", e, m, true);
+                    SetTicked(e, false); SyncParts(e);
+                    foreach (var m in e.Models) Expect("item unticked", e, m, false);
+                    if (e.Models.Count < 2) continue;
+                    foreach (var m in e.Models.Where(m => entriesByModel[m].Count(o => o.Group == null) > 1))
+                    {
+                        // a part's box, item unticked / ticked
+                        Reset(); SetPartOn(new PartRow(e, m), true); Expect("part ticked", e, m, true);
+                        SetPartOn(new PartRow(e, m), false); Expect("part unticked", e, m, false);
+                        Reset(); SetTicked(e, true); SyncParts(e); SetPartOn(new PartRow(e, m), false); Expect("part left out of ticked item", e, m, false);
+                    }
+                }
+                Reset(); foreach (var id in keepSel) project.Selected.Add(id); foreach (var kv in keepOff) project.OffParts[kv.Key] = kv.Value;
+                log.Add($"  {shared.Count} entries share a model");
+                foreach (var kv in miss.OrderBy(kv => kv.Key))
+                {
+                    log.Add($"  apart {kv.Key}: {kv.Value.Count}");
+                    if (kv.Key.EndsWith("OTHER")) foreach (var s in kv.Value.Distinct().Take(12)) log.Add("       " + s);
+                }
+                Check(!miss.Keys.Any(k => k.EndsWith("OTHER")), "ticked / unticked in one category (item or part): the same in all");
+                var toaster = cats.Where(c => c.Name.StartsWith("Junk: ")).SelectMany(c => c.Entries).Where(e => e.Name == "Toaster").ToList();
+                if (toaster.Count > 1)
+                {
+                    project.Overrides[toaster[0].Id] = new Style { GlowColor = "#13579B" };
+                    MirrorLooks(new[] { toaster[0] });
+                    Check(!project.Overrides.ContainsKey(toaster[1].Id), "junk under another component keeps its own look");
+                    project.Overrides.Remove(toaster[0].Id);
+                }
+            }
+
             log.Add("quick looks");
             Pick(guardian);
             OwnSwitched(true);
@@ -3784,7 +3910,7 @@ public sealed class MainForm : Form
                 lookPopup.Left = Right - 10 - lookPopup.Width;
             await Task.Delay(300);
         }
-        catLookButton.PerformClick(); // the category's look in the pop-up
+        OpenCategoryLook(); // the category's look in the pop-up
         await FitPopup();
         // framed (2026-11-15 layout: the pop-up covers the list): 1 the "Start from" presets, 2 the Layers box
         var presets = inspector.Editor.PresetControls.Select(c => On(c)).Aggregate(Rectangle.Union);

@@ -447,7 +447,7 @@
 "Place settings": "食器",
 "Plans": "設計図",
 "Plastic Gas Canisters elsewhere light up too": "他の場所のプラスチック製ガス缶も光ります",
-"Player vending machines in CAMPs - every design (Vendor Bot, Slocum's Joe, cash registers...) has a model of its own, so only shops light up. \"Select all\" finds any player's shop. The Legendary Exchange machines at train stations are here too.": "C.A.M.P. のプレイヤーの自販機 - デザインごと (ベンダーボット、Slocum's Joe、レジ...) に固有のモデルがあるので、ショップだけが光ります。「すべて選択」で全プレイヤーのショップが見つかります。駅のレジェンダリー交換マシンもここにあります。",
+"Player vending machines in CAMPs - every design (Vendor Bot, Slocum's Joe, cash registers...) has a model of its own, so only shops light up. Tick them all (the box at the top of the list) to find any player's shop. The Legendary Exchange machines at train stations are here too.": "C.A.M.P. のプレイヤーの自販機 - デザインごと (ベンダーボット、Slocum's Joe、レジ...) に固有のモデルがあるので、ショップだけが光ります。すべてにチェック (リスト上部のボックス) で全プレイヤーのショップが見つかります。駅のレジェンダリー交換マシンもここにあります。",
 "Player vendors": "プレイヤーのショップ",
 "Postcards": "絵はがき",
 "Pre-war food": "戦前の食べ物",

@@ -1,6 +1,21 @@
 ESP Maker - changes
 ===================
 
+2.7.2
+Changed
+- The item list toolbar is one row: a tick box in the list header selects or clears all items,
+  "Category look" sits by the title and the filters open from a funnel button.
+- "Item fixes" are now called "Item list updates". An update that only announces a new version
+  says "ESP Maker X is available".
+Fixed
+- Text was cut off when the Windows display scale is above 100 %. ESP Maker now scales itself.
+- The same item in several categories is linked everywhere: a junk item under each of its
+  components ticks and unticks together, and each copy keeps its own look.
+- All outfits entries link only to outfits with exactly the same models (look-alikes stay apart).
+- Recipe ingredients tick only their own parts (Brain Bombs: the dirty Sugar Bombs, not the
+  clean box).
+- Bright works on colour variants (Rusted Vendor Bot and other recoloured items).
+
 2.7.1
 Fixed
 - Hiding clothes with a body mod installed: each hidden outfit used to get its own copy of the body,

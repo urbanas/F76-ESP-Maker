@@ -10,8 +10,8 @@
     <ApplicationIcon>Resources\ESPMaker.ico</ApplicationIcon>
     <Product>ESP Maker</Product>
     <RootNamespace>ItemFinder</RootNamespace>
-    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <Version>2.7.1</Version>
+    <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+    <Version>2.7.2</Version>
   </PropertyGroup>
 
   <!-- dev / test command-line modes (uitest, stress...) are left out of the release build: publish with -p:DevTools=false -->

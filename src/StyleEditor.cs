@@ -186,9 +186,9 @@ public sealed class StyleEditor : UserControl
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(hover ? Ui.Hover : Ui.Window);
             if (hover) using (var p = new Pen(Ui.Accent)) g.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
-            int d = Font.Height + 8, x = 10;
+            int d = Font.Height + Ui.S(8), x = Ui.S(10);
             KindIcon(g, kind, new Rectangle(x, (Height - d) / 2, d, d), hover ? Ui.Accent : Ui.Fg);
-            x += d + 12;
+            x += d + Ui.S(12);
             using var bold = new Font(Font, FontStyle.Bold);
             int top = (Height - 2 * Font.Height - 2) / 2;
             TextRenderer.DrawText(g, Text, bold, new Point(x, top), Ui.Fg, TextFormatFlags.NoPrefix);
@@ -251,7 +251,7 @@ public sealed class StyleEditor : UserControl
 
     /// <summary>One row of the layer list: drag handle, colour dot, name + summary, ▲ ▼ ✕. The item's row at the bottom
     /// (Kind "") only shows where the stack starts.</summary>
-    sealed class LayerRow : Control
+    sealed class LayerRow : Control, Ui.ISelfSized
     {
         public readonly string Kind;
         public string Summary = "";
@@ -271,10 +271,10 @@ public sealed class StyleEditor : UserControl
             Cursor = Cursors.Hand;
         }
 
-        protected override void OnFontChanged(EventArgs e) { Height = Font.Height * 2 + 14; base.OnFontChanged(e); }
+        protected override void OnFontChanged(EventArgs e) { Height = Font.Height * 2 + Ui.S(14); base.OnFontChanged(e); }
 
-        int B => Height - 14; // button size
-        Rectangle Button(int i) => new(Width - 6 - (3 - i) * (B + 2), (Height - B) / 2, B, B);
+        int B => Height - Ui.S(14); // button size
+        Rectangle Button(int i) => new(Width - Ui.S(6) - (3 - i) * (B + Ui.S(2)), (Height - B) / 2, B, B);
         int ButtonAt(Point p) => Kind.Length == 0 ? -1 : Enumerable.Range(0, 3).FirstOrDefault(i => Button(i).Contains(p), -1);
 
         protected override void OnPaint(PaintEventArgs e)
@@ -286,9 +286,9 @@ public sealed class StyleEditor : UserControl
             bool item = Kind.Length == 0;
             using (var bg = new SolidBrush(Picked ? Ui.AccentSoft : item ? Ui.Panel : Ui.Window)) g.FillRectangle(bg, r);
             using (var pen = new Pen(Picked ? Ui.Accent : Ui.Line, Picked ? 2f : 1f)) g.DrawRectangle(pen, r);
-            int x = 6;
-            TextRenderer.DrawText(g, item ? "⊥" : "⠿", Font, new Rectangle(x, 0, 14, Height), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix);
-            x += 18;
+            int x = Ui.S(6);
+            TextRenderer.DrawText(g, item ? "⊥" : "⠿", Font, new Rectangle(x, 0, Ui.S(14), Height), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix);
+            x += Ui.S(18);
             int d = Font.Height - 2;
             var dot = new Rectangle(x, (Height - d) / 2, d, d);
             if (Kind == "copy")
@@ -304,11 +304,11 @@ public sealed class StyleEditor : UserControl
                 using var edge = new Pen(Color.FromArgb(150, Ui.Muted), 1f);
                 g.DrawEllipse(edge, dot.X, dot.Y, dot.Width - 1, dot.Height - 1);
             }
-            x += d + 8;
-            int textW = (item ? Width - 6 : Button(0).Left - 4) - x;
+            x += d + Ui.S(8);
+            int textW = (item ? Width - 6 : Button(0).Left - Ui.S(4)) - x;
             using var bold = new Font(Font, FontStyle.Bold);
-            TextRenderer.DrawText(g, KindName(Kind), bold, new Rectangle(x, 6, textW, Font.Height + 1), Ui.Fg, TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
-            TextRenderer.DrawText(g, Summary, Font, new Rectangle(x, 6 + Font.Height + 1, textW, Font.Height + 1), Ui.Muted, TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+            TextRenderer.DrawText(g, KindName(Kind), bold, new Rectangle(x, Ui.S(6), textW, Font.Height + 1), Ui.Fg, TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+            TextRenderer.DrawText(g, Summary, Font, new Rectangle(x, Ui.S(6) + Font.Height + 1, textW, Font.Height + 1), Ui.Muted, TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
             if (item) return;
             string[] marks = { "▲", "▼", "✕" };
             bool[] on = { CanUp, CanDown, true };
@@ -323,11 +323,11 @@ public sealed class StyleEditor : UserControl
             if (dropEdge != 0)
             {
                 // a thick bar with an arrow head at the left, on the edge where the layer will land
-                int y = dropEdge < 0 ? 0 : Height - 4;
+                int y = dropEdge < 0 ? 0 : Height - Ui.S(4);
                 using var bar = new SolidBrush(Ui.Accent);
-                g.FillRectangle(bar, 0, y, Width, 4);
-                int cy = y + 2;
-                g.FillPolygon(bar, new[] { new Point(0, cy - 6), new Point(8, cy), new Point(0, cy + 6) });
+                g.FillRectangle(bar, 0, y, Width, Ui.S(4));
+                int cy = y + Ui.S(2);
+                g.FillPolygon(bar, new[] { new Point(0, cy - Ui.S(6)), new Point(Ui.S(8), cy), new Point(0, cy + Ui.S(6)) });
             }
         }
 
@@ -575,8 +575,8 @@ public sealed class StyleEditor : UserControl
 
         // the layers above the item, top of the list = highest; the item is the bottom row
         layersSection = new Section(Tr("Layers"), Tr("Add a beam, an arrow, an icon, a copy of the item or a line of text - any of them, in any order.\nThe top of the list is the highest above the item: each layer sits on the one under it.\nDrag a row (or ▲ ▼, Alt+Up / Alt+Down) to move it; ✕ or Delete removes it. Click a row for its settings."));
-        addButton.Height = Font.Height + 14;
-        skyLabel.Height = Font.Height + 2;
+        addButton.Height = Font.Height + Ui.S(14);
+        skyLabel.Height = Font.Height + Ui.S(2);
         Wide(layersSection, addButton);
         Wide(layersSection, skyLabel);
         Wide(layersSection, layerList);
@@ -588,8 +588,8 @@ public sealed class StyleEditor : UserControl
             // a drop-down as wide as the button with rows like the layer list's: colour dot, name, what it is underneath
             var on = style.Stack;
             var kinds = Style.Kinds.Where(k => !on.Contains(k)).ToList();
-            var panel = new Panel { BackColor = Ui.Window, Width = addButton.Width, Padding = new Padding(4) };
-            int y = 4;
+            var panel = new Panel { BackColor = Ui.Window, Width = addButton.Width, Padding = new Padding(Ui.S(4)) };
+            int y = Ui.S(4);
             var drop = new ToolStripDropDown { Padding = Padding.Empty, BackColor = Ui.Line };
             foreach (var k in kinds)
             {
@@ -598,18 +598,18 @@ public sealed class StyleEditor : UserControl
                 {
                     "beam" => Tr("A column of light above it"), "arrow" => Tr("Points down at it"), "icon" => Tr("A picture or 3D model"),
                     "text" => Tr("Its name or your own words"), "copy" => Tr("A copy of the item's own shape"), _ => "",
-                }, kind) { Font = Font, Bounds = new Rectangle(4, y, panel.Width - 8, Font.Height * 2 + 14) };
+                }, kind) { Font = Font, Bounds = new Rectangle(Ui.S(4), y, panel.Width - Ui.S(8), Font.Height * 2 + Ui.S(14)) };
                 row.Click += (_, _) => { drop.Close(); AddLayer(kind); };
                 panel.Controls.Add(row);
-                y += row.Height + 2;
+                y += row.Height + Ui.S(2);
             }
             if (kinds.Count == 0)
             {
                 panel.Controls.Add(new Label { Text = Tr("Everything is added"), ForeColor = Ui.Muted, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
-                                               Bounds = new Rectangle(4, y, panel.Width - 8, Font.Height + 12) });
-                y += Font.Height + 14;
+                                               Bounds = new Rectangle(Ui.S(4), y, panel.Width - Ui.S(8), Font.Height + Ui.S(12)) });
+                y += Font.Height + Ui.S(14);
             }
-            panel.Height = y + 2;
+            panel.Height = y + Ui.S(2);
             drop.Items.Add(new ToolStripControlHost(panel) { Padding = Padding.Empty, Margin = new Padding(1), AutoSize = false, Size = panel.Size });
             drop.Closed += (_, _) => BeginInvoke(() => drop.Dispose());
             drop.Show(addButton, new Point(0, addButton.Height));
@@ -775,7 +775,7 @@ public sealed class StyleEditor : UserControl
             layerList.Controls.Clear();
             foreach (var k in stack.Reverse().Append(""))
             {
-                var row = new LayerRow(k) { Font = Font };
+                var row = Ui.Scaled(new LayerRow(k) { Font = Font });
                 row.Clicked += kind => { picked = kind; RefreshCards(); };
                 row.Removed += RemoveLayer;
                 row.Up += kind => MoveLayer(kind, +1);
@@ -783,7 +783,7 @@ public sealed class StyleEditor : UserControl
                 row.Dropped += DropLayer;
                 layerList.Controls.Add(row);
             }
-            layerList.Controls.Add(new Ground());
+            layerList.Controls.Add(Ui.Scaled(new Ground()));
             layerList.ResumeLayout();
         }
         foreach (var row in layerList.Controls.OfType<LayerRow>())
@@ -947,7 +947,7 @@ public sealed class StyleEditor : UserControl
     {
         if (presetTiles.Count > 0)
         {
-            int w = Math.Max(200, Width), gap = 8;
+            int w = Math.Max(Ui.S(200), Width), gap = Ui.S(8);
             arrangedWidth = Width;
             bool wide = w >= Font.Height * 30;
             var settings = PickedSection;
@@ -955,22 +955,22 @@ public sealed class StyleEditor : UserControl
             var shown = new[] { layersSection, settings };
             int listW = wide ? Math.Min(Font.Height * 20, (w - gap) * 45 / 100) : w, setW = wide ? w - listW - gap : w;
             // the chips: "Start from  (Glow only) (Glow + beam) (Glow + beam + name)", wrapping when narrow
-            int chipH = Font.Height + 12, x = startLabel.Width + 10, y = 0;
+            int chipH = Font.Height + Ui.S(12), x = startLabel.Width + Ui.S(10), y = 0;
             startLabel.Location = new Point(0, (chipH - startLabel.Height) / 2);
             foreach (var t in presetTiles)
             {
                 int tw = t.WantedWidth;
-                if (x + tw > w && x > startLabel.Width + 10) { x = startLabel.Width + 10; y += chipH + 4; }
+                if (x + tw > w && x > startLabel.Width + Ui.S(10)) { x = startLabel.Width + Ui.S(10); y += chipH + Ui.S(4); }
                 t.Bounds = new Rectangle(x, y, tw, chipH);
-                x += tw + 6;
+                x += tw + Ui.S(6);
             }
             y += chipH + gap;
-            foreach (var f in fxFlows) f.MaximumSize = new Size(Math.Max(120, setW - 110), 0);
-            int rowW = Math.Max(160, listW - 18);
+            foreach (var f in fxFlows) f.MaximumSize = new Size(Math.Max(Ui.S(120), setW - Ui.S(110)), 0);
+            int rowW = Math.Max(Ui.S(160), listW - Ui.S(18));
             addButton.Width = skyLabel.Width = rowW;
             stackHint.MaximumSize = new Size(rowW, 0);
             foreach (Control row in layerList.Controls)
-                row.Size = row is Ground ? new Size(rowW - 4, 6) : new Size(rowW, Font.Height * 2 + 14);
+                row.Size = row is Ground ? new Size(rowW - Ui.S(4), Ui.S(6)) : new Size(rowW, Font.Height * 2 + Ui.S(14));
             if (wide)
             {
                 int h = Math.Max(layersSection.Wanted(listW), settings.Wanted(setW));
@@ -985,7 +985,7 @@ public sealed class StyleEditor : UserControl
                     s.Bounds = new Rectangle(0, y, sw, h);
                     y += h + gap;
                 }
-            if (Height != y + 4) Height = y + 4;
+            if (Height != y + Ui.S(4)) Height = y + Ui.S(4);
         }
         HeightChanged?.Invoke(this, EventArgs.Empty);
     }

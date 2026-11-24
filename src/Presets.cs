@@ -48,10 +48,10 @@ sealed class PresetPicker : Form
             var bold = new Font(font, FontStyle.Bold);
             box.Paint += (_, e) =>
             {
-                int left = 8 + c.Picture.Width + 12, w = box.Width - left - 8;
+                int left = Ui.S(8) + c.Picture.Width + Ui.S(12), w = box.Width - left - Ui.S(8);
                 var flags = TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix;
-                var th = TextRenderer.MeasureText(e.Graphics, c.Title, bold, new Size(w, 100), flags).Height;
-                var nh = TextRenderer.MeasureText(e.Graphics, c.Note, font, new Size(w, 100), flags).Height;
+                var th = TextRenderer.MeasureText(e.Graphics, c.Title, bold, new Size(w, Ui.S(100)), flags).Height;
+                var nh = TextRenderer.MeasureText(e.Graphics, c.Note, font, new Size(w, Ui.S(100)), flags).Height;
                 int top = (box.Height - th - nh - 2) / 2;
                 TextRenderer.DrawText(e.Graphics, c.Title, bold, new Rectangle(left, top, w, th), Ui.Fg, flags);
                 TextRenderer.DrawText(e.Graphics, c.Note, font, new Rectangle(left, top + th + 2, w, nh), Ui.Muted, flags);

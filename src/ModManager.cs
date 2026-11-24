@@ -63,11 +63,11 @@ sealed class ModManager : Form
             Text = Tf("Mods in {0}, as listed in {1}. Ticked = the game loads it; unticked stays in Data but is off.\n", game.DataFolder, game.IniName) +
                    Tr("Top loads first - when two mods change the same file, the LOWER one wins. Drag rows, or Ctrl+Up / Ctrl+Down."),
         };
-        list.Columns.Add("#", 44);
-        list.Columns.Add("Mod", 290);
-        list.Columns.Add("Size", 80, HorizontalAlignment.Right);
-        list.Columns.Add("Changed", 100);
-        list.Columns.Add("Shares files with", 380);
+        list.Columns.Add("#", Ui.S(44));
+        list.Columns.Add("Mod", Ui.S(290));
+        list.Columns.Add("Size", Ui.S(80), HorizontalAlignment.Right);
+        list.Columns.Add("Changed", Ui.S(100));
+        list.Columns.Add("Shares files with", Ui.S(380));
 
         var side = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 150, FlowDirection = FlowDirection.TopDown, Padding = new Padding(10, 0, 0, 0) };
         Button Side(string text, Action act)

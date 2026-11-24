@@ -336,10 +336,13 @@ public static class Builder
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try { NifPatch.Apply(src.Archive.ReadFile(src), new PatchOptions(p => { used.Add(p.Material); return null; }, null, 0, 0, false)); }
         catch (Exception ex) { log(Tf("  {0}: couldn't read {1} ({2}) - not brightened", item, path, ex.Message)); return null; }
-        foreach (var material in used)
+        // colour variants swap the model's materials for their own (MSWP: Rusted Vendor Bot = *_rusted.bgsm): brighten
+        // those too, or the variant shows X-ray but no Bright (user report 2026-11-24)
+        var keys = used.Select(GameIndex.MaterialPath).ToList();
+        if (GameIndex.Current?.Swaps is { Count: > 0 } swaps)
+            keys.AddRange(keys.SelectMany(k => swaps.GetValueOrDefault(k) ?? new()).ToList());
+        foreach (var key in keys.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            int at = material.IndexOf(@"materials\", StringComparison.OrdinalIgnoreCase);
-            var key = Ba2Path.Normalize(at >= 0 ? material[at..] : @"materials\" + material);
             if (!key.EndsWith(".bgsm", StringComparison.OrdinalIgnoreCase) || brightened.ContainsKey(key)) continue;
             var entry = game.FindOriginal(key);
             var mat = entry?.Archive.ReadFile(entry);
