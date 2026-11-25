@@ -1554,6 +1554,14 @@ public sealed class MainForm : Form
         centre.Controls.Add(dockPanel);
         centre.Controls.Add(dockTab);
         dockSplit.SplitterMoved += (_, _) => { settings.DockWidth = Ui.U(dockPanel.Width); settings.Save(); };
+        // opened at start-up the window wasn't maximised yet: its width came from the small window and stayed squeezed until
+        // closed and opened again (user, 2026-11-25) - follow the room (the saved width, as far as it fits)
+        centre.Resize += (_, _) =>
+        {
+            if (!dockPanel.Visible || centre.ClientSize.Width <= 0) return;
+            int w = DockWidthIn(centre.ClientSize.Width);
+            if (dockPanel.Width != w) dockPanel.Width = w;
+        };
         dockTab.Click += (_, _) => { if (settings.LookDocked) OpenDock(!dockPanel.Visible); else SetLookDocked(true); };
         tip.SetToolTip(dockTab, Tr("Open / close the look editor (Ctrl+L)"));
         UpdateDockTab();
@@ -3742,6 +3750,27 @@ public sealed class MainForm : Form
             Check(look != null && look.GlowColor == "#123456" && look.GlowOpacity == 55 && look.GlowFill && !look.AllWalls && look.Beam && look.BeamColor == "#654321" && look.BeamStrength == 40, "older build: look read from its materials");
             Check(GameData.IsOwn(arch), "our archive is recognised");
             File.Delete(temp); File.Delete(plain);
+            // scanlines: own texture + material, the copy's V offset animated, read back from an older build
+            // standing still: no controller
+            project.Overrides[guardian.Id] = new Style { GlowColor = "#123456", GlowOpacity = 55, GlowScan = true };
+            Builder.Build(project, cats, game!, temp, _ => { });
+            var still = Ba2Archive.Open(temp);
+            Check(still.Entries.Where(e => e.Name.EndsWith(".nif", StringComparison.OrdinalIgnoreCase))
+                .Any(e => System.Text.Encoding.ASCII.GetString(still.ReadFile(e)) is var s && s.Contains("_s.bgem") && !s.Contains("BSEffectShaderPropertyFloatController")), "scanlines standing still: no animation");
+            File.Delete(temp);
+            project.Overrides[guardian.Id] = new Style { GlowColor = "#123456", GlowOpacity = 55, GlowScan = true, GlowFx = new PartFx { Flow = true } };
+            Builder.Build(project, cats, game!, temp, _ => { });
+            var sa = Ba2Archive.Open(temp);
+            bool scanNif = sa.Entries.Where(e => e.Name.EndsWith(".nif", StringComparison.OrdinalIgnoreCase))
+                .Any(e => System.Text.Encoding.ASCII.GetString(sa.ReadFile(e)) is var s && s.Contains("_s.bgem") && s.Contains("BSEffectShaderPropertyFloatController"));
+            var scanTex = Path.Combine(Path.GetTempPath(), "espmaker-uitest - Textures.ba2");
+            bool HasScanTex(Ba2Archive x) => x.Entries.Any(e => e.Name.EndsWith("scanlines.dds", StringComparison.OrdinalIgnoreCase));
+            Check(scanNif && (HasScanTex(sa) || File.Exists(scanTex) && HasScanTex(Ba2Archive.Open(scanTex))), "scanlines: material, texture and moving lines built");
+            Ba2Writer.WriteGeneral(plain, sa.Entries.Where(e => e.Name != Importer.SetupPath).Select(e => (e.Name, sa.ReadFile(e))).ToList());
+            var scanBack = Importer.Read(plain, cats);
+            Check((scanBack.Project.Overrides.GetValueOrDefault(guardian.Id) ?? scanBack.Project.CategoryStyles.GetValueOrDefault(bosses.Name)) is { GlowScan: true }, "scanlines: read back from an older build");
+            File.Delete(temp); File.Delete(plain);
+            if (File.Exists(scanTex)) File.Delete(scanTex);
 
             log.Add("build & save dialog");
             // presses the dialog's main button; if that leaves it open (refused), its Cancel next

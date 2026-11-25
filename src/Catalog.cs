@@ -87,6 +87,9 @@ public sealed class Style : IJsonOnDeserialized
     /// <summary>Colour over the whole item (hides its texture). Off = an outline: clear where the surface faces you,
     /// coloured towards the edges - like the outline ESP mods, the item keeps its normal look.</summary>
     public bool GlowFill { get; set; }
+    /// <summary>Scanlines (2026-11-25, after the Slasher ESP Scanlines mod): bands of light run up the item, see-through between
+    /// them. A glow shape like Outline / Fill (Glow stays on; GlowFill is ignored). GlowFx.Flow = the lines move (on when picked).</summary>
+    public bool GlowScan { get; set; }
     /// <summary>Off by default - beams are added where wanted (category or single item).</summary>
     public bool Beam { get; set; }
     public string BeamColor { get; set; } = "#00E5FF";

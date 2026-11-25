@@ -183,7 +183,7 @@ public static class Importer
         return st;
     }
 
-    static readonly Regex OwnMaterial = new(@"\\itemfinder\\(?:(?<glow>glow[ab])_(?<hex>[0-9a-f]{6})_(?<power>\d+)(?<x>_x)?(?<o>_o)?(?:_cut\w+)?" +
+    static readonly Regex OwnMaterial = new(@"\\itemfinder\\(?:(?<glow>glow[ab])_(?<hex>[0-9a-f]{6})_(?<power>\d+)(?<x>_x)?(?<o>_o)?(?<s>_s)?(?:_cut\w+)?" +
         @"|beam_(?<beam>[0-9a-f]{6})_(?<power>\d+)(?<x>_x)?|icon3d_(?<solid>[0-9a-f]{6})(?<x>_x)?|icon_(?<icon>.+?)_(?<hex>[0-9a-f]{6})(?<x>_x)?" +
         @"|model_(?<model>.+?)(?:_(?<hex>[0-9a-f]{6}))?(?<x>_x)?)\.bgem$");
 
@@ -206,6 +206,8 @@ public static class Importer
                 st.GlowColor = "#" + m.Groups["hex"].Value.ToUpperInvariant();
                 st.GlowOpacity = int.Parse(m.Groups["power"].Value);
                 st.GlowFill = !m.Groups["o"].Success;
+                st.GlowScan = m.Groups["s"].Success;
+                if (st.GlowScan) st.GlowFx.Flow = true; // moving or not isn't in the material name: the default
             }
             else if (m.Groups["beam"].Success)
             {

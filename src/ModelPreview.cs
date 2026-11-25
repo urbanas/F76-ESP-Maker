@@ -95,7 +95,8 @@ static class ModelPreview
         var data = src.Archive.ReadFile(src);
         var chosen = st.Has("icon") ? Icons.Get(st.Icon) : null;
         bool use3D = noIcon || st.Icon3D;
-        var opts = new PatchOptions(st.Glow ? p => new GlowMat(GlowTag, p.Cutout ? p.Threshold : -1) : null,
+        // as Builder.GlowFor: only still cut-out parts keep the cut-out, animated ones (creatures) glow whole
+        var opts = new PatchOptions(st.Glow ? p => new GlowMat(GlowTag, p.Cutout && !p.Skinned ? p.Threshold : -1) : null,
                                     beamHere && st.Beam ? BeamTag : null, st.BeamLength, st.BeamWidth, harvestable,
                                     beamHere && !use3D && chosen != null ? IconTag : null, st.IconSize,
                                     beamHere && chosen != null ? Icons.Mask(chosen) : null, Icon3DTag, // solid where flat can't show
@@ -754,6 +755,8 @@ static class PreviewRenderer
         // the other layers (look stack): arrow, name, item copy - each its own colour, X-ray and strength
         public Color ArrowCol, LabelCol;
         public bool ArrowX, LabelX, CopyX;
+        /// <summary>Scanlines glow: added light in bands along the height that run up (as NifPatch.HeightUvs + the V offset).</summary>
+        public bool Scan;
         public float LabelA = 1f, CopyA = 1f;
 
         public static Paint Of(Style st)
@@ -773,6 +776,7 @@ static class PreviewRenderer
                 ArrowCol = Materials.Parse(st.ArrowColour), LabelCol = Materials.Parse(st.LabelColour),
                 ArrowX = st.ArrowFx.Walls, LabelX = st.LabelFx.Walls, CopyX = st.CopyFx.Walls,
                 LabelA = A(st.LabelStrength), CopyA = A(st.CopyStrength),
+                Scan = st.Glow && st.GlowScan,
             };
         }
 
@@ -866,7 +870,7 @@ static class PreviewRenderer
                         if (shown <= 0.001f) continue;
                         if (fx.Pulse) bright = 0.625f + 0.375f * MathF.Cos(time * MathF.PI); // a breath every 2 s, as built
                         if (fx.Rainbow) rainbow = RainbowAt(time);
-                        if (fx.Flow && p0.Kind == PartKind.Beam) flowT = time;
+                        if (fx.Flow && (p0.Kind == PartKind.Beam || pt.Scan && p0.Kind == PartKind.Glow)) flowT = time;
                         bool spinOk = !still && fx.Spin && (p0.Kind == PartKind.Model || p0.Kind == PartKind.Icon3D && !IsArrow(p0));
                         bool bobOk = !still && fx.Bob && p0.Kind is PartKind.Icon or PartKind.Icon3D or PartKind.Model;
                         p = Moved(p0, spinOk ? time / 4 * 2 * MathF.PI : 0, bobOk ? MathF.Sin(time * MathF.PI) : 0, shown);
@@ -1241,7 +1245,13 @@ static class PreviewRenderer
                             break;
                         }
                         case PartKind.Glow:
-                            if (p.TestRef >= 0) { float k = strength * clear; color[ci] += cr * k; color[ci + 1] += cg * k; color[ci + 2] += cb * k; } // cut-out: added light
+                            if (pt.Scan && p.TestRef < 0)
+                            {
+                                float pz = pa * wz[a] + pb * wz[b] + pd * wz[d];
+                                float k = Math.Min(1.5f, Materials.ScanScale(pt.GlowK / 0.36f)) /* the material's colour scale */ * Materials.ScanBand(-pz / Materials.ScanTile + Math.Max(0, flowT) / Materials.ScanPeriod) * clear;
+                                color[ci] += cr * k; color[ci + 1] += cg * k; color[ci + 2] += cb * k;
+                            }
+                            else if (p.TestRef >= 0) { float k = strength * clear; color[ci] += cr * k; color[ci + 1] += cg * k; color[ci + 2] += cb * k; } // cut-out: added light
                             else
                             {
                                 float ga = glowA * clear;

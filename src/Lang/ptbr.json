@@ -1110,5 +1110,11 @@
 "ESP Maker {0} is available": "ESP Maker {0} está disponível",
 "what's new:": "novidades:",
 "Open the Nexus page to download it?": "Abrir a página do Nexus para baixar?",
-"Item list updates version {0} ({1}) downloaded - no item changes, only news.": "Atualizações da lista de itens versão {0} ({1}) baixadas - sem mudanças de itens, só novidades."
+"Item list updates version {0} ({1}) downloaded - no item changes, only news.": "Atualizações da lista de itens versão {0} ({1}) baixadas - sem mudanças de itens, só novidades.",
+"Scanlines": "Linhas de varredura",
+"Lines move": "Linhas em movimento",
+"Scanlines: lines of light move up the item, see-through between them.": "Linhas de varredura: linhas de luz sobem pelo item, transparente entre elas.",
+"The scanlines move up the item. Off: they stand still.": "As linhas sobem pelo item. Desligado: ficam paradas.",
+"Show": "Mostrar",
+"Show: all, only selected, only own looks, or only items with parts": "Mostrar: tudo, só os selecionados, só visuais próprios ou só itens com partes"
 }

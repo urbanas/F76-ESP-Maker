@@ -6,7 +6,7 @@ Make your own ESP mod for **Fallout 76** without editing any files.
 
 Choose what you want to spot: bobbleheads, magazines, plans, XP food, pre-war food, notes, plants (including the nuked flora for Stable Flux), loot, loot bags, CAMP storage boxes, clothes, every outfit and armor piece (on the ground or worn), event objects, player vending machines, workbenches, legendary enemies or any kind of creature. Then choose how it looks:
 
-- an outline or full glow, or just brighter colours - optionally seen through walls (X-ray)
+- an outline or full glow, moving scanlines, or just brighter colours - optionally seen through walls (X-ray)
 - or Invisible: the item disappears and only what you add shows (it also hides foliage and worn outfits)
 
 Above the item you stack layers in any order: a beam into the sky, an arrow, a flat icon or a small 3D model, a copy of the item itself, and a floating name label. Each layer has its own colour, strength and size, and effects: X-ray, rainbow colours, pulse, spin, bob, light running up the beam, and a timer that hides it after a set time.

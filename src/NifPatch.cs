@@ -177,8 +177,10 @@ public sealed class NifFile
 /// alpha, which made its glow see-through).</param>
 /// <param name="Lift">Depth-tested glow (visible through walls off): the copy's vertices move out along their normals,
 /// or it sits at the item's own depth and flickers with it (salt / pepper, in-game test 2026-11-18).</param>
+/// <param name="Scan">Scanlines: the copy's UVs are remade from its height (HeightUvs).</param>
+/// <param name="ScanMoves">With Scan: its V offset runs (the lines move up).</param>
 public sealed record GlowMat(string Material, int TestRef = -1, int AlphaMode = 0, bool Outline = false, bool NoVertexColors = false,
-                             bool Lift = false);
+                             bool Lift = false, bool Scan = false, bool ScanMoves = false);
 
 /// <summary>What the patcher knows about a part that should glow.</summary>
 /// <param name="Material">The part's material file path from the model ("" if none).</param>
@@ -277,6 +279,37 @@ public static class NifPatch
             for (int k = 0; k < 3; k++)
                 Set(p, k, Get(p, k) + (b[p + nOff + k] / 255f * 2 - 1) * dist);
         }
+    }
+
+    /// <summary>Scanlines: every vertex's UV from its position (in place) - V = -height / tile, U = (x + y) / tile - so the
+    /// banded texture lies in level lines whatever the model's own UV layout. UVs are 2 halfs at nibble 2 (flag 0x2);
+    /// positions 3 halfs or 3 floats (flag 0x400) at the vertex start. False when the layout has no UVs.</summary>
+    static bool HeightUvs(byte[] b, int r, float tile)
+    {
+        int vdAt = r + 12;
+        if (b.Length < vdAt + 18) return false;
+        ulong vd = BitConverter.ToUInt64(b, vdAt);
+        int attrs = (int)((vd >> 44) & 0xFFF);
+        int size = (int)(vd & 0xF) * 4, uvOff = (int)((vd >> 8) & 0xF) * 4;
+        if ((attrs & 0x1) == 0 || (attrs & 0x2) == 0 || size == 0 || uvOff == 0) return false;
+        bool full = (attrs & 0x400) != 0;
+        int verts = BitConverter.ToUInt16(b, vdAt + 12), data = vdAt + 18;
+        if (data + verts * size > b.Length) return false;
+        float Get(int p, int k) => full ? BitConverter.ToSingle(b, p + 4 * k) : (float)BitConverter.UInt16BitsToHalf(BitConverter.ToUInt16(b, p + 2 * k));
+        // halfs lose precision far from 0: start at the shape's top / smallest x + y (one shift for the whole shape, whole
+        // repeats, so the lines stay level with the other parts)
+        float top = float.MinValue, side = float.MaxValue;
+        for (int v = 0; v < verts; v++) { int p = data + v * size; top = Math.Max(top, Get(p, 2)); side = Math.Min(side, Get(p, 0) + Get(p, 1)); }
+        top = MathF.Ceiling(top / tile) * tile; side = MathF.Floor(side / tile) * tile;
+        for (int v = 0; v < verts; v++)
+        {
+            int p = data + v * size;
+            float x = Get(p, 0), y = Get(p, 1), z = Get(p, 2);
+            float vv = (top - z) / tile, uu = (x + y - side) / tile;
+            BitConverter.TryWriteBytes(b.AsSpan(p + uvOff), BitConverter.HalfToUInt16Bits((Half)uu));
+            BitConverter.TryWriteBytes(b.AsSpan(p + uvOff + 2), BitConverter.HalfToUInt16Bits((Half)vv));
+        }
+        return true;
     }
 
     /// <summary>A shape's data without its vertex colours (4 bytes per vertex): vertex description at refs + 12
@@ -378,6 +411,7 @@ public static class NifPatch
         var partOf = new Dictionary<int, int>();
         PartMotion? Mo(int part) => o.Motion?[part];
         int beamShader = -1;
+        var scanShaders = new List<int>(); // scanline glow copies: their V offset runs
         // markers that can turn / bob: (shape, its centre, its height, its section)
         var movers = new List<(int Shape, (float X, float Y, float Z) At, float Height, int Part)>();
         // Glow copies get their own additive blending (light added on top, the item stays visible underneath).
@@ -447,7 +481,8 @@ public static class NifPatch
                 partShaders[GlowPart].Add((glowShader, glowMat.Material));
                 Put(copy, r + 4, glowShader);
                 Put(copy, r + 8, glowMat.AlphaMode switch { 1 => -1, 2 => alphaProp, _ => GlowAlpha(glowMat.TestRef) });
-                if (glowMat.Outline || glowMat.NoVertexColors) copy = WithoutVertexColors(copy, r);
+                if (glowMat.Outline || glowMat.NoVertexColors || glowMat.Scan) copy = WithoutVertexColors(copy, r);
+                if (glowMat.Scan && HeightUvs(copy, r, Materials.ScanTile) && glowMat.ScanMoves) scanShaders.Add(glowShader);
                 if (glowMat.Lift && skin < 0) LiftAlongNormals(copy, r);
                 int shape = f.Add(f.TypeOf(s), copy);
                 if (!glowAdded.TryGetValue(attachTo, out var list)) glowAdded[attachTo] = list = new();
@@ -730,6 +765,8 @@ public static class NifPatch
                 }
                 if (p == BeamPart && m.Flow && beamShader >= 0) { AddFloatController(f, beamShader, 13, new[] { (0f, 0f), (1.5f, 1f) }); shaderCtls++; did.Add("flow"); }
             }
+            foreach (var sh in scanShaders) { AddFloatController(f, sh, 13, new[] { (0f, 0f), (Materials.ScanPeriod, 1f) }); shaderCtls++; }
+            if (scanShaders.Count > 0) did.Add("scanlines");
             if (spun) did.Add("spin");
             if (bobbed) did.Add("bob");
             if (shaderCtls > 0 || moved > 0)

@@ -40,7 +40,7 @@ public sealed class StyleEditor : UserControl
     readonly List<FlowLayoutPanel> fxFlows = new();
     /// <summary>Joined buttons for a number box's usual values: Soft 15 / Medium 30 / Strong 60 ...</summary>
     readonly List<(Seg Seg, NumericUpDown Box, string[] Names, int[] Values)> steps = new();
-    readonly Seg itemSeg = new(Tr("Outline"), Tr("Fill"), Tr("Bright"), Tr("Off"));
+    readonly Seg itemSeg = new(Tr("Outline"), Tr("Fill"), Tr("Scanlines"), Tr("Bright"), Tr("Off"));
     readonly SwatchRow markerSwatches = new() { Margin = new Padding(0, 0, 0, 2), Small = true };
     readonly Label markerSame = new() { AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(3, 6, 0, 0) };
     readonly LinkLabel markerOwn = new() { AutoSize = true, Margin = new Padding(0, 6, 3, 0) };
@@ -540,12 +540,15 @@ public sealed class StyleEditor : UserControl
         const string timerNote = "\nA hide timer starts when the game loads the item, so it starts again when you come back to the area.";
 
         // 1 the item: a glow (outline / fill), or its own colours lit (bright); invisible
-        itemSection = new Section(Tr("The item"), Tr("Outline / Fill: a coloured light on the item. Bright: its own colours light up, day and night (not through walls).\nInvisible: the item disappears - only what you add shows; still there to pick up. Worn outfits vanish from whoever wears them, you too. Not on enemies.") + "\n" + Tr("Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.") + timerNote);
+        itemSection = new Section(Tr("The item"), Tr("Outline / Fill: a coloured light on the item. Bright: its own colours light up, day and night (not through walls).\nInvisible: the item disappears - only what you add shows; still there to pick up. Worn outfits vanish from whoever wears them, you too. Not on enemies.") + "\n" + Tr("Scanlines: lines of light move up the item, see-through between them.") + "\n" + Tr("Bright doesn't work on a few plants in game (Razorgrain): they get a Fill glow in their own colour instead.") + timerNote);
         Wide(itemSection, itemSeg);
         itemSeg.Picked += i =>
         {
             if (loading) return;
-            style.Glow = i < 2; style.GlowFill = i == 1; style.Brighten = i == 2;
+            // picking Scanlines starts them moving; the other shapes have no use for the glow's Flow
+            if (i == 2 && !style.GlowScan) style.GlowFx.Flow = true;
+            if (i != 2) style.GlowFx.Flow = false;
+            style.Glow = i < 3; style.GlowFill = i == 1; style.GlowScan = i == 2; style.Brighten = i == 3;
             Commit();
         };
         swatches.Small = true;
@@ -554,6 +557,8 @@ public sealed class StyleEditor : UserControl
         shineRows.AddRange(Row(itemSection, Tr("Shine"), Steps(brightStrength, strength, new[] { 50, 100, 200 }), brightStrength, Unit("%")));
         invisibleBox.CheckedChanged += (_, _) => { if (loading) return; style.Invisible = invisibleBox.Checked; UpdateLook(); Changed?.Invoke(this, EventArgs.Empty); };
         glowFx = Fx(itemSection, st => st.GlowFx);
+        glowFx.Flow.Text = Tr("Lines move"); // the glow's Flow: only for Scanlines
+        fxTips.SetToolTip(glowFx.Flow, Tr("The scanlines move up the item. Off: they stand still."));
         xrayRows.AddRange(Row(itemSection, Tr("Strength"), Steps(xrayStrength, strength, new[] { 50, 100, 200 }), xrayStrength, Unit("%")));
         xrayStrength.ValueChanged += (_, _) => { if (loading) return; style.XrayStrength = (int)xrayStrength.Value; Edited(); };
         pickRow = Row(itemSection, Tr("Pickup range"), Steps(pickRange, new[] { Tr("Off"), "2 m", "4 m", "6 m" }, new[] { 0, 2, 4, 6 }), pickRange, Unit("m"));
@@ -754,7 +759,7 @@ public sealed class StyleEditor : UserControl
         "icon" => iconButton.Text + FxSummary(style.IconFx),
         "copy" => Tf("{0} % of the item", copySize.Value) + FxSummary(style.CopyFx),
         "text" => LabelSummary(),
-        _ => style.Glow ? (style.GlowFill ? Tr("Fill") : Tr("Outline")) : style.Brighten ? Tr("Bright") : Tr("Off"),
+        _ => style.Glow ? (style.GlowScan ? Tr("Scanlines") : style.GlowFill ? Tr("Fill") : Tr("Outline")) : style.Brighten ? Tr("Bright") : Tr("Off"),
     };
 
     Color DotOf(string kind) => Materials.Parse(kind switch
@@ -843,14 +848,14 @@ public sealed class StyleEditor : UserControl
     /// <summary>The sections show the look: lit choices, the rows that fit, the layer list, the matching preset.</summary>
     void RefreshCards()
     {
-        int item = style.Glow ? (style.GlowFill ? 1 : 0) : style.Brighten ? 2 : 3;
+        int item = style.Glow ? (style.GlowScan ? 2 : style.GlowFill ? 1 : 0) : style.Brighten ? 3 : 4;
         itemSeg.Selected = item;
         var stack = style.Stack;
         if (picked.Length > 0 && !stack.Contains(picked)) picked = stack.LastOrDefault() ?? "";
         layersSection.Title = Tr("Layers") + "   " + Tf("{0} of {1}", stack.Length, Style.Kinds.Length);
         if (layerSections.TryGetValue(picked, out var ps)) ps.Title = KindName(picked) + "   ·   " + Tf("layer {0} from the item", Array.IndexOf(stack, picked) + 1);
-        foreach (var c in glowRows) c.Visible = item < 2;
-        foreach (var c in shineRows) c.Visible = item == 2;
+        foreach (var c in glowRows) c.Visible = item < 3;
+        foreach (var c in shineRows) c.Visible = item == 3;
         bool own = !sameColor.Checked;
         markerSame.Text = own ? Tr("Its own colour ·") : Tr("Same as the item ·");
         markerOwn.Text = own ? Tr("same as the item") : Tr("use a different colour");
@@ -871,7 +876,7 @@ public sealed class StyleEditor : UserControl
         foreach (var x in fxRows)
         {
             var fx = x.Of(style);
-            x.Walls.Checked = x == glowFx && item == 3 ? style.OwnXray : fx.Walls; x.Pulse.Checked = fx.Pulse; x.Rainbow.Checked = fx.Rainbow;
+            x.Walls.Checked = x == glowFx && item == 4 ? style.OwnXray : fx.Walls; x.Pulse.Checked = fx.Pulse; x.Rainbow.Checked = fx.Rainbow;
             x.Spin.Checked = fx.Spin; x.Bob.Checked = fx.Bob; x.Flow.Checked = fx.Flow;
             x.Hide.Value = Math.Clamp(fx.HideAfter, (int)x.Hide.Minimum, (int)x.Hide.Maximum);
             foreach (var c in x.Rows) c.Visible = true;
@@ -889,12 +894,12 @@ public sealed class StyleEditor : UserControl
                 fxTips.SetToolTip(x.HideFlow, icons3D ? AnimatedWhy : "");
                 if (x.Rows.FirstOrDefault(r => r is Label l && l.Text == Tr("Hide after")) is { } lab) fxTips.SetToolTip(lab, icons3D ? AnimatedWhy : "");
             }
-            x.Flow.Visible = x == beamFx;
+            x.Flow.Visible = x == beamFx || x == glowFx && item == 2;
         }
         // Bright / Off: only X-ray (a copy in its own colours, Builder.XrayFor); pulse / rainbow / timer not for it yet
-        glowFx.Pulse.Visible = glowFx.Rainbow.Visible = item < 2;
-        if (item >= 2) foreach (var c in glowFx.Rows.Skip(2)) c.Visible = false;
-        foreach (var c in xrayRows) c.Visible = item == 3 && style.OwnXray && !style.Invisible;
+        glowFx.Pulse.Visible = glowFx.Rainbow.Visible = item < 3;
+        if (item >= 3) foreach (var c in glowFx.Rows.Skip(2)) c.Visible = false;
+        foreach (var c in xrayRows) c.Visible = item == 4 && style.OwnXray && !style.Invisible;
         xrayStrength.Value = Math.Clamp(style.XrayStrength, 25, 300);
         foreach (var (seg, box, _, values) in steps) seg.Selected = Array.IndexOf(values, (int)box.Value);
         invisibleBox.Checked = style.Invisible;

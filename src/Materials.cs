@@ -95,6 +95,55 @@ public static class Materials
         return bmp;
     }
 
+    /// <summary>Game units per repeat of the scanline texture (57 cm): NifPatch writes the glow copy's V as -height / this.</summary>
+    public const float ScanTile = 40f;
+    /// <summary>Seconds for the scanlines to move one repeat up (V offset 0 -> 1): 7 cm/s, slow enough that the fine lines
+    /// don't flicker.</summary>
+    public const float ScanPeriod = 8f;
+    /// <summary>Lines per repeat: one every 5 units (7 cm; 2.4 cm lines only showed up really close in game, user 2026-11-25).</summary>
+    const int ScanLines = 8;
+
+    /// <summary>Scanlines: added light through the banded <see cref="ScanTexture"/> (white, alpha = brightness), tiled; the
+    /// glow copy's UVs follow its height (NifPatch.HeightUvs) and the V offset is animated, so the lines run up.
+    /// Brightness like a cut-out glow (the texture is dark between the lines): 100 % = colour scale 2.0.</summary>
+    public static byte[] ScanGlow(byte[] template, Color c, int strengthPercent, bool throughWalls, string texture)
+    {
+        float s = Math.Clamp(strengthPercent, 5, 100) / 100f;
+        var m = Make(template, texture, c, ScanScale(s), falloff: false, throughWalls, alpha: 1f);
+        Additive(m);
+        BitConverter.TryWriteBytes(m.AsSpan(TileFlags), 3u);
+        return m;
+    }
+
+    /// <summary>Colour scale of the scanline material at strength s (0.05..1): 2.5 x (the texture is mostly dark).</summary>
+    public static float ScanScale(float s) => 2.5f * s;
+
+    /// <summary>Brightness of the scanline texture at v (0..1, one repeat): <see cref="ScanLines"/> even lines (at 0.6,
+    /// softer beside it, a faint tint between) with a slight slow ripple, as the Slasher mod's bands.dds. The preview uses the
+    /// same curve.</summary>
+    public static float ScanBand(float v)
+    {
+        v -= MathF.Floor(v);
+        // where in its step, in repeats: the line and its soft edges keep a fixed width (3/256 of a repeat each, 0.47 units =
+        // 7 mm; 1/256 was too thin to see beyond arm's length, user 2026-11-25)
+        float at = v * ScanLines % 1f / ScanLines;
+        const float w = 3f / 256;
+        float line = at < w ? 0.6f : at < 2 * w || at > 1f / ScanLines - w ? 0.2f : 0.12f;
+        return line * (0.9f + 0.1f * MathF.Cos(2 * MathF.PI * v * 4));
+    }
+
+    public static Bitmap ScanTexture()
+    {
+        const int h = ScanLines * 32; // 32 rows per step: 3 rows of line, 3 soft rows each side
+        var bmp = new Bitmap(16, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        for (int y = 0; y < h; y++)
+        {
+            int a = (int)Math.Round(255 * ScanBand((y + 0.5f) / h));
+            for (int x = 0; x < 16; x++) bmp.SetPixel(x, y, System.Drawing.Color.FromArgb(a, 255, 255, 255));
+        }
+        return bmp;
+    }
+
     /// <summary>The colour strength (base colour scale) a material was written with - the pulse animates around it.</summary>
     public static float BaseScale(byte[] m)
     {

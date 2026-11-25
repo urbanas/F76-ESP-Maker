@@ -429,6 +429,15 @@ public static class Builder
         if (method is "B" or "C")
         {
             var vc = Materials.Parse(st.GlowColor);
+            if (st.GlowScan)
+            {
+                // scanlines: banded texture, the copy's UVs remade from its height, V offset animated (NifPatch)
+                if (!files.Any(f => f.Path == ScanTexture))
+                    using (var bmp = Materials.ScanTexture()) files.Add((ScanTexture, Icons.Dds(bmp)));
+                var spath = $@"materials\itemfinder\glowb_{Key(Materials.Hex(vc))}_{st.GlowOpacity}{(st.GlowFx.Walls ? "_x" : "")}_s.bgem";
+                if (!mats.ContainsKey(spath)) mats[spath] = Materials.ScanGlow(template, vc, st.GlowOpacity, st.GlowFx.Walls, "itemfinder/scanlines.dds");
+                return new GlowMat(spath, -1, 1, Scan: true, ScanMoves: st.GlowFx.Flow);
+            }
             var vpath = $@"materials\itemfinder\glow{method.ToLowerInvariant()}_{Key(Materials.Hex(vc))}_{st.GlowOpacity}{(st.GlowFx.Walls ? "_x" : "")}{(st.GlowFill ? "" : "_o")}.bgem";
             if (!mats.ContainsKey(vpath)) mats[vpath] = Materials.GlowVariant(template, vc, st.GlowOpacity, st.GlowFx.Walls, method == "B", !st.GlowFill);
             // no blending block at all: keeping a cut-out part's own block hid the glow (its alpha test fails on the
@@ -594,6 +603,7 @@ public static class Builder
     }
 
     const string FlowTexture = @"textures\itemfinder\beamflow.dds";
+    const string ScanTexture = @"textures\itemfinder\scanlines.dds";
 
     static string BeamMaterial(Style st, byte[] template, Dictionary<string, byte[]> mats, List<(string Path, byte[] Data)> files)
     {

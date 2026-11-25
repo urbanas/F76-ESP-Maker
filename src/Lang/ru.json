@@ -1113,5 +1113,11 @@
 "ESP Maker {0} is available": "Доступен ESP Maker {0}",
 "what's new:": "что нового:",
 "Open the Nexus page to download it?": "Открыть страницу Nexus, чтобы скачать?",
-"Item list updates version {0} ({1}) downloaded - no item changes, only news.": "Обновления списка предметов версии {0} ({1}) загружены — изменений предметов нет, только новости."
+"Item list updates version {0} ({1}) downloaded - no item changes, only news.": "Обновления списка предметов версии {0} ({1}) загружены — изменений предметов нет, только новости.",
+"Scanlines": "Линии сканирования",
+"Lines move": "Движение линий",
+"Scanlines: lines of light move up the item, see-through between them.": "Линии сканирования: полосы света движутся вверх по предмету, между ними — прозрачно.",
+"The scanlines move up the item. Off: they stand still.": "Линии движутся вверх по предмету. Выкл.: стоят на месте.",
+"Show": "Показать",
+"Show: all, only selected, only own looks, or only items with parts": "Показать: все, только выбранные, только своё оформление или только предметы с частями"
 }

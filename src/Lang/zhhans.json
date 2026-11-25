@@ -1111,5 +1111,11 @@
 "ESP Maker {0} is available": "ESP Maker {0} 已发布",
 "what's new:": "新内容：",
 "Open the Nexus page to download it?": "打开 Nexus 页面下载吗？",
-"Item list updates version {0} ({1}) downloaded - no item changes, only news.": "已下载物品列表更新版本 {0} ({1}) - 没有物品更改，只有消息。"
+"Item list updates version {0} ({1}) downloaded - no item changes, only news.": "已下载物品列表更新版本 {0} ({1}) - 没有物品更改，只有消息。",
+"Scanlines": "扫描线",
+"Lines move": "线条移动",
+"Scanlines: lines of light move up the item, see-through between them.": "扫描线：光线沿物品向上移动，线条之间透明。",
+"The scanlines move up the item. Off: they stand still.": "扫描线沿物品向上移动。关：静止不动。",
+"Show": "显示",
+"Show: all, only selected, only own looks, or only items with parts": "显示：全部、仅选中、仅自有外观，或仅有部件的物品"
 }

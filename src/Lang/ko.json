@@ -1110,5 +1110,11 @@
 "ESP Maker {0} is available": "ESP Maker {0} 사용 가능",
 "what's new:": "새로운 내용:",
 "Open the Nexus page to download it?": "Nexus 페이지를 열어 다운로드하시겠습니까?",
-"Item list updates version {0} ({1}) downloaded - no item changes, only news.": "아이템 목록 업데이트 버전 {0} ({1}) 다운로드됨 - 아이템 변경 없음, 소식만 있음."
+"Item list updates version {0} ({1}) downloaded - no item changes, only news.": "아이템 목록 업데이트 버전 {0} ({1}) 다운로드됨 - 아이템 변경 없음, 소식만 있음.",
+"Scanlines": "스캔라인",
+"Lines move": "선 움직임",
+"Scanlines: lines of light move up the item, see-through between them.": "스캔라인: 빛의 선이 아이템을 따라 위로 움직이고, 선 사이는 투명합니다.",
+"The scanlines move up the item. Off: they stand still.": "스캔라인이 아이템을 따라 위로 움직입니다. 끔: 멈춰 있습니다.",
+"Show": "표시",
+"Show: all, only selected, only own looks, or only items with parts": "표시: 전체, 선택한 것만, 고유 모양만, 또는 부품이 있는 아이템만"
 }
