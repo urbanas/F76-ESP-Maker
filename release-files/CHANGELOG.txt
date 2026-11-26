@@ -1,6 +1,25 @@
 ESP Maker - changes
 ===================
 
+2.8
+New
+- Scanlines: a new glow shape - thin lines of light move up the item ("Lines move" switch for
+  still lines). Not on cut-out parts like leaves (greyed out there, with the reason).
+- Ping: a sonar ring in the glow colour runs out over the ground from the item every few seconds
+  and shows through walls (5 / 15 / 30 m). Its own layer.
+- Pickup range is now its own layer "Pick-up zone": a Ball (up to 22 m) or a flat round Mat on
+  the ground (up to 100 m, with a Thickness), range buttons 5 / 15 / 30 m, and "Show the zone in
+  game" with its own colour, strength and drawing (rim and rings, or rim only).
+- Plants: the outline follows the leaves' own edges instead of filling them; solid parts inside
+  (a carrot's root) get a tight outline.
+- "(loose)" / "(plant)" after names shared by an Aid & food item and a plant (Carrot).
+Changed
+- Your picks: the badges, the parts and the total count the same entries.
+- A layer you just added stays selected when the item's look was following its category.
+Fixed
+- Carrots and other crops in the ground can be picked up from above with the Mat.
+- The docked look editor was squeezed after a restart.
+
 2.7.2
 Changed
 - The item list toolbar is one row: a tick box in the list header selects or clears all items,

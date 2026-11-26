@@ -723,7 +723,7 @@ public sealed class StyleEditor : UserControl
         zoneSection = layerSections["zone"] = new Section(Tr("Pick-up zone"), PickWhy + "\n" + PickShapeWhy);
         Row(zoneSection, Tr("Shape"), pickShape);
         pickShape.Picked += i => { if (loading) return; style.PickMat = i == 1; Edited(); };
-        var rangeRow = Row(zoneSection, Tr("Range"), Steps(pickRange, new[] { "4 m", "15 m", "50 m" }, new[] { 4, 15, 50 }), pickRange, Unit("m"));
+        var rangeRow = Row(zoneSection, Tr("Range"), Steps(pickRange, new[] { "5 m", "15 m", "30 m" }, new[] { 5, 15, 30 }), pickRange, Unit("m"));
         ((FlowLayoutPanel)rangeRow[1]).WrapContents = true;
         fxFlows.Add((FlowLayoutPanel)rangeRow[1]);
         foreach (var c in rangeRow) fxTips.SetToolTip(c, PickShapeWhy);
@@ -741,7 +741,8 @@ public sealed class StyleEditor : UserControl
         pickShowRows.AddRange(Row(zoneSection, Tr("Drawing"), pickDrawing));
         pickShowRows.AddRange(zoneSection.Body.Controls.Cast<Control>().Skip(before).Where(c => !pickShowRows.Contains(c)));
         pickDrawing.Picked += i => { if (loading) return; style.PickRimOnly = i == 1; Edited(); };
-        Row(zoneSection, "", pickCycle);
+        // "Comes and goes" hidden for 2.8 (user, 2026-11-26: untested in game); Builder ignores Style.PickCycle too
+        // Row(zoneSection, "", pickCycle);
         pickCycle.CheckedChanged += (_, _) => { if (loading) return; style.PickCycle = pickCycle.Checked; Edited(); };
 
         // the sonar ping: round the item like the zone, its own layer (user, 2026-11-26; was a row of The item)
@@ -867,7 +868,7 @@ public sealed class StyleEditor : UserControl
         "copy" => Tf("{0} % of the item", copySize.Value) + FxSummary(style.CopyFx),
         "text" => LabelSummary(),
         "zone" => (style.PickMat ? Tr("Mat") : Tr("Ball")) + " · " + Tf("{0} m", style.PickMat ? style.PickRange : Math.Min(style.PickRange, Pickup.BallMax))
-                  + (style.PickShow ? " · " + Tf("strength {0} %", style.PickStrength) : "") + (style.PickCycle ? " · " + Tr("comes and goes") : ""),
+                  + (style.PickShow ? " · " + Tf("strength {0} %", style.PickStrength) : ""),
         "ping" => Tf("{0} m", style.PingRange),
         _ => style.Glow ? (style.GlowScan ? Tr("Scanlines") : style.GlowFill ? Tr("Fill") : Tr("Outline")) : style.Brighten ? Tr("Bright") : Tr("Off"),
     };

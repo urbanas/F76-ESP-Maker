@@ -111,7 +111,7 @@ public static class Builder
                                             motion, p => materials.TryGetValue(p, out var mb) ? Materials.BaseScale(mb) : 1f,
                                             s.Stack, main ? arrowMat : null, s.ArrowWidth, copyMesh, copyMat, s.CopySize, s.IconScale / 100f, s.CopyScale / 100f,
                                             PickRange: pickOk ? s.PickRange : 0, PickDonor: s.PickRange > 0 && pickOk ? PickDonor(game) : null,
-                                            PickMat: s.PickMat, PickCycle: s.PickCycle, PickRimOnly: s.PickRimOnly, PickHeight: s.PickThickness / 100f,
+                                            PickMat: s.PickMat, PickCycle: false /* hidden for 2.8 */, PickRimOnly: s.PickRimOnly, PickHeight: s.PickThickness / 100f,
                                             PickShowMaterial: s.PickRange > 0 && pickOk && s.PickShow ? Icon3DMaterial(s.PickColour, true, Math.Clamp(s.PickStrength, 5, 100), template, materials) : null,
                                             PingRange: main ? s.PingRange : 0,
                                             PingMaterial: main && s.PingRange > 0 ? PingMaterial(s.GlowColor, template, materials, files) : null);
