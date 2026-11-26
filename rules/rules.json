@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "version": 16,
+  "version": 17,
   "minApp": "2.5",
-  "latestApp": "2.7.2",
+  "latestApp": "2.8",
   "updated": "2026-11-26",
   "changes": [
     { "version": 16, "text": [ "Wooden crates have their own row now: EVERYTHING ELSE > Other: Containers > Wooden Crate (before: Junk & misc > Box of Dried Chilies)", "The Blue Ridge crates of Riding Shotgun can't be done in ESP Maker - they are ordinary wooden crates with a blue paint; use the True Blue Crate mod on Nexus for them" ] },
