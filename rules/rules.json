@@ -1,10 +1,11 @@
 {
   "schema": 1,
-  "version": 15,
+  "version": 16,
   "minApp": "2.5",
   "latestApp": "2.7.2",
   "updated": "2026-11-26",
   "changes": [
+    { "version": 16, "text": [ "Wooden crates have their own row now: EVERYTHING ELSE > Other: Containers > Wooden Crate (before: Junk & misc > Box of Dried Chilies)", "The Blue Ridge crates of Riding Shotgun can't be done in ESP Maker - they are ordinary wooden crates with a blue paint; use the True Blue Crate mod on Nexus for them" ] },
     { "version": 15, "text": [ "Removed: EVENTS > Riding Shotgun - it lit up hide bundles instead of the Blue Ridge crates. The crates come back in the next ESP Maker version" ] },
     { "version": 14, "text": [ "New: EVENTS > Riding Shotgun - the lost Blue Ridge Caravan supplies in Big Bend Tunnel" ] },
     { "version": 13, "text": [ "ESP Maker 2.7.2 is out: text no longer cut off above 100 % Windows display scale, a one-row item list toolbar, the same item linked in every category, and Bright on colour variants (Rusted Vendor Bot)" ] },
@@ -1459,7 +1460,9 @@
   },
   "presets": [],
   "retirePresets": [],
-  "exclude": [],
+  "exclude": [
+    { "model": "setdressing\\woodcrate\\woodcrate.nif", "category": "Junk & misc", "note": "the ordinary wooden crate was listed as Junk & misc 'Box of Dried Chilies' (quest prop boxes on the same model) - out of there it gets its own row in Other: Containers, named Wooden Crate - user request 2026-11-26" }
+  ],
   "include": [
     { "model": "setdressing\\ashlootmounds\\ashlootmound02.nif", "category": "Loot spots & event objects", "entry": "Lucky Strike dig sites", "note": "own row in Loot spots, twin of EVENTS Lucky Strike > Dig sites - user request 2026-11-17" }
   ],
