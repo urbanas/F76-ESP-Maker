@@ -30,6 +30,9 @@ public static class Materials
     /// and fading to almost nothing at 5 % (the old 0.3 floor kept 5 % bright in game).</summary>
     public static float OutlineAlpha(float s) => Math.Min(1f, 1.7f * s);
 
+    /// <summary>The tight outline's falloff (GlowVariant tight): clear from this facing (cos) on, full colour below the stop.</summary>
+    public const float TightStart = 0.3f, TightStop = 0.05f;
+
     static void Outline(byte[] m, float s)
     {
         int d = BitConverter.ToInt32(m, TextureLength) - TemplateTexture.Length - 1;
@@ -144,6 +147,31 @@ public static class Materials
         return bmp;
     }
 
+    /// <summary>Sonar ping disc: the ring texture (PingTexture) running from the middle out by the V offset (like the
+    /// flowing beam), added light, no falloff (seen almost edge-on from standing height), through walls.</summary>
+    public static byte[] Ping(byte[] template, Color c, string texture)
+    {
+        var m = Make(template, texture, c, 1.4f, falloff: false, throughWalls: true, alpha: 1f);
+        Additive(m);
+        BitConverter.TryWriteBytes(m.AsSpan(TileFlags), 3u);
+        BitConverter.TryWriteBytes(m.AsSpan(VScale), 1f);
+        return m;
+    }
+
+    /// <summary>The ping's ring along V: one bright line with a soft glow either side, clear everywhere else.</summary>
+    public static Bitmap PingTexture()
+    {
+        var bmp = new Bitmap(16, 256, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        for (int y = 0; y < 256; y++)
+        {
+            double d = Math.Abs(y - 128) / 128.0; // 0 at the line
+            double k = Math.Max(Math.Exp(-d * d / 0.0008), 0.45 * Math.Exp(-d * d / 0.006));
+            int a = (int)Math.Round(255 * k);
+            for (int x = 0; x < 16; x++) bmp.SetPixel(x, y, System.Drawing.Color.FromArgb(a, 255, 255, 255));
+        }
+        return bmp;
+    }
+
     /// <summary>The colour strength (base colour scale) a material was written with - the pulse animates around it.</summary>
     public static float BaseScale(byte[] m)
     {
@@ -166,7 +194,9 @@ public static class Materials
 
     /// <summary>Test variants of the glow, both untextured. B: normal blending (source alpha, inverse source alpha) with
     /// the strength as opacity, like other ESP mods' overlays. C: added light, set in the material only.</summary>
-    public static byte[] GlowVariant(byte[] template, Color c, int strengthPercent, bool throughWalls, bool normalBlend, bool outline = false)
+    /// <param name="tight">Outline only on the outermost edge, faces clear (a solid area inside a cut-out, e.g. the
+    /// carrot's root: small and round, the normal outline covered all of it - user, 2026-11-26).</param>
+    public static byte[] GlowVariant(byte[] template, Color c, int strengthPercent, bool throughWalls, bool normalBlend, bool outline = false, bool tight = false)
     {
         float s = Math.Clamp(strengthPercent, 5, 100) / 100f;
         if (normalBlend)
@@ -179,6 +209,12 @@ public static class Materials
             if (outline)
             {
                 Outline(b, s);
+                if (tight)
+                {
+                    int d = BitConverter.ToInt32(b, TextureLength) - TemplateTexture.Length - 1;
+                    foreach (var (i, v) in new[] { (0, TightStart), (1, TightStop), (2, 0f), (3, 1f) })
+                        BitConverter.TryWriteBytes(b.AsSpan(FalloffAngles + d + 4 * i), v);
+                }
                 // one-sided: the far side's faces point away from you, so the falloff makes them fully opaque - drawn
                 // through the item (visible through walls) they washed the whole thing out white (bobblehead in game)
                 b[0x30] = 0;

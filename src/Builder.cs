@@ -110,7 +110,11 @@ public static class Builder
                                             labelMat, s.LabelSize * labelRatio, s.LabelSize, s.Invisible && e.CanHide,
                                             motion, p => materials.TryGetValue(p, out var mb) ? Materials.BaseScale(mb) : 1f,
                                             s.Stack, main ? arrowMat : null, s.ArrowWidth, copyMesh, copyMat, s.CopySize, s.IconScale / 100f, s.CopyScale / 100f,
-                                            PickRange: pickOk ? s.PickRange : 0, PickDonor: s.PickRange > 0 && pickOk ? PickDonor(game) : null);
+                                            PickRange: pickOk ? s.PickRange : 0, PickDonor: s.PickRange > 0 && pickOk ? PickDonor(game) : null,
+                                            PickMat: s.PickMat, PickCycle: s.PickCycle, PickRimOnly: s.PickRimOnly, PickHeight: s.PickThickness / 100f,
+                                            PickShowMaterial: s.PickRange > 0 && pickOk && s.PickShow ? Icon3DMaterial(s.PickColour, true, Math.Clamp(s.PickStrength, 5, 100), template, materials) : null,
+                                            PingRange: main ? s.PingRange : 0,
+                                            PingMaterial: main && s.PingRange > 0 ? PingMaterial(s.GlowColor, template, materials, files) : null);
                 }
                 // invisible enemies: their shimmer's gradient in the glow colour (a game texture: into the texture archive)
                 if (e.Gradients != null && st.Glow)
@@ -302,7 +306,7 @@ public static class Builder
         return new GlowMat(path, cut ?? -1); // its own additive alpha block, as the working glows
     }
 
-    static bool ChangesModel(Style s) => s.ShowsOwnXray || s.Glow || s.Beam || s.Arrow || s.Copy || s.Label || s.Invisible || s.PickRange > 0 || Icons.Get(s.Icon) != null || Models3D.Get(s.Icon) != null;
+    static bool ChangesModel(Style s) => s.ShowsOwnXray || s.Glow || s.Beam || s.Arrow || s.Copy || s.Label || s.Invisible || s.PickRange > 0 || s.PingRange > 0 || Icons.Get(s.Icon) != null || Models3D.Get(s.Icon) != null;
 
     /// <summary>The "pick up from afar" donor collision (Pickup), read once from the game; null when it can't be used.</summary>
     static byte[]? PickDonor(GameData game)
@@ -471,17 +475,63 @@ public static class Builder
         {
             // the part's own texture would tint the glow (dark red berries glowed almost black, green leaves bright):
             // a white copy keeping only its see-through parts gives the same cut-out in one even colour
-            var mask = CutMask(game, cut.Texture, files);
-            mats[path] = Materials.CutoutGlow(template, c, st.GlowOpacity, st.GlowFx.Walls, mask ?? cut.Texture, cut.Ref, !st.GlowFill, white: mask != null);
+            // Outline: a mask of only a thin rim along the cut-out's edge (user, 2026-11-26: on flat leaf cards the
+            // view-angle outline looked just like Fill) - drawn plain, without the angle fade
+            var mask = CutMask(game, cut.Texture, files, st.GlowFill ? -1 : cut.Ref);
+            mats[path] = Materials.CutoutGlow(template, c, st.GlowOpacity, st.GlowFx.Walls, mask ?? cut.Texture, cut.Ref, !st.GlowFill && mask == null, white: mask != null);
         }
-        return new GlowMat(path, mats[path][0x29], Outline: !st.GlowFill);
+        // Outline: the rims above are only the cut-out's edges - a solid area inside it (the carrot's root: one shape and
+        // one texture with its leaves) also gets the angle outline, on its fully opaque triangles only
+        GlowMat? also = null;
+        if (!st.GlowFill && OpaqueTest(game, cut.Texture, cut.Ref) is { } opaque)
+        {
+            var opath = $@"materials\itemfinder\glowb_{Key(Materials.Hex(c))}_{st.GlowOpacity}{(st.GlowFx.Walls ? "_x" : "")}_ot.bgem";
+            if (!mats.ContainsKey(opath)) mats[opath] = Materials.GlowVariant(template, c, st.GlowOpacity, st.GlowFx.Walls, true, true, tight: true);
+            also = new GlowMat(opath, -1, 1, Outline: true, Opaque: opaque);
+        }
+        return new GlowMat(path, mats[path][0x29], Outline: !st.GlowFill, Also: also);
+    }
+
+    static readonly Dictionary<string, Func<float, float, bool>?> opaqueTests = new();
+    /// <summary>Whether a UV point is solid in a cut-out texture: every pixel of its cell (≤ 256 px grid) passes the
+    /// alpha test. Null when the texture can't be read.</summary>
+    static Func<float, float, bool>? OpaqueTest(GameData game, string texture, byte testRef)
+    {
+        string key = texture.ToLowerInvariant() + "|" + testRef;
+        lock (opaqueTests)
+            if (opaqueTests.TryGetValue(key, out var known)) return known;
+        Func<float, float, bool>? test = null;
+        if (ModelPreview.LoadTexture(game, texture) is { } src)
+        {
+            int k = 1;
+            while (src.Width / k > 256 || src.Height / k > 256) k *= 2;
+            int w = Math.Max(1, src.Width / k), h = Math.Max(1, src.Height / k);
+            var solid = new bool[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int a = 255; // the least opaque of the k x k pixels
+                    for (int dy = 0; dy < k; dy++)
+                        for (int dx = 0; dx < k; dx++)
+                            a = Math.Min(a, src.Pixels[((y * k + dy) * src.Width + x * k + dx) * 4 + 3]);
+                    solid[y * w + x] = a > testRef;
+                }
+            test = (u, v) =>
+            {
+                int x = (int)MathF.Floor((u - MathF.Floor(u)) * w), y = (int)MathF.Floor((v - MathF.Floor(v)) * h);
+                return solid[Math.Clamp(y, 0, h - 1) * w + Math.Clamp(x, 0, w - 1)];
+            };
+        }
+        lock (opaqueTests) opaqueTests[key] = test;
+        return test;
     }
 
     /// <summary>A cut-out texture as white with its own transparency (at most 256 px, like the game's lower mips), written
     /// once as textures\itemfinder\cut\[hash].dds; returns the path for the material, or null if the texture can't be read.</summary>
-    static string? CutMask(GameData game, string texture, List<(string Path, byte[] Data)> files)
+    /// <param name="edgeRef">≥ 0: only a rim along the edge of what passes this alpha test is kept (the cut-out's outline).</param>
+    static string? CutMask(GameData game, string texture, List<(string Path, byte[] Data)> files, int edgeRef = -1)
     {
-        string name = $"{Ba2Hash.Crc(texture.ToLowerInvariant()):x8}";
+        string name = $"{Ba2Hash.Crc(texture.ToLowerInvariant()):x8}" + (edgeRef >= 0 ? $"_edge{edgeRef}" : "");
         string file = $@"textures\itemfinder\cut\{name}.dds", forMaterial = $"itemfinder/cut/{name}.dds";
         if (files.Any(f => f.Path == file)) return forMaterial;
         var src = ModelPreview.LoadTexture(game, texture);
@@ -502,8 +552,31 @@ public static class Builder
                 px[i] = px[i + 1] = px[i + 2] = 255;
                 px[i + 3] = (byte)a;
             }
+        if (edgeRef >= 0) EdgeOnly(px, w, h, edgeRef);
         files.Add((file, DdsFile.WriteBgra(new Rgba(w, h, px))));
         return forMaterial;
+    }
+
+    /// <summary>Keeps (fully opaque) only the pixels that pass the alpha test and have a failing one (or the texture's
+    /// border) within a few pixels; everything else becomes see-through.</summary>
+    internal static void EdgeOnly(byte[] px, int w, int h, int testRef)
+    {
+        int r = Math.Max(1, (int)Math.Round(Math.Max(w, h) / 128f));
+        var inside = new bool[w * h];
+        for (int i = 0; i < inside.Length; i++) inside[i] = px[i * 4 + 3] > testRef;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                bool rim = false;
+                if (inside[y * w + x])
+                    for (int dy = -r; dy <= r && !rim; dy++)
+                        for (int dx = -r; dx <= r && !rim; dx++)
+                        {
+                            int xx = x + dx, yy = y + dy;
+                            rim = xx < 0 || yy < 0 || xx >= w || yy >= h || !inside[yy * w + xx];
+                        }
+                px[(y * w + x) * 4 + 3] = rim ? (byte)255 : (byte)0;
+            }
     }
 
     /// <summary>Texture paths in models may start with "textures\"; material files use paths inside textures\.</summary>
@@ -599,6 +672,19 @@ public static class Builder
         var c = Materials.Parse(colour);
         var path = $@"materials\itemfinder\icon3d_{Key(Materials.Hex(c))}{(walls ? "_x" : "")}{Pct(pct)}.bgem";
         if (!mats.ContainsKey(path)) mats[path] = Materials.Icon3D(template, c, walls, Top(pct));
+        return path;
+    }
+
+    const string PingTexture = @"textures\itemfinder\ping.dds";
+
+    /// <summary>The sonar ping disc's material in the glow colour (Materials.Ping) and its ring texture.</summary>
+    static string PingMaterial(string colour, byte[] template, Dictionary<string, byte[]> mats, List<(string Path, byte[] Data)> files)
+    {
+        var c = Materials.Parse(colour);
+        var path = $@"materials\itemfinder\ping_{Key(Materials.Hex(c))}.bgem";
+        if (!files.Any(f => f.Path == PingTexture))
+            using (var bmp = Materials.PingTexture()) files.Add((PingTexture, Icons.Dds(bmp)));
+        if (!mats.ContainsKey(path)) mats[path] = Materials.Ping(template, c, "itemfinder/ping.dds");
         return path;
     }
 

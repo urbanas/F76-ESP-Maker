@@ -69,7 +69,7 @@ public sealed class StyleEditor : UserControl
 
     static string KindName(string kind) => kind switch
     {
-        "beam" => Tr("Beam"), "arrow" => Tr("Arrow"), "icon" => Tr("Icon"), "copy" => Tr("Item copy"), "text" => Tr("Text"), _ => Tr("The item"),
+        "beam" => Tr("Beam"), "arrow" => Tr("Arrow"), "icon" => Tr("Icon"), "copy" => Tr("Item copy"), "text" => Tr("Text"), "zone" => Tr("Pick-up zone"), "ping" => Tr("Ping"), _ => Tr("The item"),
     };
 
     /// <summary>One section of the look: a bold title (its hint as a tooltip) and its settings under it, framed.</summary>
@@ -172,13 +172,15 @@ public sealed class StyleEditor : UserControl
     {
         readonly string what, kind;
         bool hover;
-        public AddRow(string name, string what, string kind)
+        /// <summary>Greyed (not for this item; the tooltip says why), clicks do nothing.</summary>
+        public readonly bool Off;
+        public AddRow(string name, string what, string kind, bool off = false)
         {
-            Text = name; this.what = what; this.kind = kind;
+            Text = name; this.what = what; this.kind = kind; Off = off;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-            Cursor = Cursors.Hand;
+            Cursor = off ? Cursors.Default : Cursors.Hand;
         }
-        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseEnter(EventArgs e) { hover = !Off; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -187,11 +189,11 @@ public sealed class StyleEditor : UserControl
             g.Clear(hover ? Ui.Hover : Ui.Window);
             if (hover) using (var p = new Pen(Ui.Accent)) g.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
             int d = Font.Height + Ui.S(8), x = Ui.S(10);
-            KindIcon(g, kind, new Rectangle(x, (Height - d) / 2, d, d), hover ? Ui.Accent : Ui.Fg);
+            KindIcon(g, kind, new Rectangle(x, (Height - d) / 2, d, d), Off ? Ui.Line : hover ? Ui.Accent : Ui.Fg);
             x += d + Ui.S(12);
             using var bold = new Font(Font, FontStyle.Bold);
             int top = (Height - 2 * Font.Height - 2) / 2;
-            TextRenderer.DrawText(g, Text, bold, new Point(x, top), Ui.Fg, TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(g, Text, bold, new Point(x, top), Off ? Ui.Muted : Ui.Fg, TextFormatFlags.NoPrefix);
             TextRenderer.DrawText(g, what, Font, new Rectangle(x, top + Font.Height + 2, Width - x - 6, Font.Height + 1), Ui.Muted, TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
         }
     }
@@ -228,6 +230,19 @@ public sealed class StyleEditor : UserControl
                 using (var f = new Font(FontFamily.GenericSansSerif, h * 0.5f, FontStyle.Bold, GraphicsUnit.Pixel))
                     TextRenderer.DrawText(g, "Aa", f, r, c, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 g.DrawLine(p, P(0.15f, 0.88f), P(0.85f, 0.88f));
+                break;
+            case "zone": // a flat ring on the floor round a small item
+                g.DrawEllipse(p, x + w * 0.05f, y + h * 0.55f, w * 0.9f, h * 0.36f);
+                using (var thin = new Pen(Color.FromArgb(120, c), 1.2f))
+                    g.DrawEllipse(thin, x + w * 0.27f, y + h * 0.64f, w * 0.46f, h * 0.18f);
+                g.DrawRectangle(p, x + w * 0.42f, y + h * 0.3f, w * 0.16f, h * 0.4f);
+                break;
+            case "ping": // rings running out over the floor
+                g.DrawEllipse(p, x + w * 0.02f, y + h * 0.5f, w * 0.96f, h * 0.42f);
+                using (var thin = new Pen(Color.FromArgb(150, c), 1.2f))
+                    g.DrawEllipse(thin, x + w * 0.2f, y + h * 0.58f, w * 0.6f, h * 0.26f);
+                using (var faint = new Pen(Color.FromArgb(90, c), 1.2f))
+                    g.DrawEllipse(faint, x + w * 0.36f, y + h * 0.65f, w * 0.28f, h * 0.12f);
                 break;
             default: // item copy
                 g.DrawRectangle(p, x + w * 0.1f, y + h * 0.45f, w * 0.5f, h * 0.48f);
@@ -267,15 +282,18 @@ public sealed class StyleEditor : UserControl
             Kind = kind;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
             Margin = new Padding(0, 0, 0, kind.Length > 0 ? 4 : 2);
-            AllowDrop = kind.Length > 0;
+            AllowDrop = kind.Length > 0 && !OnGround(kind);
             Cursor = Cursors.Hand;
         }
+
+        /// <summary>The pick-up zone / ping: round the item, not in the stack - no moving, only ✕.</summary>
+        bool Zone => OnGround(Kind);
 
         protected override void OnFontChanged(EventArgs e) { Height = Font.Height * 2 + Ui.S(14); base.OnFontChanged(e); }
 
         int B => Height - Ui.S(14); // button size
         Rectangle Button(int i) => new(Width - Ui.S(6) - (3 - i) * (B + Ui.S(2)), (Height - B) / 2, B, B);
-        int ButtonAt(Point p) => Kind.Length == 0 ? -1 : Enumerable.Range(0, 3).FirstOrDefault(i => Button(i).Contains(p), -1);
+        int ButtonAt(Point p) => Kind.Length == 0 ? -1 : Enumerable.Range(Zone ? 2 : 0, Zone ? 1 : 3).FirstOrDefault(i => Button(i).Contains(p), -1);
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -287,7 +305,7 @@ public sealed class StyleEditor : UserControl
             using (var bg = new SolidBrush(Picked ? Ui.AccentSoft : item ? Ui.Panel : Ui.Window)) g.FillRectangle(bg, r);
             using (var pen = new Pen(Picked ? Ui.Accent : Ui.Line, Picked ? 2f : 1f)) g.DrawRectangle(pen, r);
             int x = Ui.S(6);
-            TextRenderer.DrawText(g, item ? "⊥" : "⠿", Font, new Rectangle(x, 0, Ui.S(14), Height), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(g, item ? "⊥" : Zone ? "◎" : "⠿", Font, new Rectangle(x, 0, Ui.S(14), Height), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix);
             x += Ui.S(18);
             int d = Font.Height - 2;
             var dot = new Rectangle(x, (Height - d) / 2, d, d);
@@ -312,7 +330,7 @@ public sealed class StyleEditor : UserControl
             if (item) return;
             string[] marks = { "▲", "▼", "✕" };
             bool[] on = { CanUp, CanDown, true };
-            for (int i = 0; i < 3; i++)
+            for (int i = Zone ? 2 : 0; i < 3; i++)
             {
                 var br = Button(i);
                 if (hoverButton == i && on[i]) using (var hb = new SolidBrush(Ui.Hover)) g.FillRectangle(hb, br);
@@ -338,7 +356,7 @@ public sealed class StyleEditor : UserControl
         {
             int hb = ButtonAt(e.Location);
             if (hb != hoverButton) { hoverButton = hb; Invalidate(); }
-            if (press is Point p && Kind.Length > 0 && (Math.Abs(e.X - p.X) > 4 || Math.Abs(e.Y - p.Y) > 4))
+            if (press is Point p && Kind.Length > 0 && !Zone && (Math.Abs(e.X - p.X) > 4 || Math.Abs(e.Y - p.Y) > 4))
             {
                 press = null;
                 dragging = this;
@@ -362,7 +380,7 @@ public sealed class StyleEditor : UserControl
         }
         protected override void OnDragOver(DragEventArgs e)
         {
-            bool ok = e.Data?.GetData(typeof(string)) is string k && k != Kind;
+            bool ok = e.Data?.GetData(typeof(string)) is string k && k != Kind && !Zone && !OnGround(k);
             e.Effect = ok ? DragDropEffects.Move : DragDropEffects.None;
             // the dragged layer takes this row's place: above it when it comes from below, else below it (user, 2026-11-15:
             // no sign where it would land)
@@ -427,8 +445,30 @@ public sealed class StyleEditor : UserControl
     FxRows glowFx = null!, beamFx = null!, arrowFx = null!, iconFx = null!, copyFx = null!, labelFx = null!;
     readonly CheckBox invisibleBox = new() { Text = Tr("Invisible - only what you add shows"), AutoSize = true };
     /// <summary>"Pick up from afar": the pick-up sphere's radius in metres (Style.PickRange), 0 = off.</summary>
-    readonly NumericUpDown pickRange = new() { Minimum = 0, Maximum = 15, Increment = 1, Width = 48 };
-    Control[] pickRow = Array.Empty<Control>();
+    readonly NumericUpDown pickRange = new() { Minimum = 1, Maximum = 100, Increment = 1, Width = 48 };
+    readonly Seg pickShape = new(Tr("Ball"), Tr("Mat"));
+    readonly CheckBox pickShow = new() { Text = Tr("Show the zone in game"), AutoSize = true };
+    readonly CheckBox pickCycle = new() { Text = Tr("Comes and goes (test: 5 s on, 3 s off)"), AutoSize = true };
+    readonly NumericUpDown pickStrength = new() { Minimum = 5, Maximum = 100, Increment = 5, Width = 48 };
+    readonly Seg pickDrawing = new(Tr("Rim + rings"), Tr("Rim only"));
+    /// <summary>The mat's thickness above the ground in cm (Style.PickThickness).</summary>
+    readonly NumericUpDown pickHeight = new() { Minimum = 5, Maximum = 500, Increment = 5, Width = 48 };
+    Control[] pickHeightRow = Array.Empty<Control>();
+    /// <summary>The rows under "Show the zone" (colour, strength, drawing): shown while it is ticked.</summary>
+    readonly List<Control> pickShowRows = new();
+    /// <summary>The ping's range before its layer was removed: adding it again brings it back.</summary>
+    int lastPing = 15;
+    /// <summary>Rows under the item's ground line, round the item and not in the stack (no moving).</summary>
+    static bool OnGround(string kind) => kind is "zone" or "ping";
+    Section zoneSection = null!;
+    OwnColour zoneColour = null!;
+    /// <summary>The range before the zone layer was removed: adding it again brings it back.</summary>
+    int lastPick = 15;
+    static string NotPickWhy => Tr("Only on things you pick up, harvest or open where they lie - not on enemies, people, CAMP items, containers, doors or furniture (they would lose their solid shape).");
+    /// <summary>Sonar ping: the ring's range in metres (Style.PingRange), 0 = off.</summary>
+    readonly NumericUpDown pingRange = new() { Minimum = 1, Maximum = 100, Increment = 1, Width = 48 };
+    static readonly string PingWhy = Tr("A ring in the glow colour runs out over the ground from the item every few seconds, like sonar, and shows through walls.\nThe number is how far it runs.");
+    static readonly string PickShapeWhy = Tr("Ball: round the item, up to 22 m. Mat: flat on the floor round the item's foot, up to 100 m - look at the ground near the item to pick it up; it never hides buttons, doors or things standing on it.");
     static readonly string PickWhy = Tr("Pick it up from further away: an invisible ball round the item (shown in the 3D view) that the game's aim hits - you walk straight through it.\nYou reach about 2 m past the ball's edge. The item stays where it is placed (it doesn't fall or get knocked about).\nInside the ball it may be picked instead of a door or box next to it - keep it small near those.");
 
     void BuildCards()
@@ -561,8 +601,6 @@ public sealed class StyleEditor : UserControl
         fxTips.SetToolTip(glowFx.Flow, Tr("The scanlines move up the item. Off: they stand still."));
         xrayRows.AddRange(Row(itemSection, Tr("Strength"), Steps(xrayStrength, strength, new[] { 50, 100, 200 }), xrayStrength, Unit("%")));
         xrayStrength.ValueChanged += (_, _) => { if (loading) return; style.XrayStrength = (int)xrayStrength.Value; Edited(); };
-        pickRow = Row(itemSection, Tr("Pickup range"), Steps(pickRange, new[] { Tr("Off"), "2 m", "4 m", "6 m" }, new[] { 0, 2, 4, 6 }), pickRange, Unit("m"));
-        foreach (var c in pickRow) fxTips.SetToolTip(c, PickWhy);
         Wide(itemSection, invisibleBox); // last in the section (user, 2026-11-09)
         swatches.Picked += c =>
         {
@@ -593,6 +631,8 @@ public sealed class StyleEditor : UserControl
             // a drop-down as wide as the button with rows like the layer list's: colour dot, name, what it is underneath
             var on = style.Stack;
             var kinds = Style.Kinds.Where(k => !on.Contains(k)).ToList();
+            if (style.PickRange <= 0 || !pickOk) kinds.Add("zone");
+            if (style.PingRange <= 0 || icons3D) kinds.Add("ping");
             var panel = new Panel { BackColor = Ui.Window, Width = addButton.Width, Padding = new Padding(Ui.S(4)) };
             int y = Ui.S(4);
             var drop = new ToolStripDropDown { Padding = Padding.Empty, BackColor = Ui.Line };
@@ -602,9 +642,12 @@ public sealed class StyleEditor : UserControl
                 var row = new AddRow(KindName(kind), kind switch
                 {
                     "beam" => Tr("A column of light above it"), "arrow" => Tr("Points down at it"), "icon" => Tr("A picture or 3D model"),
-                    "text" => Tr("Its name or your own words"), "copy" => Tr("A copy of the item's own shape"), _ => "",
-                }, kind) { Font = Font, Bounds = new Rectangle(Ui.S(4), y, panel.Width - Ui.S(8), Font.Height * 2 + Ui.S(14)) };
-                row.Click += (_, _) => { drop.Close(); AddLayer(kind); };
+                    "text" => Tr("Its name or your own words"), "copy" => Tr("A copy of the item's own shape"),
+                    "zone" => pickOk ? Tr("Pick it up from further away") : Tr("Not on this kind of item"),
+                    "ping" => icons3D ? Tr("Not on this kind of item") : Tr("A ring runs out over the ground"), _ => "",
+                }, kind, kind == "zone" && !pickOk || kind == "ping" && icons3D) { Font = Font, Bounds = new Rectangle(Ui.S(4), y, panel.Width - Ui.S(8), Font.Height * 2 + Ui.S(14)) };
+                if (row.Off) fxTips.SetToolTip(row, kind == "ping" ? AnimatedWhy : NotPickWhy);
+                row.Click += (_, _) => { if (row.Off) return; drop.Close(); AddLayer(kind); };
                 panel.Controls.Add(row);
                 y += row.Height + Ui.S(2);
             }
@@ -676,6 +719,36 @@ public sealed class StyleEditor : UserControl
         Colour(textSection, st => st.LabelColor, (st, c) => st.LabelColor = c, st => st.LabelColour);
         labelFx = Fx(textSection, st => st.LabelFx);
 
+        // the pick-up zone: round the item, not in the stack (user, 2026-11-25: its own layer, settings under the list)
+        zoneSection = layerSections["zone"] = new Section(Tr("Pick-up zone"), PickWhy + "\n" + PickShapeWhy);
+        Row(zoneSection, Tr("Shape"), pickShape);
+        pickShape.Picked += i => { if (loading) return; style.PickMat = i == 1; Edited(); };
+        var rangeRow = Row(zoneSection, Tr("Range"), Steps(pickRange, new[] { "4 m", "15 m", "50 m" }, new[] { 4, 15, 50 }), pickRange, Unit("m"));
+        ((FlowLayoutPanel)rangeRow[1]).WrapContents = true;
+        fxFlows.Add((FlowLayoutPanel)rangeRow[1]);
+        foreach (var c in rangeRow) fxTips.SetToolTip(c, PickShapeWhy);
+        pickHeightRow = Row(zoneSection, Tr("Thickness"), Steps(pickHeight, new[] { "10 cm", "50 cm", "1 m", "2 m" }, new[] { 10, 50, 100, 200 }), pickHeight, Unit("cm"));
+        ((FlowLayoutPanel)pickHeightRow[1]).WrapContents = true;
+        fxFlows.Add((FlowLayoutPanel)pickHeightRow[1]);
+        foreach (var c in pickHeightRow) fxTips.SetToolTip(c, Tr("How far the mat reaches up from the ground. 10 cm: a flat mat you aim at the ground for. Thicker: you can also aim higher, but it covers more of what stands inside it (buttons, doors, plants)."));
+        Row(zoneSection, "", pickShow);
+        fxTips.SetToolTip(pickShow, Tr("Draws the zone in game, so you see how far it reaches. Without it the zone is invisible."));
+        pickShow.CheckedChanged += (_, _) => { if (loading) return; style.PickShow = pickShow.Checked; Edited(); };
+        int before = zoneSection.Body.Controls.Count;
+        Colour(zoneSection, st => st.PickColor, (st, c) => st.PickColor = c, st => st.PickColour);
+        zoneColour = ownColours[^1];
+        pickShowRows.AddRange(Row(zoneSection, Tr("Strength"), Steps(pickStrength, strength, new[] { 15, 30, 60 }), pickStrength, Unit("%")));
+        pickShowRows.AddRange(Row(zoneSection, Tr("Drawing"), pickDrawing));
+        pickShowRows.AddRange(zoneSection.Body.Controls.Cast<Control>().Skip(before).Where(c => !pickShowRows.Contains(c)));
+        pickDrawing.Picked += i => { if (loading) return; style.PickRimOnly = i == 1; Edited(); };
+        Row(zoneSection, "", pickCycle);
+        pickCycle.CheckedChanged += (_, _) => { if (loading) return; style.PickCycle = pickCycle.Checked; Edited(); };
+
+        // the sonar ping: round the item like the zone, its own layer (user, 2026-11-26; was a row of The item)
+        var pingSection = layerSections["ping"] = new Section(Tr("Ping"), PingWhy);
+        foreach (var c in Row(pingSection, Tr("Range"), Steps(pingRange, new[] { "5 m", "15 m", "30 m" }, new[] { 5, 15, 30 }), pingRange, Unit("m")))
+            fxTips.SetToolTip(c, PingWhy);
+
         // presets: switch the parts on / off; colours and sizes stay
         string[] names = { Tr("Glow only"), Tr("Glow + beam"), Tr("Glow + beam + name") };
         for (int i = 0; i < names.Length; i++)
@@ -703,6 +776,20 @@ public sealed class StyleEditor : UserControl
     /// <summary>A layer on top of the stack; the icon brings back the last one, or opens the picker.</summary>
     void AddLayer(string kind)
     {
+        if (kind == "zone")
+        {
+            picked = kind;
+            loading = true; pickRange.Value = Math.Clamp(lastPick, 1, 100); loading = false;
+            Edit(() => style.PickRange = (int)pickRange.Value);
+            return;
+        }
+        if (kind == "ping")
+        {
+            picked = kind;
+            loading = true; pingRange.Value = Math.Clamp(lastPing, 1, 100); loading = false;
+            Edit(() => style.PingRange = (int)pingRange.Value);
+            return;
+        }
         if (kind == "icon" && style.Icon.Length == 0)
         {
             if (lastIcon.Length > 0) style.Icon = lastIcon;
@@ -714,6 +801,26 @@ public sealed class StyleEditor : UserControl
 
     void RemoveLayer(string kind)
     {
+        if (kind == "zone")
+        {
+            Edit(() =>
+            {
+                lastPick = style.PickRange;
+                style.PickRange = 0;
+                picked = style.Stack.LastOrDefault() ?? "";
+            });
+            return;
+        }
+        if (kind == "ping")
+        {
+            Edit(() =>
+            {
+                lastPing = style.PingRange;
+                style.PingRange = 0;
+                picked = HasZone ? "zone" : style.Stack.LastOrDefault() ?? "";
+            });
+            return;
+        }
         var order = style.Stack.ToList();
         int i = order.IndexOf(kind);
         Edit(() =>
@@ -759,27 +866,33 @@ public sealed class StyleEditor : UserControl
         "icon" => iconButton.Text + FxSummary(style.IconFx),
         "copy" => Tf("{0} % of the item", copySize.Value) + FxSummary(style.CopyFx),
         "text" => LabelSummary(),
+        "zone" => (style.PickMat ? Tr("Mat") : Tr("Ball")) + " · " + Tf("{0} m", style.PickMat ? style.PickRange : Math.Min(style.PickRange, Pickup.BallMax))
+                  + (style.PickShow ? " · " + Tf("strength {0} %", style.PickStrength) : "") + (style.PickCycle ? " · " + Tr("comes and goes") : ""),
+        "ping" => Tf("{0} m", style.PingRange),
         _ => style.Glow ? (style.GlowScan ? Tr("Scanlines") : style.GlowFill ? Tr("Fill") : Tr("Outline")) : style.Brighten ? Tr("Bright") : Tr("Off"),
     };
 
     Color DotOf(string kind) => Materials.Parse(kind switch
     {
-        "beam" => style.BeamColor, "arrow" => style.ArrowColour, "icon" => style.IconColour, "text" => style.LabelColour, _ => style.GlowColor,
+        "beam" => style.BeamColor, "arrow" => style.ArrowColour, "icon" => style.IconColour, "text" => style.LabelColour, "zone" => style.PickColour, _ => style.GlowColor,
     });
 
     /// <summary>The layer list as the look has it (rebuilt when the layers change, else just repainted).</summary>
     void RefreshRows()
     {
         var stack = style.Stack;
-        string key = string.Join(",", stack);
+        var under = new[] { "zone", "ping" }.Where(k => k == "zone" ? HasZone : HasPing).ToArray();
+        bool zone = under.Length > 0;
+        string key = string.Join(",", stack) + "|" + string.Join(",", under);
         if (key != listed)
         {
             listed = key;
             layerList.SuspendLayout();
             foreach (Control c in layerList.Controls.Cast<Control>().ToList()) c.Dispose();
             layerList.Controls.Clear();
-            foreach (var k in stack.Reverse().Append(""))
+            foreach (var k in stack.Reverse().Append("").Concat(under))
             {
+                if (k == under.FirstOrDefault()) layerList.Controls.Add(Ui.Scaled(new Ground())); // zone / ping sit round the item, under the ground line
                 var row = Ui.Scaled(new LayerRow(k) { Font = Font });
                 row.Clicked += kind => { picked = kind; RefreshCards(); };
                 row.Removed += RemoveLayer;
@@ -788,7 +901,7 @@ public sealed class StyleEditor : UserControl
                 row.Dropped += DropLayer;
                 layerList.Controls.Add(row);
             }
-            layerList.Controls.Add(Ui.Scaled(new Ground()));
+            if (!zone) layerList.Controls.Add(Ui.Scaled(new Ground()));
             layerList.ResumeLayout();
         }
         foreach (var row in layerList.Controls.OfType<LayerRow>())
@@ -842,6 +955,11 @@ public sealed class StyleEditor : UserControl
         return w.Count > 0 ? " · " + string.Join(" · ", w) : "";
     }
 
+    /// <summary>The look has a pick-up zone that applies to this item (the zone row is listed).</summary>
+    bool HasZone => style.PickRange > 0 && pickOk;
+    /// <summary>The look has a sonar ping that applies to this item (not on creatures / worn outfits).</summary>
+    bool HasPing => style.PingRange > 0 && !icons3D;
+
     /// <summary>The section of the picked layer (the empty one without layers).</summary>
     Section PickedSection => layerSections.TryGetValue(picked, out var s) ? s : itemSection;
 
@@ -851,9 +969,9 @@ public sealed class StyleEditor : UserControl
         int item = style.Glow ? (style.GlowScan ? 2 : style.GlowFill ? 1 : 0) : style.Brighten ? 3 : 4;
         itemSeg.Selected = item;
         var stack = style.Stack;
-        if (picked.Length > 0 && !stack.Contains(picked)) picked = stack.LastOrDefault() ?? "";
+        if (picked.Length > 0 && !stack.Contains(picked) && !(picked == "zone" && HasZone) && !(picked == "ping" && HasPing)) picked = stack.LastOrDefault() ?? "";
         layersSection.Title = Tr("Layers") + "   " + Tf("{0} of {1}", stack.Length, Style.Kinds.Length);
-        if (layerSections.TryGetValue(picked, out var ps)) ps.Title = KindName(picked) + "   ·   " + Tf("layer {0} from the item", Array.IndexOf(stack, picked) + 1);
+        if (!OnGround(picked) && layerSections.TryGetValue(picked, out var ps)) ps.Title = KindName(picked) + "   ·   " + Tf("layer {0} from the item", Array.IndexOf(stack, picked) + 1);
         foreach (var c in glowRows) c.Visible = item < 3;
         foreach (var c in shineRows) c.Visible = item == 3;
         bool own = !sameColor.Checked;
@@ -903,12 +1021,14 @@ public sealed class StyleEditor : UserControl
         xrayStrength.Value = Math.Clamp(style.XrayStrength, 25, 300);
         foreach (var (seg, box, _, values) in steps) seg.Selected = Array.IndexOf(values, (int)box.Value);
         invisibleBox.Checked = style.Invisible;
-        // creatures / worn outfits: no pick-up ball (greyed with the reason, like the motions)
-        foreach (var c in pickRow)
-        {
-            c.Enabled = pickOk;
-            fxTips.SetToolTip(c, pickOk ? PickWhy : Tr("Only on things you pick up, harvest or open where they lie - not on enemies, people, CAMP items, containers, doors or furniture (they would lose their solid shape)."));
-        }
+        // the pick-up zone layer: colour / strength / drawing only while it is drawn in game
+        // colour + drawing also colour the 3D view's guide, so they stay shown; strength is for the game only
+        foreach (var c in pickShowRows) c.Visible = !zoneColour.SwatchRowCtl.Contains(c) || !string.IsNullOrEmpty(style.PickColor);
+        foreach (var c in pickHeightRow) c.Visible = style.PickMat;
+        pickShape.Selected = style.PickMat ? 1 : 0;
+        pickDrawing.Selected = style.PickRimOnly ? 1 : 0;
+        pickShow.Checked = style.PickShow;
+        pickCycle.Checked = style.PickCycle;
         labelCat.Checked = style.LabelCategory;
         int p = PresetOf(); // the preset the look matches is lit (none when it matches none)
         foreach (var t in presetTiles) t.Selected = t.Index == p;
@@ -954,8 +1074,9 @@ public sealed class StyleEditor : UserControl
         {
             int w = Math.Max(Ui.S(200), Width), gap = Ui.S(8);
             arrangedWidth = Width;
-            bool wide = w >= Font.Height * 30;
             var settings = PickedSection;
+            // the pick-up zone's settings always go under the list, never beside it (user, 2026-11-25)
+            bool wide = w >= Font.Height * 30 && settings != zoneSection;
             foreach (var s in layerSections.Values.Append(itemSection)) s.Visible = s == settings;
             var shown = new[] { layersSection, settings };
             int listW = wide ? Math.Min(Font.Height * 20, (w - gap) * 45 / 100) : w, setW = wide ? w - listW - gap : w;
@@ -1024,13 +1145,36 @@ public sealed class StyleEditor : UserControl
     }
     bool pickOk = true;
 
+    /// <summary>The shown item has see-through cut-out parts (leaves, grass, grilles): Scanlines can't be drawn on them
+    /// (their glow needs the cut-out picture, the lines need their own), so the choice is greyed (user, 2026-11-26).</summary>
+    public bool Cutout
+    {
+        get => cutout;
+        set
+        {
+            if (cutout == value) return;
+            cutout = value;
+            itemSeg.Off = value ? 2 : -1;
+            fxTips.SetToolTip(itemSeg, value ? Tr("Scanlines don't work on this item: leaves and other see-through parts can only glow as an outline or a fill.") : null);
+        }
+    }
+    bool cutout;
+
+    /// <summary>The layer whose settings are shown ("" = the item). LookPanel keeps it over the reload when a followed
+    /// look becomes the item's own, so a just-added layer stays picked (user, 2026-11-26).</summary>
+    public string PickedLayer
+    {
+        get => picked;
+        set { picked = value; UpdateLook(); FocusPicked(); }
+    }
+
     /// <summary>Left from the old small sketch; the pop-up shows the real 3D preview.</summary>
     public bool Sketch { get => false; set { } }
 
     public StyleEditor()
     {
         Height = 400;
-        foreach (var box in new[] { opacity, brightStrength, length, width, beamStrength, arrowWidth, iconStrength, labelStrength, copyStrength, iconSize, copySize, labelSize, pickRange })
+        foreach (var box in new[] { opacity, brightStrength, length, width, beamStrength, arrowWidth, iconStrength, labelStrength, copyStrength, iconSize, copySize, labelSize, pickRange, pickStrength, pickHeight, pingRange })
             box.ValueChanged += (_, _) => Commit();
         iconButton.FlatAppearance.BorderColor = Color.FromArgb(160, 160, 160);
         iconButton.Click += (_, _) => PickIcon();
@@ -1054,7 +1198,11 @@ public sealed class StyleEditor : UserControl
             copyStrength.Value = Math.Clamp(style.CopyStrength, 10, 300);
             iconSize.Value = Math.Clamp(style.IconScale, (int)iconSize.Minimum, (int)iconSize.Maximum);
             copySize.Value = Math.Clamp(style.CopyScale, (int)copySize.Minimum, (int)copySize.Maximum);
-            pickRange.Value = Math.Clamp(style.PickRange, 0, (int)pickRange.Maximum);
+            if (style.PickRange > 0) pickRange.Value = Math.Clamp(style.PickRange, 1, (int)pickRange.Maximum);
+            else pickRange.Value = Math.Clamp(lastPick, 1, (int)pickRange.Maximum);
+            pickStrength.Value = Math.Clamp(style.PickStrength, 5, 100);
+            pickHeight.Value = Math.Clamp(style.PickThickness, 5, 500);
+            pingRange.Value = Math.Clamp(style.PingRange > 0 ? style.PingRange : lastPing, 1, (int)pingRange.Maximum);
             if (labelText.Text != style.LabelText) labelText.Text = style.LabelText;
             labelSize.Value = Math.Clamp((decimal)Math.Round(style.LabelSize * 2 / UnitsPerCm), labelSize.Minimum, labelSize.Maximum);
             sameColor.Checked = style.GlowColor.Equals(style.BeamColor, StringComparison.OrdinalIgnoreCase);
@@ -1095,7 +1243,10 @@ public sealed class StyleEditor : UserControl
         style.CopyStrength = (int)copyStrength.Value;
         style.IconScale = (int)iconSize.Value; // % of the item's size
         style.CopyScale = (int)copySize.Value;
-        style.PickRange = (int)pickRange.Value;
+        if (style.PickRange > 0) style.PickRange = (int)pickRange.Value; // 0 = no zone layer (✕), the box keeps the last range
+        style.PickStrength = (int)pickStrength.Value;
+        style.PickThickness = (int)pickHeight.Value;
+        if (style.PingRange > 0) style.PingRange = (int)pingRange.Value; // 0 = no ping layer (✕)
         style.LabelSize = (float)labelSize.Value * UnitsPerCm / 2; // text height in cm -> half height in game units
         if (sameColor.Checked) style.BeamColor = style.GlowColor;
         UpdateLook();

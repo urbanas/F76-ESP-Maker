@@ -38,6 +38,18 @@ public static class Pickup
     // Nested balls: inside a ball its own surface can't be aimed at (a ray starting inside a shape doesn't hit it - the
     // gap the user found with one 15 m ball, 2026-11-16), so the next smaller ball must be well within reach (~2.1 m).
     const int NonCollidable = 15;
+    /// <summary>Largest ball in metres: 15 nested shells must stay ~1.5 m apart (beyond, gaps open up). The mat has no limit.</summary>
+    public const int BallMax = 22;
+    /// <summary>The mat: its top this far above the item's lowest point and its bottom this far below (metres = Havok units);
+    /// round: every spare piece is a square of half side radius/√2, turned evenly (15 squares = 6 degrees apart: corners
+    /// on the circle, the outline never under 95 % of it - user 2026-11-25, the 4-square mat looked like a star).</summary>
+    public const float MatTop = 0.10f, MatBottom = 0.15f;
+    /// <summary>The mat's top (Havok units, model space): <paramref name="height"/> (default MatTop) above the ground. Ground =
+    /// the model's origin when the item reaches below it (plants: roots in the soil - user 2026-11-19, carrot mat was
+    /// underground), else the item's foot.</summary>
+    public static float MatTopZ(float minZ, float maxZ, float height = MatTop) => (minZ < 0 && maxZ > 0 ? 0 : minZ) + height;
+    /// <summary>"Comes and goes" test: seconds the zone is there, then away (moved this far down, game units).</summary>
+    public const float CycleOn = 5, CycleOff = 3, CycleDrop = 10000;
     /// <summary>Game units per Havok unit (FO4 / FO76 Havok scale 0.0142875).</summary>
     public const float UnitsPerHavok = 69.99125f;
 
@@ -57,7 +69,10 @@ public static class Pickup
 
     /// <summary>The donor's data with piece 1 = the box min..max and piece 2 = a sphere of <paramref name="radius"/> round its
     /// centre (all in Havok units, model space). Throws when the donor isn't laid out as expected.</summary>
-    public static byte[] Make(byte[] donor, (float X, float Y, float Z) min, (float X, float Y, float Z) max, float radius)
+    /// <param name="matHeight">The mat's thickness above the ground (Havok units = metres): its top; the bottom stays
+    /// MatBottom under the item's foot (user 2026-11-25: adjustable thickness).</param>
+    public static byte[] Make(byte[] donor, (float X, float Y, float Z) min, (float X, float Y, float Z) max, float radius, bool mat = false,
+                              float matHeight = MatTop)
     {
         var bl = (byte[])donor.Clone();
         var (data, items) = Read(bl);
@@ -70,7 +85,12 @@ public static class Pickup
         // piece 0 = the item's box; then nested balls from the outside in, evenly spaced - ALL spare pieces used (at 1.5 m
         // apart the pick-up dropped out after crossing each shell, user 2026-11-16: the next ball was at the edge of reach)
         int balls = Math.Max(1, inst.Count - 1);
-        float Ball(int n) => n >= 1 && n <= balls ? radius * (balls - n + 1) / balls : 0;
+        float Ball(int n) => !mat && n >= 1 && n <= balls ? radius * (balls - n + 1) / balls : 0;
+        // mat (every piece after the item's box): flat squares round the item's foot, turned evenly over 90 degrees
+        int matPieces = inst.Count - 1;
+        bool IsMat(int n) => mat && n >= 1;
+        float[] lo = { float.MaxValue, float.MaxValue, float.MaxValue }, hi = { float.MinValue, float.MinValue, float.MinValue };
+        var shapesUsed = new HashSet<int>();
         for (int n = 0; n < inst.Count; n++)
         {
             int io = inst.Off + 128 * n;
@@ -81,6 +101,7 @@ public static class Pickup
             W3(bl, io + 64, 1, 1, 1);
             int shape = BitConverter.ToInt32(bl, io + 80);
             if (shape <= 0 || shape >= items.Count || items[shape].Type != "hknpConvexPolytopeShape") throw new InvalidDataException("donor: piece is not a box");
+            if (!shapesUsed.Add(shape)) throw new InvalidDataException("donor: pieces share a shape");
             int so = D + items[shape].Off;
             var verts = items.FirstOrDefault(i => i.Type == "hkVector4f" && D + i.Off == so + 96);
             var planes = items.Where(i => i.Type == "hkVector4" && i.Off > verts.Off).OrderBy(i => i.Off).FirstOrDefault();
@@ -89,20 +110,39 @@ public static class Pickup
             var old = Enumerable.Range(0, 8).Select(k => R3(bl, D + verts.Off + 16 * k)).ToArray();
             float[] mid = { old.Average(v => v[0]), old.Average(v => v[1]), old.Average(v => v[2]) };
             // piece 2: a tiny box with a convex radius = a sphere (Havok rounds every shape by its convex radius)
-            float[] h = Ball(n) == 0 ? half : new[] { 0.01f, 0.01f, 0.01f };
-            var now = old.Select(v => Enumerable.Range(0, 3).Select(a => c[a] + (v[a] > mid[a] ? h[a] : -h[a])).ToArray()).ToArray();
+            float[] h = Ball(n) > 0 ? new[] { 0.01f, 0.01f, 0.01f } : half;
+            float[] at = c;
+            float turn = 0;
+            if (IsMat(n))
+            {
+                // top matHeight above the ground (MatTopZ, default MatTop), bottom MatBottom below the item's foot
+                float top = MatTopZ(min.Z, max.Z, matHeight), bottom = min.Z - MatBottom;
+                float s = radius / MathF.Sqrt(2); // corners on the circle
+                h = new[] { s, s, (top - bottom) / 2 };
+                at = new[] { c[0], c[1], (top + bottom) / 2 };
+                turn = (n - 1) * MathF.PI / (2 * matPieces);
+            }
+            float cs = MathF.Cos(turn), sn = MathF.Sin(turn);
+            var now = old.Select(v =>
+            {
+                float dx = v[0] > mid[0] ? h[0] : -h[0], dy = v[1] > mid[1] ? h[1] : -h[1], dz = v[2] > mid[2] ? h[2] : -h[2];
+                return new[] { at[0] + dx * cs - dy * sn, at[1] + dx * sn + dy * cs, at[2] + dz };
+            }).ToArray();
             for (int k = 0; k < 8; k++) W3(bl, D + verts.Off + 16 * k, now[k][0], now[k][1], now[k][2]);
             for (int k = 0; k < planes.Count; k++)
             {
                 var p = R3(bl, D + planes.Off + 16 * k);
+                if (turn != 0) { p = new[] { p[0] * cs - p[1] * sn, p[0] * sn + p[1] * cs, p[2] }; W3(bl, D + planes.Off + 16 * k, p[0], p[1], p[2]); }
                 float far = now.Max(v => p[0] * v[0] + p[1] * v[1] + p[2] * v[2]);
                 BitConverter.TryWriteBytes(bl.AsSpan(D + planes.Off + 16 * k + 12), -far);
             }
-            BitConverter.TryWriteBytes(bl.AsSpan(so + 24), Ball(n) > 0 ? Ball(n) : 0.01f); // hknpShape.convexRadius (the donor's own on a box)
+            float rad = Ball(n) > 0 ? Ball(n) : 0.01f;
+            BitConverter.TryWriteBytes(bl.AsSpan(so + 24), rad); // hknpShape.convexRadius (the donor's own on a box)
+            foreach (var v in now)
+                for (int a = 0; a < 3; a++) { lo[a] = Math.Min(lo[a], v[a] - rad); hi[a] = Math.Max(hi[a], v[a] + rad); }
         }
-        // bounds of the whole compound and of every node of its tree: round both pieces (loose is fine)
-        float[] lo = new float[3], hi = new float[3];
-        for (int a = 0; a < 3; a++) { lo[a] = Math.Min(c[a] - half[a], c[a] - radius) - 0.05f; hi[a] = Math.Max(c[a] + half[a], c[a] + radius) + 0.05f; }
+        // bounds of the whole compound and of every node of its tree: round all pieces (loose is fine)
+        for (int a = 0; a < 3; a++) { lo[a] -= 0.05f; hi[a] += 0.05f; }
         var comp = One("hknpCompoundShape");
         void Aabb(int o) { W3(bl, o, lo[0], lo[1], lo[2]); W3(bl, o + 16, hi[0], hi[1], hi[2]); } // w kept (tree links)
         Aabb(comp.Off + 144);

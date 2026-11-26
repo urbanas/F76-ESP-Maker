@@ -882,6 +882,8 @@ static class PreviewRenderer
                     bool fill = pt.Fill || p.Filled;
                     Draw(p, cam, color, depth, hit, light, col, layerA, xray, pt,
                          fill ? pt.FillA : pt.OutlineA, !fill, bright, flowT);
+                    if (!fill && kind == PartKind.Glow && p.TestRef >= 0 && p.Tex != null && !p.Skinned) // a cut-out's solid area (Builder: second copy)
+                        Draw(p, cam, color, depth, hit, light, col, layerA, xray, pt, pt.OutlineA, true, bright, flowT, solidOnly: true);
                 }
         // Bright / Off + X-ray: a copy of the item's own parts that shows through walls (Builder.XrayFor)
         foreach (var (parts, pt, lk) in looks)
@@ -890,7 +892,21 @@ static class PreviewRenderer
                     Draw(p, cam, color, depth, null, light, Color.White, 1f, true, pt, ghost: lk.XrayScale);
         }
         // the pick-up ball (not on creatures / worn outfits: the build leaves them without one)
-        if (st.PickRange > 0 && !scene.Parts.Any(p => p.Skinned)) PickBall(cam, color, scene, st.PickRange * StyleEditor.UnitsPerMetre);
+        if (st.PickRange > 0 && !scene.Parts.Any(p => p.Skinned))
+        {
+            // in the zone layer's colour and drawing (as it shows in game when "Show the zone" is on)
+            var zc = Materials.Parse(st.PickColour);
+            var tint = (zc.R / 255f, zc.G / 255f, zc.B / 255f);
+            bool rim = st.PickRimOnly;
+            if (st.PickMat) PickMat(cam, color, scene, st.PickRange * StyleEditor.UnitsPerMetre, tint, rim, st.PickThickness / 100f);
+            else PickBall(cam, color, scene, Math.Min(st.PickRange, Pickup.BallMax) * StyleEditor.UnitsPerMetre, tint, rim);
+        }
+        // sonar ping (NifPatch: ring at the item's foot, grows and fades, loops); a still picture shows it half way out
+        if (st.PingRange > 0 && !scene.Parts.Any(p => p.Skinned))
+        {
+            float ph = time >= 0 ? time % NifPatch.PingPeriod / NifPatch.PingPeriod : 0.5f;
+            PingRing(cam, color, scene, st.PingRange * StyleEditor.UnitsPerMetre, ph, Materials.Parse(st.GlowColor));
+        }
 
         if (x != null && VisionMatrix.TryGetValue(x.Vision, out var m))
             for (int i = 0; i < w * h * 3; i += 3)
@@ -941,23 +957,64 @@ static class PreviewRenderer
 
     /// <summary>"Pick up from afar" (Style.PickRange): the invisible pick-up ball as a wire globe round the item's middle,
     /// where the build puts it (NifPatch.AddPickup) - drawn over everything, it is a guide.</summary>
-    static void PickBall(Cam c, float[] color, PreviewScene s, float radius)
+    static void PickBall(Cam c, float[] color, PreviewScene s, float radius, (float, float, float) tint, bool rimOnly)
     {
         var (cx, cy, cz) = ((s.Min.X + s.Max.X) / 2, (s.Min.Y + s.Max.Y) / 2, (s.Min.Z + s.Max.Z) / 2);
-        var tint = (0.35f, 0.85f, 1f);
         const int seg = 48;
         (float, float, float) P(float lat, float lon) =>
             (cx + radius * MathF.Cos(lat) * MathF.Cos(lon), cy + radius * MathF.Cos(lat) * MathF.Sin(lon), cz + radius * MathF.Sin(lat));
         for (int i = -2; i <= 2; i++) // circles of latitude every 30 degrees
         {
+            if (rimOnly && i != 0) continue;
             float lat = i * MathF.PI / 6;
             for (int j = 0; j < seg; j++) Line(c, color, P(lat, j * 2 * MathF.PI / seg), P(lat, (j + 1) * 2 * MathF.PI / seg), i == 0 ? 0.7f : 0.45f, tint);
         }
-        for (int j = 0; j < 8; j++) // meridians every 45 degrees
+        for (int j = 0; j < 8 && !rimOnly; j++) // meridians every 45 degrees
         {
             float lon = j * MathF.PI / 4;
             for (int i = 0; i < seg / 2; i++)
                 Line(c, color, P(-MathF.PI / 2 + i * MathF.PI / (seg / 2), lon), P(-MathF.PI / 2 + (i + 1) * MathF.PI / (seg / 2), lon), 0.45f, tint);
+        }
+    }
+
+    /// <summary>The sonar ping at <paramref name="t"/> (0..1 of its run): a rim with two fainter trailing circles.</summary>
+    static void PingRing(Cam c, float[] color, PreviewScene s, float range, float t, Color col)
+    {
+        var (cx, cy, z) = ((s.Min.X + s.Max.X) / 2, (s.Min.Y + s.Max.Y) / 2, s.Min.Z + 2);
+        float size = Math.Max(Math.Max(s.Max.X - s.Min.X, s.Max.Y - s.Min.Y), 30f) / 2;
+        float r0 = Math.Min(size, range * 0.5f), r = r0 + (range - r0) * t, k = 1 - 0.8f * t;
+        var tint = (col.R / 255f, col.G / 255f, col.B / 255f);
+        const int seg = 96;
+        foreach (var (f, a) in new[] { (1f, 0.9f), (0.94f, 0.4f), (0.88f, 0.2f) })
+            for (int j = 0; j < seg; j++)
+            {
+                float b0 = j * 2 * MathF.PI / seg, b1 = (j + 1) * 2 * MathF.PI / seg;
+                Line(c, color, (cx + r * f * MathF.Cos(b0), cy + r * f * MathF.Sin(b0), z), (cx + r * f * MathF.Cos(b1), cy + r * f * MathF.Sin(b1), z), a * k, tint);
+            }
+    }
+
+    /// <summary>The pick-up mat (Style.PickMat): a circle of the range on top of its thickness (Style.PickThickness), with rings every
+    /// 5 m and spokes.</summary>
+    static void PickMat(Cam c, float[] color, PreviewScene s, float radius, (float, float, float) tint, bool rimOnly, float height)
+    {
+        const float U = Pickup.UnitsPerHavok;
+        var (cx, cy, z) = ((s.Min.X + s.Max.X) / 2, (s.Min.Y + s.Max.Y) / 2, Pickup.MatTopZ(s.Min.Z / U, s.Max.Z / U, height) * U + 2);
+        const int seg = 128;
+        static float Edge(float b) => 1; // round (Pickup: the squares' corners on the circle)
+        (float, float, float) P(float b, float f) { float e = Edge(b) * radius * f; return (cx + e * MathF.Cos(b), cy + e * MathF.Sin(b), z); }
+        var rings = new List<float>();
+        for (float m = 5 * StyleEditor.UnitsPerMetre; m < radius && !rimOnly; m += 5 * StyleEditor.UnitsPerMetre) rings.Add(m / radius);
+        rings.Add(1);
+        foreach (var f in rings)
+            for (int j = 0; j < seg; j++) Line(c, color, P(j * 2 * MathF.PI / seg, f), P((j + 1) * 2 * MathF.PI / seg, f), f == 1 ? 0.7f : 0.4f, tint);
+        for (int j = 0; j < 16 && !rimOnly; j++) Line(c, color, (cx, cy, z), P(j * MathF.PI / 8, 1), 0.35f, tint);
+        // a thick mat (Style.PickThickness): the rim again on the ground and upright lines between - a low cylinder
+        float ground = Pickup.MatTopZ(s.Min.Z / U, s.Max.Z / U, 0) * U + 2;
+        if (z - ground > 0.2f * StyleEditor.UnitsPerMetre)
+        {
+            (float, float, float) G(float b) { var (x, y, _) = P(b, 1); return (x, y, ground); }
+            for (int j = 0; j < seg; j++) Line(c, color, G(j * 2 * MathF.PI / seg), G((j + 1) * 2 * MathF.PI / seg), 0.45f, tint);
+            for (int j = 0; j < 16; j++) Line(c, color, G(j * MathF.PI / 8), P(j * MathF.PI / 8, 1), 0.45f, tint);
         }
     }
 
@@ -1102,8 +1159,56 @@ static class PreviewRenderer
 
     /// <param name="bright">Pulse / fade: the added light's share (not the item's own parts).</param>
     /// <param name="flowT">Flowing beam: the animation time (bands of light run up, one per 2 m in 1.5 s); below 0 = none.</param>
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Rgba, Rgba> edges = new();
+    /// <summary>The texture with only the rim of its cut-out left (Builder.EdgeOnly), made once per texture.</summary>
+    static Rgba EdgeOf(Rgba t, int testRef) => edges.GetValue(t, src =>
+    {
+        // as the build: at most 256 px (its mask size), so the rim is as wide as in game
+        int k = 1;
+        while (src.Width / k > 256 || src.Height / k > 256) k *= 2;
+        int w = Math.Max(1, src.Width / k), h = Math.Max(1, src.Height / k);
+        var px = new byte[w * h * 4];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int a = 0;
+                for (int dy = 0; dy < k; dy++)
+                    for (int dx = 0; dx < k; dx++)
+                        a = Math.Max(a, src.Pixels[((y * k + dy) * src.Width + x * k + dx) * 4 + 3]);
+                int i = (y * w + x) * 4;
+                px[i] = px[i + 1] = px[i + 2] = 255;
+                px[i + 3] = (byte)a;
+            }
+        Builder.EdgeOnly(px, w, h, testRef);
+        return new Rgba(w, h, px);
+    });
+
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Rgba, Tuple<int, int, bool[]>> solids = new();
+    /// <summary>Cells (≤ 256 px grid) where every pixel passes the alpha test (Builder.OpaqueTest).</summary>
+    static (int W, int H, bool[] S) SolidOf(Rgba t, int testRef)
+    {
+        var r = solids.GetValue(t, src =>
+        {
+            int k = 1;
+            while (src.Width / k > 256 || src.Height / k > 256) k *= 2;
+            int w = Math.Max(1, src.Width / k), h = Math.Max(1, src.Height / k);
+            var s = new bool[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int a = 255;
+                    for (int dy = 0; dy < k; dy++)
+                        for (int dx = 0; dx < k; dx++)
+                            a = Math.Min(a, src.Pixels[((y * k + dy) * src.Width + x * k + dx) * 4 + 3]);
+                    s[y * w + x] = a > testRef;
+                }
+            return Tuple.Create(w, h, s);
+        });
+        return (r.Item1, r.Item2, r.Item3);
+    }
+
     static void Draw(PreviewPart p, Cam c, float[] color, float[] depth, PreviewPart?[]? hit, (float X, float Y, float Z) light, Color col, float strength, bool xray,
-                     Paint pt, float glowA = 0, bool outline = false, float bright = 1, float flowT = -1, float ghost = 0)
+                     Paint pt, float glowA = 0, bool outline = false, float bright = 1, float flowT = -1, float ghost = 0, bool solidOnly = false)
     {
         // ghost: the Bright look's X-ray copy (Builder.XrayFor) - its own texture as added light, through everything
         if (ghost > 0) xray = true;
@@ -1130,9 +1235,25 @@ static class PreviewRenderer
         var ox = new float[3]; var oy = new float[3]; var oz = new float[3]; var oa = new float[3]; var ob = new float[3]; var od = new float[3];
         float cr = col.R / 255f, cg = col.G / 255f, cb = col.B / 255f;
         var tex = p.Tex;
+        // a cut-out part's outline: only a rim along the cut-out's edge, drawn plain (as Builder's edge mask)
+        // ... and (solidOnly) the angle outline on its fully opaque triangles (Builder.OpaqueTest: the carrot's root)
+        (int W, int H, bool[] S)? opaqueGrid = null;
+        if (outline && p.Kind == PartKind.Glow && p.TestRef >= 0 && tex != null)
+        {
+            if (solidOnly) { opaqueGrid = SolidOf(tex, p.TestRef); tex = null; }
+            else { tex = EdgeOf(tex, p.TestRef); outline = false; }
+        }
+        bool Solid(float u, float v)
+        {
+            var (w, h, s) = opaqueGrid!.Value;
+            int x = (int)MathF.Floor((u - MathF.Floor(u)) * w), y = (int)MathF.Floor((v - MathF.Floor(v)) * h);
+            return s[Math.Clamp(y, 0, h - 1) * w + Math.Clamp(x, 0, w - 1)];
+        }
         for (int t = 0; t + 2 < p.Tri.Length; t += 3)
         {
             int a = p.Tri[t], b = p.Tri[t + 1], d = p.Tri[t + 2];
+            if (opaqueGrid != null && (p.Uv == null || !Solid(p.Uv[a * 2], p.Uv[a * 2 + 1]) || !Solid(p.Uv[b * 2], p.Uv[b * 2 + 1]) || !Solid(p.Uv[d * 2], p.Uv[d * 2 + 1])
+                                  || !Solid((p.Uv[a * 2] + p.Uv[b * 2] + p.Uv[d * 2]) / 3, (p.Uv[a * 2 + 1] + p.Uv[b * 2 + 1] + p.Uv[d * 2 + 1]) / 3))) continue;
             if (vzs[a] < c.Near && vzs[b] < c.Near && vzs[d] < c.Near) continue; // behind the camera
             // the face normal (lighting when the model has none, and how much a beam faces you)
             var fn = Norm(Cross((wx[b] - wx[a], wy[b] - wy[a], wz[b] - wz[a]), (wx[d] - wx[a], wy[d] - wy[a], wz[d] - wz[a])));
@@ -1251,7 +1372,7 @@ static class PreviewRenderer
                                 float k = Math.Min(1.5f, Materials.ScanScale(pt.GlowK / 0.36f)) /* the material's colour scale */ * Materials.ScanBand(-pz / Materials.ScanTile + Math.Max(0, flowT) / Materials.ScanPeriod) * clear;
                                 color[ci] += cr * k; color[ci + 1] += cg * k; color[ci + 2] += cb * k;
                             }
-                            else if (p.TestRef >= 0) { float k = strength * clear; color[ci] += cr * k; color[ci + 1] += cg * k; color[ci + 2] += cb * k; } // cut-out: added light
+                            else if (p.TestRef >= 0 && !solidOnly) { float k = strength * clear; color[ci] += cr * k; color[ci + 1] += cg * k; color[ci + 2] += cb * k; } // cut-out: added light
                             else
                             {
                                 float ga = glowA * clear;
@@ -1260,7 +1381,10 @@ static class PreviewRenderer
                                     var vd = Norm((c.Eye.X - wx[a], c.Eye.Y - wy[a], c.Eye.Z - wz[a]));
                                     float fa = MathF.Abs(fn.X * vd.X + fn.Y * vd.Y + fn.Z * vd.Z);
                                     float face = pt.Face;
-                                    ga *= fa >= 0.6f ? face : fa <= 0.1f ? 1f : 1f - (1f - face) * (fa - 0.1f) / 0.5f;
+                                    if (solidOnly) // the tight outline (Materials.GlowVariant tight)
+                                        ga *= fa >= Materials.TightStart ? 0f : fa <= Materials.TightStop ? 1f : 1f - (fa - Materials.TightStop) / (Materials.TightStart - Materials.TightStop);
+                                    else
+                                        ga *= fa >= 0.6f ? face : fa <= 0.1f ? 1f : 1f - (1f - face) * (fa - 0.1f) / 0.5f;
                                 }
                                 color[ci] += (cr - color[ci]) * ga; color[ci + 1] += (cg - color[ci + 1]) * ga; color[ci + 2] += (cb - color[ci + 2]) * ga;
                             }
@@ -1406,7 +1530,7 @@ sealed class ModelView : UserControl
 
     void Animate()
     {
-        static bool Lively(Style st) => st.Moves || st.Timed;
+        static bool Lively(Style st) => st.Moves || st.Timed || st.PingRange > 0;
         bool on = scene != null && (Lively(shown) || extras.Others.Any(o => Lively(o.Look)));
         if (on) { animClock.Restart(); if (!anim.Enabled) anim.Start(); }
         else { anim.Stop(); animClock.Reset(); }
@@ -1468,6 +1592,8 @@ sealed class ModelView : UserControl
     bool frameAll;
     bool keepOtherMods;
     PreviewScene? scene;
+    /// <summary>A model was loaded: true when it has see-through cut-out parts (leaves, grass) - StyleEditor.Cutout.</summary>
+    public event Action<bool>? CutoutKnown;
     string message = "";
     Bitmap? frame;
     const float StartZoom = 0.8f;
@@ -2126,6 +2252,8 @@ sealed class ModelView : UserControl
                                                        : ModelPreview.LoadAs(g, e, model, st, beamHere, keep));
             if (v != version) return;
             scene = s;
+            // see-through cut-out parts that aren't animated (Builder's cut-out glow: no scanlines there)
+            CutoutKnown?.Invoke(s.Parts.Any(p => p.Kind is PartKind.Solid or PartKind.Blend && p.TestRef >= 0 && !p.Skinned));
             shown = st; // the colours to draw it in: a part's own look, if it has one
             message = !ticked ? Tr("Not selected - shown as it is in the game. Select it to see the look.")
                     : !lookOn.Checked ? Tr("The look is hidden here (preview only) - the plain game model.")

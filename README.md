@@ -6,14 +6,15 @@ Make your own ESP mod for **Fallout 76** without editing any files.
 
 Choose what you want to spot: bobbleheads, magazines, plans, XP food, pre-war food, notes, plants (including the nuked flora for Stable Flux), loot, loot bags, CAMP storage boxes, clothes, every outfit and armor piece (on the ground or worn), event objects, player vending machines, workbenches, legendary enemies or any kind of creature. Then choose how it looks:
 
-- an outline or full glow, moving scanlines, or just brighter colours - optionally seen through walls (X-ray)
+- an outline or full glow, moving scanlines, or just brighter colours - optionally seen through walls (X-ray). On plants the outline follows the leaves' own edges
+- a sonar ping: a ring in the glow colour runs out over the ground from the item every few seconds and shows through walls
 - or Invisible: the item disappears and only what you add shows (it also hides foliage and worn outfits)
 
 Above the item you stack layers in any order: a beam into the sky, an arrow, a flat icon or a small 3D model, a copy of the item itself, and a floating name label. Each layer has its own colour, strength and size, and effects: X-ray, rainbow colours, pulse, spin, bob, light running up the beam, and a timer that hides it after a set time.
 
 The app speaks all 13 of the game's languages (**View → Language**). Item, enemy and category names come from your game's own text. The window text was translated with AI help, so some wording may be off; corrections are welcome.
 
-**Pickup range** (on things you can pick up) puts an invisible ball around the item, so you can take it from up to 15 m away. It is off unless you turn it on. Use it at your own risk: it lets you take things from further away than the game normally allows, and the game's servers can see that.
+**Pickup range** (on things you can pick up) puts an invisible ball (up to 22 m) or a flat mat on the ground (up to 100 m) around the item, so you can take it from further away. It is off unless you turn it on, and you can show the zone in game to see how far it reaches. Use it at your own risk: it lets you take things from further away than the game normally allows, and the game's servers can see that.
 
 ESP Maker builds the mod (`.ba2`) and installs it for you. It only changes files on your own PC. The result is a normal `.ba2` mod listed in your custom ini, like any other Fallout 76 mod.
 

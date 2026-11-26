@@ -180,7 +180,10 @@ public sealed class NifFile
 /// <param name="Scan">Scanlines: the copy's UVs are remade from its height (HeightUvs).</param>
 /// <param name="ScanMoves">With Scan: its V offset runs (the lines move up).</param>
 public sealed record GlowMat(string Material, int TestRef = -1, int AlphaMode = 0, bool Outline = false, bool NoVertexColors = false,
-                             bool Lift = false, bool Scan = false, bool ScanMoves = false);
+                             bool Lift = false, bool Scan = false, bool ScanMoves = false,
+                             GlowMat? Also = null, Func<float, float, bool>? Opaque = null);
+// Also: a second glow copy of the same part (a cut-out's outline: the rim mask + this one, the angle outline on the
+// fully opaque triangles only - the carrot's root, user 2026-11-26). Opaque: keep only triangles opaque at their UVs.
 
 /// <summary>What the patcher knows about a part that should glow.</summary>
 /// <param name="Material">The part's material file path from the model ("" if none).</param>
@@ -202,7 +205,11 @@ public sealed record PatchOptions(Func<GlowPart, GlowMat?>? GlowFor, string? Bea
                                   bool Invisible = false, Motion? Motion = null, Func<string, float>? ScaleOf = null,
                                   string[]? Stack = null, string? ArrowMaterial = null, float ArrowWidth = 3.5f,
                                   Mesh? Copy = null, string? CopyMaterial = null, float CopySize = 35,
-                                  float IconScale = 0, float CopyScale = 0, float PickRange = 0, byte[]? PickDonor = null);
+                                  float IconScale = 0, float CopyScale = 0, float PickRange = 0, byte[]? PickDonor = null,
+                                  bool PickMat = false, string? PickShowMaterial = null, bool PickCycle = false, bool PickRimOnly = false, float PickHeight = Pickup.MatTop,
+                                  int PingRange = 0, string? PingMaterial = null);
+// PingRange: > 0 = sonar ping, a ring at the item's foot growing to that many metres and fading (PingMaterial)
+// PickMat: the zone is a flat mat at the item's foot instead of a ball; PickShowMaterial: draw the zone (testing) with it
 // PickRange: > 0 = "pick up from afar", the radius in metres of the invisible pick-up sphere (Pickup); PickDonor = the
 // donor's Havok data (Pickup.DonorBlob)
 // IconScale / CopyScale: > 0 = the icon / copy is that part of the item's size (1 = as big as the item), IconSize /
@@ -312,6 +319,47 @@ public static class NifPatch
         return true;
     }
 
+    /// <summary>A shape's data with only the triangles whose corners and middle are opaque in the cut-out (by their UVs);
+    /// null when none are left or the layout isn't vertices + triangles + the rest.</summary>
+    static byte[]? KeepOpaque(byte[] b, int r, Func<float, float, bool> opaque)
+    {
+        int vdAt = r + 12;
+        if (b.Length < vdAt + 18) return null;
+        ulong vd = BitConverter.ToUInt64(b, vdAt);
+        int attrs = (int)((vd >> 44) & 0xFFF);
+        int size = (int)(vd & 0xF) * 4, uvOff = (int)((vd >> 8) & 0xF) * 4;
+        if ((attrs & 0x2) == 0 || size == 0 || uvOff == 0) return null;
+        uint tris = BitConverter.ToUInt32(b, vdAt + 8);
+        int verts = BitConverter.ToUInt16(b, vdAt + 12), data = vdAt + 18;
+        uint dataSize = BitConverter.ToUInt32(b, vdAt + 14);
+        if (dataSize != (ulong)verts * (ulong)size + tris * 6UL || data + dataSize > b.Length) return null;
+        var uv = new (float U, float V)[verts];
+        for (int v = 0; v < verts; v++)
+        {
+            int p = data + v * size + uvOff;
+            uv[v] = ((float)BitConverter.UInt16BitsToHalf(BitConverter.ToUInt16(b, p)), (float)BitConverter.UInt16BitsToHalf(BitConverter.ToUInt16(b, p + 2)));
+        }
+        int triAt = data + verts * size;
+        var kept = new List<byte>();
+        for (int t = 0; t < tris; t++)
+        {
+            int i0 = BitConverter.ToUInt16(b, triAt + t * 6), i1 = BitConverter.ToUInt16(b, triAt + t * 6 + 2), i2 = BitConverter.ToUInt16(b, triAt + t * 6 + 4);
+            if (i0 >= verts || i1 >= verts || i2 >= verts) return null;
+            var (a, c, d) = (uv[i0], uv[i1], uv[i2]);
+            if (opaque(a.U, a.V) && opaque(c.U, c.V) && opaque(d.U, d.V) && opaque((a.U + c.U + d.U) / 3, (a.V + c.V + d.V) / 3))
+                kept.AddRange(b.AsSpan(triAt + t * 6, 6).ToArray());
+        }
+        if (kept.Count == 0) return null;
+        int end = triAt + (int)tris * 6;
+        var o = new byte[b.Length - (int)tris * 6 + kept.Count];
+        Array.Copy(b, o, triAt);
+        kept.CopyTo(o, triAt);
+        Array.Copy(b, end, o, triAt + kept.Count, b.Length - end);
+        BitConverter.TryWriteBytes(o.AsSpan(vdAt + 8), (uint)(kept.Count / 6));
+        BitConverter.TryWriteBytes(o.AsSpan(vdAt + 14), (uint)(verts * size + kept.Count));
+        return o;
+    }
+
     /// <summary>A shape's data without its vertex colours (4 bytes per vertex): vertex description at refs + 12
     /// (size / offsets in 4-byte nibbles, flags from bit 44, colours = 0x20), then triangles, vertices, data size.
     /// Unchanged when there are none or the layout isn't the expected one (vertices + triangles, then the rest).</summary>
@@ -401,7 +449,9 @@ public static class NifPatch
                 if (k >= 0 && k < f.Blocks.Count && !skip.Contains(k)) { parent[k] = n; stack.Push(k); }
         }
 
-        string? pickNote = o.PickRange > 0 && o.PickDonor != null ? AddPickup(f, shapes, parent, origin, o.PickRange, o.PickDonor) : null;
+        int pickZone = -1;
+        string? pickNote = o.PickRange > 0 && o.PickDonor != null
+            ? AddPickup(f, shapes, parent, origin, o.PickRange, o.PickDonor, o.PickMat, o.PickShowMaterial, o.PickCycle, o.PickRimOnly, o.PickHeight, out pickZone) : null;
 
         var glowAdded = new Dictionary<int, List<int>>();
         int glowCount = 0, skippedCutouts = 0;
@@ -457,10 +507,17 @@ public static class NifPatch
                 }
                 // the texture set written after the shader is what the game uses when the material file is missing
                 string inline = f.TypeOf(shader + 1) == "BSShaderTextureSet" ? NifFile.FirstTexture(f.Blocks[shader + 1].Data) : "";
-                var glowMat = o.GlowFor(new GlowPart(f.Strings.ElementAtOrDefault(BitConverter.ToInt32(f.Blocks[shader].Data, 0)) ?? "", cutout, inline, threshold, skin >= 0));
-                if (glowMat == null) { skippedCutouts++; continue; }
-                int mat = f.AddString(glowMat.Material);
+                var firstMat = o.GlowFor(new GlowPart(f.Strings.ElementAtOrDefault(BitConverter.ToInt32(f.Blocks[shader].Data, 0)) ?? "", cutout, inline, threshold, skin >= 0));
+                if (firstMat == null) { skippedCutouts++; continue; }
+                foreach (var glowMat in firstMat.Also != null && f.TypeOf(s) == "BSTriShape" ? new[] { firstMat, firstMat.Also } : new[] { firstMat })
+                {
                 var copy = (byte[])b.Clone();
+                if (glowMat.Opaque != null)
+                {
+                    if (KeepOpaque(copy, r, glowMat.Opaque) is not { } solidOnly) continue; // no fully opaque triangles: rims only
+                    copy = solidOnly;
+                }
+                int mat = f.AddString(glowMat.Material);
                 Put(copy, 0, f.AddString(f.Strings.ElementAtOrDefault(BitConverter.ToInt32(b, 0)) + "_IFGlow"));
                 int av = NifFile.AvObjectEnd(copy);
                 Put(copy, av - 4, -1);                               // no collision
@@ -489,6 +546,7 @@ public static class NifPatch
                 list.Add(shape);
                 partOf[shape] = GlowPart;
                 glowCount++;
+                }
             }
         }
 
@@ -672,6 +730,29 @@ public static class NifPatch
             movers.Add((shape, (bx, by, z), 2 * S, CopyPart));
             copied = true;
         }
+        // sonar ping: a flat disc at the item's foot, its ring texture running from the middle out by the V offset (float
+        // controller var 13, as the flowing beam - in game a scale animation on a node showed nothing, 2026-11-18)
+        bool pinged = false;
+        if (o.PingRange > 0 && o.PingMaterial != null)
+        {
+            if (skinned) notes.Add("no ping (animated model)");
+            else
+            {
+                var (px, py, _) = BeamBase(f, shapes, parent, origin, beamParent, out float ps, out var pbox);
+                float R = o.PingRange * 70f, footZ = (pbox.X1 >= pbox.X0 ? pbox.Z0 : 0) - origin.GetValueOrDefault(beamParent).Z + 2;
+                float r0 = Math.Min(Math.Max(ps, 30f) / 2, R * 0.5f);
+                int mat = f.AddString(o.PingMaterial);
+                int shader = f.Add("BSEffectShaderProperty", EffectShader(mat));
+                int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
+                int at = f.Add("BSTriShape", PingDisc(f.AddString("ESPMakerPing"), shader, alpha, r0, R, (px, py, footZ)));
+                AddFloatController(f, shader, 13, new[] { (0f, 0f), (PingPeriod, 1f) });
+                if (!glowAdded.TryGetValue(beamParent, out var list)) glowAdded[beamParent] = list = new();
+                list.Add(at);
+                partOf[at] = GlowPart;
+                pinged = true;
+                notes.Add($"ping {o.PingRange} m");
+            }
+        }
         // a part that hangs on a connection point (robot parts: "connect at C-BotCore") is not placed like a worn piece:
         // markers on its root showed at the hip, then 3 m away (in game). Its skinned parts are placed right (the glow), so
         // the markers become skinned too - bound to its highest bone, the game places them with the same bones
@@ -706,7 +787,8 @@ public static class NifPatch
         // hide after N seconds: everything added goes into its own node(s), and an animation that starts when the model
         // loads (the game's autoplay behaviour, as the BobbleBanner mod does it) shrinks them to nothing
         bool timed = false;
-        if (Enumerable.Range(0, Parts).Any(p => Mo(p) is { HideAfter: > 0 }) && glowAdded.Count > 0)
+        bool hideTimed = Enumerable.Range(0, Parts).Any(p => Mo(p) is { HideAfter: > 0 }) && glowAdded.Count > 0;
+        if (hideTimed || pickZone >= 0)
         {
             var rb = f.Blocks[0].Data;
             int rootCtl = BitConverter.ToInt32(rb, 8 + 4 * BitConverter.ToInt32(rb, 4));
@@ -730,9 +812,15 @@ public static class NifPatch
                     }
                     wrapped[node] = keep;
                 }
-                glowAdded = wrapped;
-                foreach (var (n, nm, p) in inner) targets.Add((n, nm, Mo(p)!.HideAfter, Mo(p)!.BlinkOff));
-                if (targets.Count > 0) { AddHideTimer(f, targets); timed = true; }
+                if (hideTimed) glowAdded = wrapped;
+                foreach (var (n, nm, p) in inner) if (Mo(p) is { HideAfter: > 0 } im) targets.Add((n, nm, im.HideAfter, im.BlinkOff));
+                var moves = new HashSet<int>();
+                if (pickZone >= 0)
+                {
+                    targets.Add((pickZone, "ESPMakerPickZone", Pickup.CycleOn, Pickup.CycleOff));
+                    moves.Add(pickZone);
+                }
+                if (targets.Count > 0) { AddHideTimer(f, targets, moves); timed = true; }
             }
         }
         foreach (var (node, kids) in glowAdded) f.AddChildren(node, kids);
@@ -769,7 +857,8 @@ public static class NifPatch
             if (scanShaders.Count > 0) did.Add("scanlines");
             if (spun) did.Add("spin");
             if (bobbed) did.Add("bob");
-            if (shaderCtls > 0 || moved > 0)
+            if (pinged) did.Add("ping");
+            if (shaderCtls > 0 || moved > 0 || pinged)
             {
                 MarkAnimated(f, moved > 0);
                 notes.Add("moves: " + string.Join(" + ", did.Distinct()));
@@ -809,23 +898,45 @@ public static class NifPatch
     /// <summary>"Pick up from afar": the model's root collision becomes a static, non-colliding body of the item's own box +
     /// a sphere of <paramref name="metres"/> round it (Pickup); added on the root when the model has none.</summary>
     static string AddPickup(NifFile f, List<int> shapes, Dictionary<int, int> parent, Dictionary<int, (float X, float Y, float Z)> origin,
-                            float metres, byte[] donor)
+                            float metres, byte[] donor, bool mat, string? showMaterial, bool cycle, bool rimOnly, float height, out int zoneNode)
     {
+        zoneNode = -1;
         if (shapes.Any(s => BitConverter.ToInt32(f.Blocks[s].Data, NifFile.ShapeRefs(f.Blocks[s].Data)) >= 0))
             return "no pick-up area (animated model)";
+        bool capped = !mat && metres > Pickup.BallMax;
+        if (capped) metres = Pickup.BallMax;
         BeamBase(f, shapes, parent, origin, 0, out _, out var box);
         const float U = Pickup.UnitsPerHavok;
         var (lo, hi) = box is var (x0, y0, z0, x1, y1, z1) && x1 >= x0
             ? ((x0 / U, y0 / U, z0 / U), (x1 / U, y1 / U, z1 / U)) : ((-0.1f, -0.1f, 0f), (0.1f, 0.1f, 0.2f));
         byte[] blob;
-        try { blob = Pickup.Make(donor, lo, hi, metres * 70f / U); }
+        try { blob = Pickup.Make(donor, lo, hi, metres * 70f / U, mat, height); }
         catch (Exception ex) { return "no pick-up area (" + ex.Message + ")"; }
         var phys = new byte[4 + blob.Length];
         BitConverter.TryWriteBytes(phys.AsSpan(0), blob.Length);
         blob.CopyTo(phys, 4);
         var root = (byte[])f.Blocks[0].Data.Clone();
         int at = NifFile.AvObjectEnd(root) - 4, col = BitConverter.ToInt32(root, at);
-        if (f.TypeOf(col) == "bhkNPCollisionObject")
+        zoneNode = -1;
+        if (cycle)
+        {
+            // "comes and goes" test: the zone on a node of its own (the timer moves it away and back, as game doors move
+            // their parts' static collision); the item's own collision stays as it is (close pick-up while it's away)
+            int node = f.Blocks.Count;
+            var nb = PlainNode(f.AddString("ESPMakerPickZone"), new float[] { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0 }, new List<int>());
+            Put(nb, NifFile.AvObjectEnd(nb) - 4, node + 1);
+            f.Add("NiNode", nb);
+            var cd = new byte[14];
+            Put(cd, 0, node);
+            BitConverter.TryWriteBytes(cd.AsSpan(4), (ushort)0x80);
+            Put(cd, 6, node + 2);
+            f.Add("bhkNPCollisionObject", cd);
+            f.Add("bhkPhysicsSystem", phys);
+            f.AddChildren(0, new[] { node });
+            OrBsx(f, 0xA); // Havok + Complex, as the game's animated doors (0xB with Animated, which the timer adds)
+            zoneNode = node;
+        }
+        else if (f.TypeOf(col) == "bhkNPCollisionObject")
         {
             var cd = (byte[])f.Blocks[col].Data.Clone();
             int data = BitConverter.ToInt32(cd, 6);
@@ -857,7 +968,106 @@ public static class NifPatch
                 Put(b, 4, BitConverter.ToInt32(b, 4) & ~0x40);
                 f.Blocks[k] = ("BSXFlags", b);
             }
-        return $"pick-up area {metres:0.#} m";
+        // testing aid: the zone drawn as a faint see-through shape on the root (stays after harvest, like the collision)
+        if (showMaterial != null)
+        {
+            float r = metres * 70f;
+            var c = ((lo.Item1 + hi.Item1) / 2 * U, (lo.Item2 + hi.Item2) / 2 * U, (lo.Item3 + hi.Item3) / 2 * U);
+            int shader = f.Add("BSEffectShaderProperty", EffectShader(f.AddString(showMaterial)));
+            int alpha = f.Add("NiAlphaProperty", AlphaAdditive());
+            byte[] shape = mat ? ZoneMat(f.AddString("ESPMakerPickZone"), shader, alpha, r, (c.Item1, c.Item2, Pickup.MatTopZ(lo.Item3, hi.Item3, height) * U + 1), rimOnly, height * U)
+                               : ZoneBall(f.AddString("ESPMakerPickZone"), shader, alpha, r, c, rimOnly);
+            f.AddChildren(zoneNode >= 0 ? zoneNode : 0, new[] { f.Add("BSTriShape", shape) });
+        }
+        return $"pick-up {(mat ? "mat" : "ball")} {metres:0.#} m{(capped ? $" (ball capped at {Pickup.BallMax} m - use Mat for more)" : "")}{(showMaterial != null ? ", zone shown" : "")}{(cycle ? ", comes and goes" : "")}";
+    }
+
+    /// <summary>A vertex of a pick-up zone drawing: grey level <paramref name="k"/> (additive: brighter = more visible).</summary>
+    static Vert ZoneVert(float x, float y, float z, (double, double, double) n, byte k) =>
+        new((x, y, z), (0.5f, 0.5f), n, (1, 0, 0), (0, 1, 0), new[] { k, k, k, (byte)255 });
+
+    /// <summary>Both sides of every triangle (the zone is seen from inside too).</summary>
+    static List<(int, int, int)> TwoSided(List<(int, int, int)> t) => t.Concat(t.Select(x => (x.Item1, x.Item3, x.Item2))).ToList();
+
+    /// <summary>The pick-up ball drawn: a faint shell with brighter rings every 30 degrees of latitude and a bright equator.</summary>
+    static byte[] ZoneBall(int name, int shader, int alpha, float r, (float X, float Y, float Z) at, bool rimOnly = false)
+    {
+        // rim only: just the bright equator (additive: black = not drawn)
+        const int lon = 48, lat = 24;
+        var v = new List<Vert>();
+        var t = new List<(int, int, int)>();
+        for (int i = 0; i <= lat; i++)
+        {
+            float a = -MathF.PI / 2 + i * MathF.PI / lat;
+            byte k = i == lat / 2 ? (byte)200 : i % 4 == 0 ? (byte)110 : (byte)35;
+            for (int j = 0; j <= lon; j++)
+            {
+                float b = j * 2 * MathF.PI / lon;
+                float x = MathF.Cos(a) * MathF.Cos(b), y = MathF.Cos(a) * MathF.Sin(b), z = MathF.Sin(a);
+                v.Add(ZoneVert(r * x, r * y, r * z, (x, y, z), rimOnly ? (i == lat / 2 ? (byte)230 : (byte)0) : j % 6 == 0 ? Math.Max(k, (byte)110) : k));
+            }
+        }
+        for (int i = 0; i < lat; i++)
+            for (int j = 0; j < lon; j++)
+            {
+                int p = i * (lon + 1) + j, q = p + lon + 1;
+                t.Add((p, p + 1, q + 1)); t.Add((p, q + 1, q));
+            }
+        return Pack(name, shader, alpha, v, TwoSided(t), -r, r, r, at);
+    }
+
+    /// <summary>The pick-up mat drawn: a circle of the range (the built mat's corners touch it) - faint fill, bright rim,
+    /// and rings every 5 m.</summary>
+    /// <param name="wall">The mat's thickness above the ground (game units): over 20 cm the drawing gets a see-through wall
+    /// down to the ground with a bright rim there (user 2026-11-25: a thick mat showed as a flat disc).</param>
+    static byte[] ZoneMat(int name, int shader, int alpha, float r, (float X, float Y, float Z) at, bool rimOnly = false, float wall = 0)
+    {
+        // rim only: no fill, no 5 m rings - just the bright edge
+        static float Edge(float b) => 1;
+        const int seg = 128;
+        const float W = 12; // half width of a drawn line (game units)
+        // colour stops from the middle out: faint fill, a thin line every 5 m, a bright rim
+        byte fill = rimOnly ? (byte)0 : (byte)25;
+        var rings = new List<(float At, byte K)> { (0, fill) };
+        if (!rimOnly)
+            for (float m = 350; m < r - 3 * W; m += 350) { rings.Add(((m - W) / r, fill)); rings.Add((m / r, 110)); rings.Add(((m + W) / r, fill)); }
+        rings.Add(((r - 2 * W) / r, fill)); rings.Add(((r - W) / r, 230)); rings.Add((1, 230));
+        var v = new List<Vert>();
+        var t = new List<(int, int, int)>();
+        foreach (var (at0, k) in rings)
+            for (int j = 0; j <= seg; j++)
+            {
+                float b = j * 2 * MathF.PI / seg, e = Edge(b) * r * at0;
+                v.Add(ZoneVert(e * MathF.Cos(b), e * MathF.Sin(b), 0, (0, 0, 1), k));
+            }
+        for (int i = 0; i + 1 < rings.Count; i++)
+            for (int j = 0; j < seg; j++)
+            {
+                int p = i * (seg + 1) + j, q = p + seg + 1;
+                t.Add((p, q, q + 1)); t.Add((p, q + 1, p + 1));
+            }
+        float down = 0;
+        if (wall > 14)
+        {
+            // the side: from the top rim down to the ground - faint (none when rim only), a bright rim on the ground
+            down = wall;
+            var rows = wall > 4 * W ? new List<(float Z, byte K)> { (0, 230), (-W, fill), (-wall + 2 * W, fill), (-wall + W, 230), (-wall, 230) }
+                                    : new List<(float Z, byte K)> { (0, 230), (-wall, 230) }; // thin: one bright band
+            int first = v.Count;
+            foreach (var (z, k) in rows)
+                for (int j = 0; j <= seg; j++)
+                {
+                    float b = j * 2 * MathF.PI / seg;
+                    v.Add(ZoneVert(r * MathF.Cos(b), r * MathF.Sin(b), z, (MathF.Cos(b), MathF.Sin(b), 0), k));
+                }
+            for (int i = 0; i + 1 < rows.Count; i++)
+                for (int j = 0; j < seg; j++)
+                {
+                    int p = first + i * (seg + 1) + j, q = p + seg + 1;
+                    t.Add((p, q, q + 1)); t.Add((p, q + 1, p + 1));
+                }
+        }
+        return Pack(name, shader, alpha, v, TwoSided(t), -down, 1, r, at);
     }
 
     /// <summary>Where the beam starts, in the space of the node it hangs from: centred over the item's visible
@@ -1213,7 +1423,9 @@ public static class NifPatch
     /// pointing at the game's Autoplay.hkx, which plays the sequence "AutoPlay" of the root's controller manager as soon
     /// as the model loads. The sequence scales each target node 1 -> 0 over the last 4 seconds and holds (clamp).</summary>
     /// <param name="blinkOff">Blink: after hiding, back after this many seconds, looping (sequence cycle LOOP).</param>
-    static void AddHideTimer(NifFile f, List<(int Node, string Name, float T, float Off)> targets)
+    /// <param name="moves">Target nodes that are moved away (Pickup.CycleDrop down) instead of shrunk - collision follows a
+    /// move (game doors), not a scale.</param>
+    static void AddHideTimer(NifFile f, List<(int Node, string Name, float T, float Off)> targets, HashSet<int>? moves = null)
     {
         // As in BobbleBanner (works in game), the root stays bare: the original parts and their collision go into a child
         // node. Done here before the markers are attached, so the root's children are the originals.
@@ -1254,8 +1466,23 @@ public static class NifPatch
         }
         // scale keys per section (quadratic, flat tangents, as in the BobbleBanner mod)
         var dataList = new List<byte[]>();
-        foreach (var (_, _, t, blinkOff) in targets)
+        foreach (var (node, _, t, blinkOff) in targets)
         {
+            if (moves?.Contains(node) == true)
+            {
+                // there for t, then (a hundredth of a second later) far below for the off time, back; linear position keys
+                float off = Math.Max(1, blinkOff), per = (float)Math.Round(t + off), down = -Pickup.CycleDrop;
+                var pk = new List<(float T, float Z)> { (0, 0) };
+                for (float b0 = 0; b0 + per <= end + 0.01f; b0 += per)
+                    pk.AddRange(new[] { (b0 + t, 0f), (b0 + t + 0.01f, down), (b0 + per - 0.01f, down), (b0 + per, 0f) });
+                var mw = W(out var mms);
+                mw.Write(0u);                                   // no rotation keys
+                mw.Write((uint)pk.Count); mw.Write(1u);         // translation keys, linear
+                foreach (var (time, z) in pk) { mw.Write(time); mw.Write(0f); mw.Write(0f); mw.Write(z); }
+                mw.Write(0u);                                   // no scale keys
+                dataList.Add(mms.ToArray());
+                continue;
+            }
             var keys = new List<(float, float)> { (0f, 1f) };
             if (blinkOff > 0)
             {
@@ -1444,6 +1671,36 @@ public static class NifPatch
         w.Write(0u); // no scale keys
         f.Add("NiTransformData", ms.ToArray());
         Chain(f, node, ctl);
+    }
+
+    /// <summary>Sonar ping: one ring runs from the item out to the range every PingPeriod s.</summary>
+    public const float PingPeriod = 3.5f;
+
+    /// <summary>The ping disc from <paramref name="r0"/> (the item's edge) to <paramref name="r1"/>, flat, both sides. V runs
+    /// 1 at the inside to 0 at the rim, as the beam's V runs bottom to top, so the texture flows out the way the beam's flows
+    /// up; brighter inside (vertex grey), fading towards the rim.</summary>
+    static byte[] PingDisc(int name, int shader, int alpha, float r0, float r1, (float X, float Y, float Z) at)
+    {
+        const int seg = 72, rings = 16;
+        var v = new List<Vert>();
+        var t = new List<(int, int, int)>();
+        for (int i = 0; i <= rings; i++)
+        {
+            float f = (float)i / rings, r = r0 + (r1 - r0) * f;
+            byte k = (byte)Math.Round(255 * (1 - 0.8f * f));
+            for (int j = 0; j <= seg; j++)
+            {
+                float b = j * 2 * MathF.PI / seg;
+                v.Add(new Vert((r * MathF.Cos(b), r * MathF.Sin(b), 0), ((float)j / seg, 1 - f), (0, 0, 1), (1, 0, 0), (0, 1, 0), new[] { k, k, k, (byte)255 }));
+            }
+        }
+        for (int i = 0; i < rings; i++)
+            for (int j = 0; j < seg; j++)
+            {
+                int p = i * (seg + 1) + j, q = p + seg + 1;
+                t.Add((p, q, q + 1)); t.Add((p, q + 1, p + 1));
+            }
+        return Pack(name, shader, alpha, v, TwoSided(t), 0, 1, r1, at);
     }
 
     /// <summary>BSXFlags Animated (+ NeedsTransformUpdates for moving nodes), added when missing; Articulated models get

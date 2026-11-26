@@ -44,6 +44,7 @@ public static class EventCatalog
         PartNames.NameAll(idx, cats);
         Rules.Current.RenameParts(cats);
         cats.AddRange(Catalog.Rest(idx, exists, cats));
+        Entry.MarkLoose(cats);
         return cats;
     }
 

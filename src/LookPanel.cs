@@ -75,6 +75,7 @@ sealed class LookPanel : UserControl
         Load += (_, _) => Editor.FitHeight();
         Editor.HeightChanged += (_, _) => { scroll.PerformLayout(); WantedHeightChanged?.Invoke(); FitPreview(); }; // a card opened / closed
         body.Resize += (_, _) => FitPreview();
+        View.CutoutKnown += c => Editor.Cutout = c;
 
         Editor.Changed += (_, _) =>
         {
@@ -83,9 +84,11 @@ sealed class LookPanel : UserControl
             {
                 // the first change: it gets its own look (a copy of the one it used), then the change goes into it
                 var edited = Editor.Value;
+                var layer = Editor.PickedLayer; // the reload below shows the old look first, which drops a just-added layer's pick
                 OwnSwitched?.Invoke(true);
                 loading = true;
                 Editor.Value = edited;
+                Editor.PickedLayer = layer;
                 loading = false;
             }
             LookEdited?.Invoke();

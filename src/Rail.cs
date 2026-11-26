@@ -703,7 +703,10 @@ sealed class Seg : Control, Ui.ISelfSized
     protected override void OnFontChanged(EventArgs e) { Size = GetPreferredSize(Size.Empty); base.OnFontChanged(e); }
     Rectangle Part(int i) { int x = 0; for (int j = 0; j < i; j++) x += W(j); return new(x, 0, W(i), Height - 1); }
     int At(Point p) { for (int i = 0; i < options.Length; i++) if (Part(i).Contains(p)) return i; return -1; }
-    void Pick(int i) { if (i < 0 || i >= options.Length) return; Selected = i; Picked?.Invoke(i); }
+    /// <summary>A button that can't be picked now (greyed; a lit one stays lit), -1 = none.</summary>
+    public int Off { get => off; set { if (off != value) { off = value; Invalidate(); } } }
+    int off = -1;
+    void Pick(int i) { if (i < 0 || i >= options.Length || i == off) return; Selected = i; Picked?.Invoke(i); }
     protected override void OnMouseMove(MouseEventArgs e) { int h = At(e.Location); if (h != hover) { hover = h; Invalidate(); } base.OnMouseMove(e); }
     protected override void OnMouseLeave(EventArgs e) { hover = -1; Invalidate(); base.OnMouseLeave(e); }
     protected override void OnMouseClick(MouseEventArgs e) { Focus(); Pick(At(e.Location)); base.OnMouseClick(e); }
@@ -727,8 +730,8 @@ sealed class Seg : Control, Ui.ISelfSized
         {
             var r = Part(i);
             bool on = i == selected && Enabled;
-            using (var bg = new SolidBrush(on ? Ui.LitBack : i == hover && Enabled ? Ui.Hover : Ui.Window)) g.FillRectangle(bg, r);
-            TextRenderer.DrawText(g, options[i], Font, r, !Enabled ? Ui.Muted : on ? Ui.LitText : Ui.Fg,
+            using (var bg = new SolidBrush(on ? Ui.LitBack : i == hover && Enabled && i != off ? Ui.Hover : Ui.Window)) g.FillRectangle(bg, r);
+            TextRenderer.DrawText(g, options[i], Font, r, !Enabled || i == off && !on ? Ui.Muted : on ? Ui.LitText : Ui.Fg,
                                   TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             if (i > 0) g.DrawLine(line, r.Left, 0, r.Left, r.Bottom);
         }

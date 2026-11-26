@@ -1254,8 +1254,8 @@ public sealed class MainForm : Form
         {
             var root = (TreeNode)b.Tag!;
             string name = root.Tag is Picks ? Tr("Picks") : root.Tag as string == Catalog.AllSection ? Tr("Other") : Title((string)root.Tag!);
-            // the same counts as the tree's section line (linked twins count in each section they're in)
-            int n = root.Tag is Picks ? ticked.Count : cats.Where(c => c.Section == (string)root.Tag!).Sum(TickedIn);
+            // the same counts as Your picks' parts (shared models count in each section they're in): they add up to Picks
+            int n = root.Tag is Picks ? ticked.Count : TickedInSection((string)root.Tag!).Count;
             b.Set(name, n, root == shownRoot);
         }
         UpdateTray(ticked);
@@ -1314,7 +1314,7 @@ public sealed class MainForm : Form
         {
             // a part of Your picks ("Enemies  12")
             var s = ((string)n.Tag!)[(Picks.Length + 1)..];
-            int t = Ticked().Count(x => CatOf(x).Section == s);
+            int t = TickedInSection(s).Count; // as the rail badge: shared models count in each section (user, 2026-11-25)
             name = Title(s); count = t.ToString(); lit = t > 0;
         }
         var g2 = g.SmoothingMode;
@@ -1370,7 +1370,7 @@ public sealed class MainForm : Form
                 foreach (TreeNode part in sec.Nodes)
                 {
                     var s = ((string)part.Tag)[(Picks.Length + 1)..];
-                    var partText = $"{Title(s)}  ({ticked.Count(e => CatOf(e).Section == s)})";
+                    var partText = $"{Title(s)}  ({TickedInSection(s).Count})";
                     if (part.Text != partText) part.Text = partText;
                 }
                 continue;
@@ -1405,8 +1405,6 @@ public sealed class MainForm : Form
         if (n.NodeFont != font) n.NodeFont = font;
     }
 
-    /// <summary>Everything ticked, each thing once: linked twins in later categories (the same bobblehead under
-    /// Aid &amp; food and Junk &amp; misc) are left out - the shown entry says "also in".</summary>
     /// <summary>Your picks, plus the rows unchecked there since it was opened (in list order).</summary>
     List<Entry> PicksWithKept()
     {
@@ -1414,18 +1412,18 @@ public sealed class MainForm : Form
         return cats.SelectMany(c => c.Entries).Where(e => ids.Contains(e.Id) || keepShown.Contains(e.Id) && !IsTicked(e)).ToList();
     }
 
-    List<Entry> Ticked()
-    {
-        var shown = new List<Entry>();
-        var covered = new HashSet<string>();
-        foreach (var e in cats.SelectMany(c => c.Entries).Where(e => project.Selected.Contains(e.Id)))
-        {
-            if (covered.Contains(e.Id)) continue;
-            shown.Add(e);
-            foreach (var t in twins.GetValueOrDefault(e.Id, new())) covered.Add(t.Id);
-        }
-        return shown;
-    }
+    /// <summary>Everything ticked in a section, shared models included (Fuel Canister is in Junk AND Events - raid): a
+    /// part of Your picks lists and counts what the section itself has ticked, the same as its rail badge (user,
+    /// 2026-11-25: picked in Events but only listed under Junk; the counts didn't match).</summary>
+    List<Entry> TickedInSection(string section) => cats.Where(c => c.Section == section).SelectMany(c => c.Entries).Where(e => project.Selected.Contains(e.Id)).ToList();
+
+    /// <summary>A part of Your picks, plus the rows unchecked there since it was opened.</summary>
+    List<Entry> SectionPicksWithKept(string section) =>
+        cats.Where(c => c.Section == section).SelectMany(c => c.Entries).Where(e => project.Selected.Contains(e.Id) || keepShown.Contains(e.Id) && !IsTicked(e)).ToList();
+
+    /// <summary>Everything ticked, shared models included: each category's own entry by its own name (user, 2026-11-25:
+    /// Fuel Canister picked in Events - raid was hidden behind its Junk twin, and the sections didn't add up).</summary>
+    List<Entry> Ticked() => cats.SelectMany(c => c.Entries).Where(e => project.Selected.Contains(e.Id)).ToList();
 
     static string Title(string section) => section == Catalog.AllSection ? Tr("Everything else")
         : section.Length == 0 ? "" : Loc.Name(section[..1] + section[1..].ToLowerInvariant());
@@ -1437,7 +1435,7 @@ public sealed class MainForm : Form
         if (IsPicks)
         {
             var part = PicksSection;
-            var ticked = Ticked().Where(e => part == null || CatOf(e).Section == part).ToList();
+            var ticked = part == null ? Ticked() : TickedInSection(part);
             catTitle.Text = part == null ? Tf("Your picks ({0})", ticked.Count) : Tf("Your picks: {0} ({1})", Title(part), ticked.Count);
             catDesc.Text = ticked.Count == 0
                 ? Tr("Nothing selected yet. Pick a category above and select what you want to highlight.")
@@ -1927,7 +1925,7 @@ public sealed class MainForm : Form
         // a search looks through everything, also the hidden "everything else" section (CAMP objects like the
         // Pumpkin Pie Stand are only there)
         IEnumerable<Entry> src = q.Length > 0 ? cats.SelectMany(c => c.Entries)
-            : IsPicks ? PicksWithKept().Where(e => PicksSection == null || CatOf(e).Section == PicksSection)
+            : IsPicks ? PicksSection is string part ? SectionPicksWithKept(part) : PicksWithKept()
             : CurrentSection is string sec ? cats.Where(c => c.Section == sec).SelectMany(c => c.Entries)
             : Current?.Entries ?? new();
         if (q.Length > 0)
@@ -2621,6 +2619,7 @@ public sealed class MainForm : Form
         dlg.Load += (_, _) => { if (editor.FitHeight() > 0) dlg.Height += Math.Max(0, editor.Bottom + 8 - side.ClientSize.Height); };
         pick.SelectedIndexChanged += (_, _) => { if (game != null && pick.SelectedItem is Entry e) view.Show(game, e, editor.Value, keepOtherMods); };
         editor.Changed += (_, _) => view.Look = editor.Value;
+        view.CutoutKnown += c => editor.Cutout = c;
         if (pick.Items.Count > 0) pick.SelectedIndex = 0;
         return dlg;
     }
@@ -2666,6 +2665,7 @@ public sealed class MainForm : Form
         var editor = ed;
         var v = view;
         editor.Changed += (_, _) => v.Look = editor.Value;
+        v.CutoutKnown += c => editor.Cutout = c;
         return dlg;
     }
 

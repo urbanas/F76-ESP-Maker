@@ -151,6 +151,27 @@ public sealed class Style : IJsonOnDeserialized
     /// the game's pick-up aim hits (you walk through it); 0 = off. The item becomes static (doesn't fall or get knocked
     /// about). Not on creatures / worn outfits. See Pickup.</summary>
     public int PickRange { get; set; }
+    /// <summary>Pick-up zone shape (2026-11-18, test): false = ball (nested shells, capped at Pickup.BallMax), true = a flat
+    /// "mat" at the item's foot spreading over the floor - never blocks what you aim at higher up, no inside dead zone.</summary>
+    public bool PickMat { get; set; }
+    /// <summary>Testing aid: the pick-up zone is drawn in game as a faint see-through shape.</summary>
+    public bool PickShow { get; set; }
+    /// <summary>Test (2026-11-18): the zone comes and goes - on Pickup.CycleOn s, then moved away underground for
+    /// Pickup.CycleOff s (animated node, like game doors), so what it blocks is usable in the gaps.</summary>
+    public bool PickCycle { get; set; }
+    /// <summary>The drawn zone's colour (PickShow); "" = the item's glow colour (user, 2026-11-25: zone = its own layer).</summary>
+    public string PickColor { get; set; } = "";
+    [JsonIgnore] public string PickColour => string.IsNullOrEmpty(PickColor) ? GlowColor : PickColor;
+    /// <summary>The drawn zone's strength in % (as the 3D icon's material; the old fixed drawing was 25).</summary>
+    public int PickStrength { get; set; } = 25;
+    /// <summary>The drawn zone: only its rim (mat edge / ball equator), no inner rings or faint fill.</summary>
+    public bool PickRimOnly { get; set; }
+    /// <summary>The mat's thickness above the ground in cm (= its top; Pickup.MatTop = 10 by default), its bottom stays
+    /// just under the item's foot.</summary>
+    public int PickThickness { get; set; } = 10;
+    /// <summary>Sonar ping (user, 2026-11-18): a ring on the ground at the item's foot grows out to this many metres and
+    /// fades, every NifPatch.PingPeriod s, in the glow colour, through walls; 0 = off. Not on creatures / worn outfits.</summary>
+    public int PingRange { get; set; }
     // legacy (2.1 and the first motion build): one setting for the whole look, spread over the sections on reading,
     // never written (the getters give the default)
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int HideAfter { get => 0; set { foreach (var x in AllFx) x.HideAfter = value; } }
@@ -272,8 +293,21 @@ public sealed class Entry
     List<string>? search;
     string Cache()
     {
-        (shown, shownFor, shownLang, search) = (Loc.Name(Name), Name, Loc.Lang, null);
+        (shown, shownFor, shownLang, search) = (Loc.Name(Name) + (Which.Length > 0 ? " " + Tr(Which) : ""), Name, Loc.Lang, null);
         return shown;
+    }
+    /// <summary>"(loose)" / "(plant)" after the shown name when a plant and its loose ingredient have the same name
+    /// (user, 2026-11-26: the loose carrot looks planted in the 3D view). Name, Id and the in-game label stay as they are.</summary>
+    public string Which = "";
+
+    /// <summary>Marks Aid &amp; food entries named like a plant "(loose)" and those plants "(plant)".</summary>
+    public static void MarkLoose(List<Category> cats)
+    {
+        var loose = cats.Where(c => c.Name == "Aid & food").SelectMany(c => c.Entries).Where(e => e.Group == null).ToList();
+        var plants = cats.SelectMany(c => c.Entries).Where(e => e.Harvestable && e.Group == null).ToList();
+        var both = loose.Select(e => e.Name).Intersect(plants.Select(e => e.Name), StringComparer.OrdinalIgnoreCase).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in loose.Where(e => both.Contains(e.Name))) e.Which = "(loose)";
+        foreach (var e in plants.Where(e => both.Contains(e.Name))) e.Which = "(plant)";
     }
     /// <summary>For search: the English names and, in another language, the translated ones too.</summary>
     public IEnumerable<string> SearchNames
